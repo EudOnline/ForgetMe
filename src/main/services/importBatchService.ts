@@ -50,6 +50,26 @@ export async function createImportBatch(input: {
     const frozen = await freezeOriginal(input.appPaths, batchId, sourcePath)
     const duplicateClass = classifyExactDuplicate(countExistingHashes(db, frozen.sha256))
 
+    db.prepare(
+      `insert into vault_files (
+        id, batch_id, source_path, frozen_path, file_name, extension, mime_type,
+        file_size, sha256, duplicate_class, parser_status, created_at
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      frozen.fileId,
+      batchId,
+      frozen.sourcePath,
+      frozen.frozenAbsolutePath,
+      frozen.fileName,
+      frozen.extension,
+      null,
+      frozen.fileSize,
+      frozen.sha256,
+      duplicateClass,
+      'pending',
+      createdAt
+    )
+
     let parserStatus: 'parsed' | 'failed' = 'failed'
     try {
       const parsed = await parseFrozenFile(frozen.frozenAbsolutePath)
@@ -69,25 +89,7 @@ export async function createImportBatch(input: {
       reviewCount += 1
     }
 
-    db.prepare(
-      `insert into vault_files (
-        id, batch_id, source_path, frozen_path, file_name, extension, mime_type,
-        file_size, sha256, duplicate_class, parser_status, created_at
-      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      frozen.fileId,
-      batchId,
-      frozen.sourcePath,
-      frozen.frozenAbsolutePath,
-      frozen.fileName,
-      frozen.extension,
-      null,
-      frozen.fileSize,
-      frozen.sha256,
-      duplicateClass,
-      parserStatus,
-      createdAt
-    )
+    db.prepare('update vault_files set parser_status = ? where id = ?').run(parserStatus, frozen.fileId)
 
     files.push({
       ...frozen,

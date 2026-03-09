@@ -13,7 +13,9 @@ export function openDatabase(filename: string) {
 }
 
 export function runMigrations(db: ArchiveDatabase) {
-  const migrationPath = path.join(migrationsDir, '001_init.sql')
-  const sql = fs.readFileSync(migrationPath, 'utf8')
-  db.exec(sql)
+  const migrationFiles = fs.readdirSync(migrationsDir).filter((fileName) => fileName.endsWith('.sql')).sort()
+  for (const migrationFile of migrationFiles) {
+    const sql = fs.readFileSync(path.join(migrationsDir, migrationFile), 'utf8')
+    db.exec(sql)
+  }
 }

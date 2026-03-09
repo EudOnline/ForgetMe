@@ -17,6 +17,16 @@ export type ImportBatchSummary = {
   }>
 }
 
+export type ArchiveSearchResult = {
+  fileId: string
+  batchId: string
+  fileName: string
+  fileKind: string
+  duplicateClass: string
+  parserStatus: string
+  matchedPeople: string[]
+}
+
 export type CreateImportBatchInput = {
   sourcePaths: string[]
   sourceLabel: string
@@ -27,6 +37,8 @@ export interface ArchiveApi {
   createImportBatch: (input: CreateImportBatchInput) => Promise<ImportBatchSummary>
   listImportBatches: () => Promise<ImportBatchSummary[]>
   getImportBatch: (batchId: string) => Promise<ImportBatchSummary | null>
+  searchArchive: (input: { query?: string; fileKinds?: string[]; batchId?: string; duplicateClass?: string; personName?: string }) => Promise<ArchiveSearchResult[]>
+  logicalDeleteBatch: (batchId: string) => Promise<{ status: 'deleted'; batchId: string; deletedAt: string }>
 }
 
 declare global {
