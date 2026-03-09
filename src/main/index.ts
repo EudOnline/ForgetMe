@@ -1,5 +1,14 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
+import { ensureAppPaths } from './services/appPaths'
+
+const resolveAppDataRoot = () => {
+  if (app.isPackaged) {
+    return app.getPath('userData')
+  }
+
+  return join(process.cwd(), '.local-dev', 'forgetme')
+}
 
 const createWindow = () => {
   const window = new BrowserWindow({
@@ -18,6 +27,7 @@ const createWindow = () => {
 }
 
 app.whenReady().then(() => {
+  ensureAppPaths(resolveAppDataRoot())
   createWindow()
 
   app.on('activate', () => {
