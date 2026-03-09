@@ -13,6 +13,10 @@ function databasePath(appPaths: AppPaths) {
   return path.join(appPaths.sqliteDir, 'archive.sqlite')
 }
 
+function reportPath(appPaths: AppPaths, batchId: string) {
+  return path.join(appPaths.importReportsDir, `${batchId}.json`)
+}
+
 export async function createImportBatch(input: {
   appPaths: AppPaths
   sourcePaths: string[]
@@ -98,7 +102,6 @@ export async function createImportBatch(input: {
 
   db.prepare('update import_batches set status = ? where id = ?').run('ready', batchId)
 
-  const manifestPath = path.join(input.appPaths.importReportsDir, `${batchId}.json`)
   const report = {
     batchId,
     sourceLabel: input.sourceLabel,
@@ -112,14 +115,33 @@ export async function createImportBatch(input: {
     files
   }
 
-  fs.writeFileSync(manifestPath, JSON.stringify(report, null, 2))
+  fs.writeFileSync(reportPath(input.appPaths, batchId), JSON.stringify(report, null, 2))
 
   db.close()
 
   return {
     batchId,
-    manifestPath,
+    manifestPath: reportPath(input.appPaths, batchId),
     files,
-    summary: report.summary
+    summary: report.summary,
+    sourceLabel: input.sourceLabel,
+    createdAt
   }
+}
+
+export async function listImportBatches(appPaths: AppPaths) {
+  return fs
+    .readdirSync(appPaths.importReportsDir)
+    .filter((fileName) => fileName.endsWith('.json'))
+    .map((fileName) => JSON.parse(fs.readFileSync(path.join(appPaths.importReportsDir, fileName), 'utf8')))
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+}
+
+export async function getImportBatch(appPaths: AppPaths, batchId: string) {
+  const filename = reportPath(appPaths, batchId)
+  if (!fs.existsSync(filename)) {
+    return null
+  }
+
+  return JSON.parse(fs.readFileSync(filename, 'utf8'))
 }

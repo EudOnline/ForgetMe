@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
+import { registerArchiveIpc } from './ipc/archiveIpc'
 import { ensureAppPaths } from './services/appPaths'
 
 const resolveAppDataRoot = () => {
@@ -27,7 +28,8 @@ const createWindow = () => {
 }
 
 app.whenReady().then(() => {
-  ensureAppPaths(resolveAppDataRoot())
+  const appPaths = ensureAppPaths(resolveAppDataRoot())
+  registerArchiveIpc(appPaths)
   createWindow()
 
   app.on('activate', () => {
