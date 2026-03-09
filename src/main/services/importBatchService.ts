@@ -4,6 +4,9 @@ import path from 'node:path'
 import type { AppPaths } from './appPaths'
 import { classifyExactDuplicate, countExistingHashes } from './dedupService'
 import { openDatabase, runMigrations } from './db'
+import { parseFrozenFile } from './parserRegistry'
+import { collectPeopleAnchors, persistPeopleAnchors } from './peopleService'
+import { persistFileBatchRelations, persistPeopleFileRelations } from './relationService'
 import { freezeOriginal } from './vaultService'
 
 function databasePath(appPaths: AppPaths) {
@@ -22,13 +25,45 @@ export async function createImportBatch(input: {
   runMigrations(db)
   db.prepare(
     'insert into import_batches (id, source_label, status, created_at) values (?, ?, ?, ?)'
-  ).run(batchId, input.sourceLabel, 'frozen', createdAt)
+  ).run(batchId, input.sourceLabel, 'processing', createdAt)
 
-  const files = []
+  const files = [] as Array<{
+    fileId: string
+    sourcePath: string
+    fileName: string
+    extension: string
+    fileSize: number
+    sha256: string
+    duplicateClass: 'unique' | 'duplicate_exact'
+    frozenAbsolutePath: string
+    parserStatus: 'parsed' | 'failed'
+  }>
+  const parsedFiles = [] as Array<{ fileId: string; kind: string; summary: Record<string, unknown> }>
+  let parsedCount = 0
+  let reviewCount = 0
 
   for (const sourcePath of input.sourcePaths) {
     const frozen = await freezeOriginal(input.appPaths, batchId, sourcePath)
     const duplicateClass = classifyExactDuplicate(countExistingHashes(db, frozen.sha256))
+
+    let parserStatus: 'parsed' | 'failed' = 'failed'
+    try {
+      const parsed = await parseFrozenFile(frozen.frozenAbsolutePath)
+      parsedFiles.push({ fileId: frozen.fileId, kind: parsed.kind, summary: parsed.summary })
+      db.prepare(
+        'insert into file_derivatives (id, file_id, derivative_type, payload_json, created_at) values (?, ?, ?, ?, ?)'
+      ).run(
+        crypto.randomUUID(),
+        frozen.fileId,
+        'parsed_summary',
+        JSON.stringify(parsed),
+        createdAt
+      )
+      parserStatus = 'parsed'
+      parsedCount += 1
+    } catch {
+      reviewCount += 1
+    }
 
     db.prepare(
       `insert into vault_files (
@@ -46,37 +81,45 @@ export async function createImportBatch(input: {
       frozen.fileSize,
       frozen.sha256,
       duplicateClass,
-      'pending',
+      parserStatus,
       createdAt
     )
 
     files.push({
       ...frozen,
-      duplicateClass
+      duplicateClass,
+      parserStatus
     })
   }
 
-  const manifestPath = path.join(input.appPaths.importReportsDir, `${batchId}.json`)
+  const anchors = persistPeopleAnchors(db, collectPeopleAnchors({ parsedFiles }))
+  persistFileBatchRelations(db, batchId, files.map((file) => file.fileId))
+  persistPeopleFileRelations(db, anchors)
 
-  fs.writeFileSync(
-    manifestPath,
-    JSON.stringify(
-      {
-        batchId,
-        sourceLabel: input.sourceLabel,
-        createdAt,
-        files
-      },
-      null,
-      2
-    )
-  )
+  db.prepare('update import_batches set status = ? where id = ?').run('ready', batchId)
+
+  const manifestPath = path.join(input.appPaths.importReportsDir, `${batchId}.json`)
+  const report = {
+    batchId,
+    sourceLabel: input.sourceLabel,
+    createdAt,
+    summary: {
+      frozenCount: files.length,
+      parsedCount,
+      duplicateCount: files.filter((file) => file.duplicateClass === 'duplicate_exact').length,
+      reviewCount
+    },
+    files
+  }
+
+  fs.writeFileSync(manifestPath, JSON.stringify(report, null, 2))
 
   db.close()
 
   return {
     batchId,
     manifestPath,
-    files
+    files,
+    summary: report.summary
   }
 }
