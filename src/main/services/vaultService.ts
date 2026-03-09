@@ -3,6 +3,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { AppPaths } from './appPaths'
 
+export type DuplicateClass = 'unique' | 'duplicate_exact'
+
 export type FrozenOriginalRecord = {
   fileId: string
   sourcePath: string
@@ -10,7 +12,7 @@ export type FrozenOriginalRecord = {
   extension: string
   fileSize: number
   sha256: string
-  duplicateClass: 'unique'
+  duplicateClass: DuplicateClass
   frozenAbsolutePath: string
 }
 
@@ -19,7 +21,7 @@ function sha256File(sourcePath: string) {
   return crypto.createHash('sha256').update(buffer).digest('hex')
 }
 
-export async function freezeOriginal(appPaths: AppPaths, batchId: string, sourcePath: string): Promise<FrozenOriginalRecord> {
+export async function freezeOriginal(appPaths: AppPaths, _batchId: string, sourcePath: string): Promise<Omit<FrozenOriginalRecord, 'duplicateClass'>> {
   const sha256 = sha256File(sourcePath)
   const extension = path.extname(sourcePath)
   const destinationDir = path.join(appPaths.vaultOriginalsDir, sha256.slice(0, 2))
@@ -27,7 +29,9 @@ export async function freezeOriginal(appPaths: AppPaths, batchId: string, source
   const stat = fs.statSync(sourcePath)
 
   fs.mkdirSync(destinationDir, { recursive: true })
-  fs.copyFileSync(sourcePath, frozenAbsolutePath)
+  if (!fs.existsSync(frozenAbsolutePath)) {
+    fs.copyFileSync(sourcePath, frozenAbsolutePath)
+  }
 
   return {
     fileId: crypto.randomUUID(),
@@ -36,7 +40,6 @@ export async function freezeOriginal(appPaths: AppPaths, batchId: string, source
     extension,
     fileSize: stat.size,
     sha256,
-    duplicateClass: 'unique',
     frozenAbsolutePath
   }
 }
