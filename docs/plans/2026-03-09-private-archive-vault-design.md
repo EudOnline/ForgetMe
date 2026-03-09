@@ -309,6 +309,10 @@ Project: ForgetMe
 - 错误时不丢原件
 - 第一版追求可信，不追求炫技
 
+## Implementation Plan
+
+See `docs/plans/2026-03-09-private-archive-vault-implementation-plan.md` for the executable task-by-task plan that drives the MVP build.
+
 ## Next Step Recommendation
 
 如果进入实现阶段，建议先写一份实现计划，拆成以下顺序：

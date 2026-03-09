@@ -1,17 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ImportBatchSummary } from '../../shared/archiveContracts'
+import { getArchiveApi } from '../archiveApi'
 import { BatchListPage } from './BatchListPage'
 import { ImportDropzone } from '../components/ImportDropzone'
 
-const fallbackApi = {
-  selectImportFiles: async () => [] as string[],
-  createImportBatch: async () => ({ batchId: '', sourceLabel: '', createdAt: '', files: [] }),
-  listImportBatches: async () => [] as ImportBatchSummary[],
-  getImportBatch: async () => null
+function basename(filePath: string) {
+  return filePath.split(/[/\\]/).filter(Boolean).at(-1) ?? filePath
 }
 
 export function ImportPage(props: { onSelectBatch?: (batchId: string) => void }) {
-  const archiveApi = useMemo(() => window.archiveApi ?? fallbackApi, [])
+  const archiveApi = useMemo(() => getArchiveApi(), [])
   const [batches, setBatches] = useState<ImportBatchSummary[]>([])
   const [isImporting, setIsImporting] = useState(false)
 
@@ -27,7 +25,8 @@ export function ImportPage(props: { onSelectBatch?: (batchId: string) => void })
     setIsImporting(true)
     const sourcePaths = await archiveApi.selectImportFiles()
     if (sourcePaths.length > 0) {
-      await archiveApi.createImportBatch({ sourcePaths, sourceLabel: 'manual-import' })
+      const sourceLabel = basename(sourcePaths[0])
+      await archiveApi.createImportBatch({ sourcePaths, sourceLabel })
       setBatches(await archiveApi.listImportBatches())
     }
     setIsImporting(false)

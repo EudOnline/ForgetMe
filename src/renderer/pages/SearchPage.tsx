@@ -1,13 +1,10 @@
 import { useMemo, useState } from 'react'
 import type { ArchiveSearchResult } from '../../shared/archiveContracts'
+import { getArchiveApi } from '../archiveApi'
 import { SearchFilters } from '../components/SearchFilters'
 
-const fallbackApi = {
-  searchArchive: async () => [] as ArchiveSearchResult[]
-}
-
 export function SearchPage() {
-  const archiveApi = useMemo(() => window.archiveApi ?? fallbackApi, [])
+  const archiveApi = useMemo(() => getArchiveApi(), [])
   const [results, setResults] = useState<ArchiveSearchResult[]>([])
 
   return (

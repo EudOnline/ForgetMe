@@ -1,10 +1,15 @@
-import { app, BrowserWindow } from 'electron'
+import fs from 'node:fs'
 import { join } from 'node:path'
+import { app, BrowserWindow } from 'electron'
 import { registerArchiveIpc } from './ipc/archiveIpc'
 import { registerSearchIpc } from './ipc/searchIpc'
 import { ensureAppPaths } from './services/appPaths'
 
 const resolveAppDataRoot = () => {
+  if (process.env.FORGETME_E2E_USER_DATA_DIR) {
+    return process.env.FORGETME_E2E_USER_DATA_DIR
+  }
+
   if (app.isPackaged) {
     return app.getPath('userData')
   }
@@ -12,13 +17,29 @@ const resolveAppDataRoot = () => {
   return join(process.cwd(), '.local-dev', 'forgetme')
 }
 
+const resolvePreloadPath = () => {
+  const mjsPath = join(__dirname, '../preload/index.mjs')
+  if (fs.existsSync(mjsPath)) {
+    return mjsPath
+  }
+
+  return join(__dirname, '../preload/index.js')
+}
+
 const createWindow = () => {
   const window = new BrowserWindow({
     width: 1200,
     height: 800,
+    show: false,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js')
+      preload: resolvePreloadPath(),
+      contextIsolation: false,
+      nodeIntegration: true
     }
+  })
+
+  window.once('ready-to-show', () => {
+    window.show()
   })
 
   if (process.env.ELECTRON_RENDERER_URL) {
