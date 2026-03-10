@@ -2,6 +2,8 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import type { AppPaths } from './appPaths'
+import { ensureCanonicalPeopleForAnchors } from './canonicalPeopleService'
+import { generatePersonMergeCandidates } from './candidateService'
 import { classifyExactDuplicate, countExistingHashes } from './dedupService'
 import { openDatabase, runMigrations } from './db'
 import { parseFrozenFile } from './parserRegistry'
@@ -99,6 +101,13 @@ export async function createImportBatch(input: {
   }
 
   const anchors = persistPeopleAnchors(db, collectPeopleAnchors({ parsedFiles }))
+  ensureCanonicalPeopleForAnchors(db, anchors.map((anchor) => ({
+    anchorPersonId: anchor.personId,
+    displayName: anchor.displayName,
+    sourceType: anchor.sourceType,
+    confidence: anchor.confidence
+  })))
+  generatePersonMergeCandidates(db)
   persistFileBatchRelations(db, batchId, files.map((file) => file.fileId))
   persistPeopleFileRelations(db, anchors)
 
