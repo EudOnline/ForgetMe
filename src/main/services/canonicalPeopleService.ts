@@ -14,6 +14,14 @@ export function normalizePersonName(displayName: string) {
   return displayName.trim().replace(/\s+/g, ' ').toLowerCase()
 }
 
+function displayNameQuality(displayName: string) {
+  const trimmed = displayName.trim()
+  const hasUppercase = /[A-Z]/.test(trimmed)
+  const hasLowercase = /[a-z]/.test(trimmed)
+  const startsUppercase = /^[A-Z]/.test(trimmed)
+  return Number(hasUppercase && hasLowercase) * 3 + Number(startsUppercase)
+}
+
 export function chooseCanonicalPersonName(aliases: CanonicalAliasInput[]) {
   return aliases
     .slice()
@@ -21,6 +29,10 @@ export function chooseCanonicalPersonName(aliases: CanonicalAliasInput[]) {
       const manualBoost = Number(right.sourceType === 'manual') - Number(left.sourceType === 'manual')
       if (manualBoost !== 0) {
         return manualBoost
+      }
+      const qualityBoost = displayNameQuality(right.displayName) - displayNameQuality(left.displayName)
+      if (qualityBoost !== 0) {
+        return qualityBoost
       }
       const lengthBoost = right.displayName.length - left.displayName.length
       if (lengthBoost !== 0) {

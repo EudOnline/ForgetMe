@@ -27,6 +27,80 @@ export type ArchiveSearchResult = {
   matchedPeople: string[]
 }
 
+export type CanonicalPersonSummary = {
+  id: string
+  primaryDisplayName: string
+  normalizedName: string
+  aliasCount: number
+  firstSeenAt: string | null
+  lastSeenAt: string | null
+  status: string
+  evidenceCount: number
+}
+
+export type CanonicalPersonDetail = CanonicalPersonSummary & {
+  manualLabels: string[]
+  aliases: Array<{
+    displayName: string
+    sourceType: string
+    confidence: number
+  }>
+}
+
+export type PersonTimelineEvent = {
+  eventId: string
+  title: string
+  timeStart: string
+  timeEnd: string
+  summary: string | null
+  evidence: Array<{
+    fileId: string
+    batchId: string | null
+    fileName: string
+    extension: string | null
+  }>
+}
+
+export type PersonGraph = {
+  nodes: Array<{
+    id: string
+    primaryDisplayName: string
+  }>
+  edges: Array<{
+    fromPersonId: string
+    toPersonId: string
+    status: 'approved'
+    sharedFileCount: number
+    evidenceFileIds: string[]
+    manualLabel?: string
+  }>
+}
+
+export type ReviewQueueItem = {
+  id: string
+  itemType: string
+  candidateId: string
+  status: string
+  priority: number
+  confidence: number
+  summary: Record<string, unknown>
+  createdAt: string
+  reviewedAt: string | null
+}
+
+export type DecisionJournalEntry = {
+  id: string
+  decisionType: string
+  targetType: string
+  targetId: string
+  operationPayload: Record<string, unknown>
+  undoPayload: Record<string, unknown>
+  actor: string
+  createdAt: string
+  undoneAt: string | null
+  undoneBy: string | null
+}
+
 export type CreateImportBatchInput = {
   sourcePaths: string[]
   sourceLabel: string
@@ -39,6 +113,16 @@ export interface ArchiveApi {
   getImportBatch: (batchId: string) => Promise<ImportBatchSummary | null>
   searchArchive: (input: { query?: string; fileKinds?: string[]; batchId?: string; duplicateClass?: string; personName?: string }) => Promise<ArchiveSearchResult[]>
   logicalDeleteBatch: (batchId: string) => Promise<{ status: 'deleted'; batchId: string; deletedAt: string }>
+  listCanonicalPeople: () => Promise<CanonicalPersonSummary[]>
+  getCanonicalPerson: (canonicalPersonId: string) => Promise<CanonicalPersonDetail | null>
+  getPersonTimeline: (canonicalPersonId: string) => Promise<PersonTimelineEvent[]>
+  getPersonGraph: (canonicalPersonId: string) => Promise<PersonGraph>
+  listReviewQueue: (input?: { status?: string }) => Promise<ReviewQueueItem[]>
+  listDecisionJournal: () => Promise<DecisionJournalEntry[]>
+  approveReviewItem: (queueItemId: string) => Promise<{ status: 'approved'; journalId: string; queueItemId: string; candidateId: string }>
+  rejectReviewItem: (input: { queueItemId: string; note?: string }) => Promise<{ status: 'rejected'; journalId: string; queueItemId: string; candidateId: string }>
+  undoDecision: (journalId: string) => Promise<{ status: 'undone'; journalId: string }>
+  setRelationshipLabel: (input: { fromPersonId: string; toPersonId: string; label: string }) => Promise<{ id: string; status: 'approved' }>
 }
 
 declare global {

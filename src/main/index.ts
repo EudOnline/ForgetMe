@@ -2,6 +2,8 @@ import fs from 'node:fs'
 import { join } from 'node:path'
 import { app, BrowserWindow } from 'electron'
 import { registerArchiveIpc } from './ipc/archiveIpc'
+import { registerPeopleIpc } from './ipc/peopleIpc'
+import { registerReviewIpc } from './ipc/reviewIpc'
 import { registerSearchIpc } from './ipc/searchIpc'
 import { ensureAppPaths } from './services/appPaths'
 
@@ -52,6 +54,8 @@ const createWindow = () => {
 app.whenReady().then(() => {
   const appPaths = ensureAppPaths(resolveAppDataRoot())
   registerArchiveIpc(appPaths)
+  registerPeopleIpc(appPaths)
+  registerReviewIpc(appPaths)
   registerSearchIpc(appPaths)
   createWindow()
 
