@@ -1,4 +1,28 @@
 import type { ArchiveDatabase } from './db'
+import { loadApprovedEnrichmentIndex } from './enrichedSearchService'
+
+function getCanonicalPersonFileIds(db: ArchiveDatabase, canonicalPersonId: string) {
+  const anchorRows = db.prepare(
+    `select anchor_person_id as anchorPersonId
+     from person_memberships
+     where canonical_person_id = ? and status = ?`
+  ).all(canonicalPersonId, 'active') as Array<{ anchorPersonId: string }>
+
+  if (anchorRows.length === 0) {
+    return [] as string[]
+  }
+
+  const fileRows = db.prepare(
+    `select distinct target_id as fileId
+     from relations
+     where source_type = 'person'
+       and target_type = 'file'
+       and source_id in (${anchorRows.map(() => '?').join(', ')})
+     order by target_id asc`
+  ).all(...anchorRows.map((row) => row.anchorPersonId)) as Array<{ fileId: string }>
+
+  return fileRows.map((row) => row.fileId)
+}
 
 export function getPeopleList(db: ArchiveDatabase) {
   const rows = db.prepare(
@@ -77,6 +101,9 @@ export function getCanonicalPerson(db: ArchiveDatabase, input: { canonicalPerson
      from person_memberships
      where canonical_person_id = ? and status = ?`
   ).get(input.canonicalPersonId, 'active') as { count: number }
+  const fileIds = getCanonicalPersonFileIds(db, input.canonicalPersonId)
+  const enrichmentByFile = loadApprovedEnrichmentIndex(db, { fileIds })
+  const approvedFields = fileIds.flatMap((fileId) => enrichmentByFile.get(fileId)?.approvedFields ?? [])
 
   return {
     id: person.id,
@@ -88,6 +115,7 @@ export function getCanonicalPerson(db: ArchiveDatabase, input: { canonicalPerson
     evidenceCount: evidenceCount.count,
     manualLabels: JSON.parse(person.manualLabelsJson),
     aliases,
+    approvedFields,
     status: person.status
   }
 }
@@ -125,6 +153,10 @@ export function getPersonTimeline(db: ArchiveDatabase, input: { canonicalPersonI
     extension: string | null
   }>
 
+  const enrichmentByFile = loadApprovedEnrichmentIndex(db, {
+    fileIds: rows.flatMap((row) => row.fileId ?? [])
+  })
+
   const timeline = new Map<string, {
     eventId: string
     title: string
@@ -136,6 +168,7 @@ export function getPersonTimeline(db: ArchiveDatabase, input: { canonicalPersonI
       batchId: string | null
       fileName: string
       extension: string | null
+      enrichmentSignals: string[]
     }>
   }>()
 
@@ -154,7 +187,8 @@ export function getPersonTimeline(db: ArchiveDatabase, input: { canonicalPersonI
         fileId: row.fileId,
         batchId: row.batchId,
         fileName: row.fileName,
-        extension: row.extension
+        extension: row.extension,
+        enrichmentSignals: enrichmentByFile.get(row.fileId)?.timelineSignals ?? []
       })
     }
 

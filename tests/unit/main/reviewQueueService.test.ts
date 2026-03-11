@@ -105,3 +105,32 @@ describe('review queue approvals', () => {
     db.close()
   })
 })
+
+it('routes structured field candidates through the shared review queue handlers', () => {
+  const db = setupDatabase()
+  const createdAt = '2026-03-11T00:00:00.000Z'
+
+  db.prepare('insert into import_batches (id, source_label, status, created_at) values (?, ?, ?, ?)').run('b-1', 'structured-review', 'ready', createdAt)
+  db.prepare('insert into vault_files (id, batch_id, source_path, frozen_path, file_name, extension, mime_type, file_size, sha256, duplicate_class, parser_status, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run('f-1', 'b-1', '/tmp/transcript.pdf', '/tmp/transcript.pdf', 'transcript.pdf', '.pdf', 'application/pdf', 1, 'hash-1', 'unique', 'parsed', createdAt)
+  db.prepare(`insert into enrichment_jobs (
+    id, file_id, enhancer_type, provider, model, status, attempt_count, input_hash,
+    started_at, finished_at, error_message, usage_json, created_at, updated_at
+  ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run('job-1', 'f-1', 'document_ocr', 'siliconflow', 'fixture-model', 'completed', 1, null, createdAt, createdAt, null, '{}', createdAt, createdAt)
+  db.prepare(`insert into structured_field_candidates (
+    id, file_id, job_id, field_type, field_key, field_value_json, document_type,
+    confidence, risk_level, source_page, source_span_json, status, created_at
+  ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run('fc-1', 'f-1', 'job-1', 'education', 'school_name', '{"value":"北京大学"}', 'transcript', 0.99, 'high', 1, null, 'pending', createdAt)
+  db.prepare('insert into review_queue (id, item_type, candidate_id, status, priority, confidence, summary_json, created_at) values (?, ?, ?, ?, ?, ?, ?, ?)').run('rq-structured', 'structured_field_candidate', 'fc-1', 'pending', 0, 0.99, '{"fieldKey":"school_name"}', createdAt)
+
+  const approved = approveReviewItem(db, { queueItemId: 'rq-structured', actor: 'local-user' })
+
+  expect(approved.status).toBe('approved')
+  expect(db.prepare('select status from structured_field_candidates where id = ?').get('fc-1')).toEqual({ status: 'approved' })
+  expect((db.prepare('select count(*) as count from enriched_evidence where evidence_type = ?').get('approved_structured_field') as { count: number }).count).toBe(1)
+
+  const undone = undoDecision(db, { journalId: approved.journalId, actor: 'local-user' })
+
+  expect(undone.status).toBe('undone')
+  expect(db.prepare('select status from structured_field_candidates where id = ?').get('fc-1')).toEqual({ status: 'undone' })
+  db.close()
+})

@@ -9,12 +9,34 @@ export const batchIdSchema = z.object({
   batchId: z.string().min(1)
 })
 
+export const fileIdSchema = z.object({
+  fileId: z.string().min(1)
+})
+
+export const jobIdSchema = z.object({
+  jobId: z.string().min(1)
+})
+
 export const canonicalPersonIdSchema = z.object({
   canonicalPersonId: z.string().min(1)
 })
 
 export const reviewQueueListInputSchema = z.object({
   status: z.string().min(1).optional()
+}).optional().default({})
+
+export const enrichmentJobFilterSchema = z.object({
+  status: z.enum(['pending', 'processing', 'completed', 'failed']).optional(),
+  fileId: z.string().min(1).optional()
+}).optional().default({})
+
+export const documentEvidenceInputSchema = z.object({
+  fileId: z.string().min(1)
+})
+
+export const structuredFieldCandidateFilterSchema = z.object({
+  fileId: z.string().min(1).optional(),
+  status: z.enum(['pending', 'approved', 'rejected', 'undone']).optional()
 }).optional().default({})
 
 export const relationshipLabelInputSchema = z.object({

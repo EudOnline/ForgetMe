@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import type { ArchiveDatabase } from './db'
 import { chooseCanonicalPersonName } from './canonicalPeopleService'
+import { approveStructuredFieldCandidate, rejectStructuredFieldCandidate, undoStructuredFieldDecision } from './enrichmentReviewService'
 import { appendDecisionJournal, listDecisionJournal, markDecisionUndone } from './journalService'
 
 type ReviewQueueItemRow = {
@@ -288,8 +289,12 @@ export function listReviewQueue(db: ArchiveDatabase, input?: { status?: string }
 }
 
 export function approveReviewItem(db: ArchiveDatabase, input: { queueItemId: string; actor: string }) {
+  const queueItem = getReviewQueueItem(db, input.queueItemId)
+  if (queueItem.itemType === 'structured_field_candidate') {
+    return approveStructuredFieldCandidate(db, input)
+  }
+
   return inTransaction(db, () => {
-    const queueItem = getReviewQueueItem(db, input.queueItemId)
     if (queueItem.status !== 'pending') {
       throw new Error(`Review queue item is not pending: ${input.queueItemId}`)
     }
@@ -307,8 +312,12 @@ export function approveReviewItem(db: ArchiveDatabase, input: { queueItemId: str
 }
 
 export function rejectReviewItem(db: ArchiveDatabase, input: { queueItemId: string; actor: string; note?: string }) {
+  const queueItem = getReviewQueueItem(db, input.queueItemId)
+  if (queueItem.itemType === 'structured_field_candidate') {
+    return rejectStructuredFieldCandidate(db, input)
+  }
+
   return inTransaction(db, () => {
-    const queueItem = getReviewQueueItem(db, input.queueItemId)
     const reviewedAt = new Date().toISOString()
 
     if (queueItem.itemType === 'person_merge_candidate') {
@@ -347,25 +356,28 @@ export function rejectReviewItem(db: ArchiveDatabase, input: { queueItemId: stri
 }
 
 export function undoDecision(db: ArchiveDatabase, input: { journalId: string; actor: string }) {
+  const journal = db.prepare(
+    `select
+      id,
+      target_type as targetType,
+      target_id as targetId,
+      undo_payload_json as undoPayloadJson,
+      undone_at as undoneAt
+    from decision_journal
+    where id = ?`
+  ).get(input.journalId) as DecisionJournalRow | undefined
+
+  if (!journal) {
+    throw new Error(`Decision journal not found: ${input.journalId}`)
+  }
+  if (journal.undoneAt) {
+    throw new Error(`Decision already undone: ${input.journalId}`)
+  }
+  if (journal.targetType === 'structured_field_candidate') {
+    return undoStructuredFieldDecision(db, input)
+  }
+
   return inTransaction(db, () => {
-    const journal = db.prepare(
-      `select
-        id,
-        target_type as targetType,
-        target_id as targetId,
-        undo_payload_json as undoPayloadJson,
-        undone_at as undoneAt
-      from decision_journal
-      where id = ?`
-    ).get(input.journalId) as DecisionJournalRow | undefined
-
-    if (!journal) {
-      throw new Error(`Decision journal not found: ${input.journalId}`)
-    }
-    if (journal.undoneAt) {
-      throw new Error(`Decision already undone: ${input.journalId}`)
-    }
-
     const undoPayload = JSON.parse(journal.undoPayloadJson) as {
       queueItemId?: string
       candidateId?: string

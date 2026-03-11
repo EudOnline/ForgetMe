@@ -5,10 +5,13 @@ import type {
   CanonicalPersonSummary,
   CreateImportBatchInput,
   DecisionJournalEntry,
+  DocumentEvidence,
+  EnrichmentJob,
   ImportBatchSummary,
   PersonGraph,
   PersonTimelineEvent,
-  ReviewQueueItem
+  ReviewQueueItem,
+  StructuredFieldCandidate
 } from '../shared/archiveContracts'
 
 declare global {
@@ -33,7 +36,14 @@ const fallbackApi: ArchiveApi = {
   approveReviewItem: async (queueItemId: string) => ({ status: 'approved' as const, journalId: '', queueItemId, candidateId: '' }),
   rejectReviewItem: async ({ queueItemId }: { queueItemId: string; note?: string }) => ({ status: 'rejected' as const, journalId: '', queueItemId, candidateId: '' }),
   undoDecision: async (journalId: string) => ({ status: 'undone' as const, journalId }),
-  setRelationshipLabel: async () => ({ id: '', status: 'approved' as const })
+  setRelationshipLabel: async () => ({ id: '', status: 'approved' as const }),
+  listEnrichmentJobs: async () => [] as EnrichmentJob[],
+  getDocumentEvidence: async (_fileId: string) => null as DocumentEvidence | null,
+  rerunEnrichmentJob: async (_jobId: string) => null as EnrichmentJob | null,
+  listStructuredFieldCandidates: async () => [] as StructuredFieldCandidate[],
+  approveStructuredFieldCandidate: async (queueItemId: string) => ({ status: 'approved' as const, journalId: '', queueItemId, candidateId: '' }),
+  rejectStructuredFieldCandidate: async ({ queueItemId }: { queueItemId: string; note?: string }) => ({ status: 'rejected' as const, journalId: '', queueItemId, candidateId: '' }),
+  undoStructuredFieldDecision: async (journalId: string) => ({ status: 'undone' as const, journalId })
 }
 
 function createIpcArchiveApi(): ArchiveApi | null {
@@ -59,7 +69,14 @@ function createIpcArchiveApi(): ArchiveApi | null {
     approveReviewItem: (queueItemId) => ipcRenderer.invoke('archive:approveReviewItem', { queueItemId }),
     rejectReviewItem: (input) => ipcRenderer.invoke('archive:rejectReviewItem', input),
     undoDecision: (journalId) => ipcRenderer.invoke('archive:undoDecision', { journalId }),
-    setRelationshipLabel: (input) => ipcRenderer.invoke('archive:setRelationshipLabel', input)
+    setRelationshipLabel: (input) => ipcRenderer.invoke('archive:setRelationshipLabel', input),
+    listEnrichmentJobs: (input) => ipcRenderer.invoke('archive:listEnrichmentJobs', input),
+    getDocumentEvidence: (fileId) => ipcRenderer.invoke('archive:getDocumentEvidence', { fileId }),
+    rerunEnrichmentJob: (jobId) => ipcRenderer.invoke('archive:rerunEnrichmentJob', { jobId }),
+    listStructuredFieldCandidates: (input) => ipcRenderer.invoke('archive:listStructuredFieldCandidates', input),
+    approveStructuredFieldCandidate: (queueItemId) => ipcRenderer.invoke('archive:approveStructuredFieldCandidate', { queueItemId }),
+    rejectStructuredFieldCandidate: (input) => ipcRenderer.invoke('archive:rejectStructuredFieldCandidate', input),
+    undoStructuredFieldDecision: (journalId) => ipcRenderer.invoke('archive:undoStructuredFieldDecision', { journalId })
   }
 }
 

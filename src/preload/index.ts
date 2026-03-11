@@ -17,7 +17,14 @@ const archiveApi: ArchiveApi = {
   approveReviewItem: (queueItemId) => ipcRenderer.invoke('archive:approveReviewItem', { queueItemId }),
   rejectReviewItem: (input) => ipcRenderer.invoke('archive:rejectReviewItem', input),
   undoDecision: (journalId) => ipcRenderer.invoke('archive:undoDecision', { journalId }),
-  setRelationshipLabel: (input) => ipcRenderer.invoke('archive:setRelationshipLabel', input)
+  setRelationshipLabel: (input) => ipcRenderer.invoke('archive:setRelationshipLabel', input),
+  listEnrichmentJobs: (input) => ipcRenderer.invoke('archive:listEnrichmentJobs', input),
+  getDocumentEvidence: (fileId) => ipcRenderer.invoke('archive:getDocumentEvidence', { fileId }),
+  rerunEnrichmentJob: (jobId) => ipcRenderer.invoke('archive:rerunEnrichmentJob', { jobId }),
+  listStructuredFieldCandidates: (input) => ipcRenderer.invoke('archive:listStructuredFieldCandidates', input),
+  approveStructuredFieldCandidate: (queueItemId) => ipcRenderer.invoke('archive:approveStructuredFieldCandidate', { queueItemId }),
+  rejectStructuredFieldCandidate: (input) => ipcRenderer.invoke('archive:rejectStructuredFieldCandidate', input),
+  undoStructuredFieldDecision: (journalId) => ipcRenderer.invoke('archive:undoStructuredFieldDecision', { journalId })
 }
 
 contextBridge.exposeInMainWorld('archiveApi', archiveApi)

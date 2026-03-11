@@ -27,6 +27,61 @@ export type ArchiveSearchResult = {
   matchedPeople: string[]
 }
 
+export type ApprovedStructuredField = {
+  fileId: string
+  fieldType: string
+  fieldKey: string
+  documentType: string
+  value: string
+}
+
+export type EnrichmentJob = {
+  id: string
+  fileId: string
+  fileName: string
+  enhancerType: string
+  provider: string
+  model: string
+  status: string
+  attemptCount: number
+  errorMessage: string | null
+  startedAt: string | null
+  finishedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type StructuredFieldCandidate = {
+  id: string
+  fileId: string
+  jobId: string
+  fieldType: string
+  fieldKey: string
+  fieldValue: string
+  documentType: string
+  confidence: number
+  riskLevel: string
+  sourcePage: number | null
+  status: string
+  createdAt: string
+  reviewedAt: string | null
+  reviewNote: string | null
+  queueItemId: string | null
+}
+
+export type DocumentEvidence = {
+  fileId: string
+  fileName: string
+  rawText: string
+  layoutBlocks: Array<{
+    page: number
+    text: string
+    bbox?: number[]
+  }>
+  approvedFields: ApprovedStructuredField[]
+  fieldCandidates: StructuredFieldCandidate[]
+}
+
 export type CanonicalPersonSummary = {
   id: string
   primaryDisplayName: string
@@ -45,6 +100,7 @@ export type CanonicalPersonDetail = CanonicalPersonSummary & {
     sourceType: string
     confidence: number
   }>
+  approvedFields?: ApprovedStructuredField[]
 }
 
 export type PersonTimelineEvent = {
@@ -58,6 +114,7 @@ export type PersonTimelineEvent = {
     batchId: string | null
     fileName: string
     extension: string | null
+    enrichmentSignals?: string[]
   }>
 }
 
@@ -123,6 +180,13 @@ export interface ArchiveApi {
   rejectReviewItem: (input: { queueItemId: string; note?: string }) => Promise<{ status: 'rejected'; journalId: string; queueItemId: string; candidateId: string }>
   undoDecision: (journalId: string) => Promise<{ status: 'undone'; journalId: string }>
   setRelationshipLabel: (input: { fromPersonId: string; toPersonId: string; label: string }) => Promise<{ id: string; status: 'approved' }>
+  listEnrichmentJobs: (input?: { status?: 'pending' | 'processing' | 'completed' | 'failed'; fileId?: string }) => Promise<EnrichmentJob[]>
+  getDocumentEvidence: (fileId: string) => Promise<DocumentEvidence | null>
+  rerunEnrichmentJob: (jobId: string) => Promise<EnrichmentJob | null>
+  listStructuredFieldCandidates: (input?: { fileId?: string; status?: 'pending' | 'approved' | 'rejected' | 'undone' }) => Promise<StructuredFieldCandidate[]>
+  approveStructuredFieldCandidate: (queueItemId: string) => Promise<{ status: 'approved'; journalId: string; queueItemId: string; candidateId: string }>
+  rejectStructuredFieldCandidate: (input: { queueItemId: string; note?: string }) => Promise<{ status: 'rejected'; journalId: string; queueItemId: string; candidateId: string }>
+  undoStructuredFieldDecision: (journalId: string) => Promise<{ status: 'undone'; journalId: string }>
 }
 
 declare global {

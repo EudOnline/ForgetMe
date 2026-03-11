@@ -1,6 +1,7 @@
 import path from 'node:path'
 import type { AppPaths } from './appPaths'
 import { openDatabase, runMigrations } from './db'
+import { buildEnrichedSearchRow, loadApprovedEnrichmentIndex } from './enrichedSearchService'
 
 function databasePath(appPaths: AppPaths) {
   return path.join(appPaths.sqliteDir, 'archive.sqlite')
@@ -56,16 +57,28 @@ export async function searchArchive(input: {
     peopleByFile.set(row.fileId, [...(peopleByFile.get(row.fileId) ?? []), row.displayName])
   }
 
+  const enrichmentByFile = loadApprovedEnrichmentIndex(db, {
+    fileIds: rows.map((row) => row.fileId)
+  })
+
   db.close()
 
   return rows
     .map((row) => {
       const fileKind = extensionToKind(row.extension)
-      const haystack = [row.fileName, row.payloadJson ?? '', ...(peopleByFile.get(row.fileId) ?? [])].join(' ')
+      const enrichment = enrichmentByFile.get(row.fileId)
+      const matchedPeople = peopleByFile.get(row.fileId) ?? []
+      const haystack = buildEnrichedSearchRow({
+        fileName: row.fileName,
+        payloadJson: row.payloadJson,
+        matchedPeople,
+        enrichedTexts: enrichment?.enrichedTexts ?? [],
+        approvedFields: enrichment?.approvedFields.map((field) => field.value) ?? []
+      }).haystack
       return {
         ...row,
         fileKind,
-        matchedPeople: peopleByFile.get(row.fileId) ?? [],
+        matchedPeople,
         haystack
       }
     })
