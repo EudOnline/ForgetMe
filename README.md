@@ -192,9 +192,26 @@ npm run test:unit -- tests/unit/main/reviewWorkbenchReadService.test.ts tests/un
 npm run build
 ```
 
+### Phase Six B2 Conflict Groups
+
+Phase 6B2 now extends `Review Workbench` with the first conflict-group and continuous-review baseline:
+
+- pending items are grouped by `canonical person + item type + field key`
+- each group shows pending count, distinct candidate values, and whether the group is currently in conflict
+- selecting a group filters the workbench sidebar to that group only
+- after approve / reject, the workbench keeps the current group context when possible and falls back to the current person when the group is exhausted
+
+### Phase Six B2 Verification
+
+```bash
+npm run test:unit -- tests/unit/main/reviewWorkbenchReadService.test.ts tests/unit/renderer/reviewWorkbenchPage.test.tsx tests/unit/renderer/reviewWorkbenchActions.test.tsx tests/unit/renderer/reviewQueuePage.test.tsx
+npm run build
+npx playwright test tests/e2e/review-workbench-single-item-flow.spec.ts
+```
+
 ### Current Operational Note
 
 The local-first runner, shared review queue, formal approved profile read model, and phase-five single-item review workbench are now wired end-to-end.
-Phase 6 now includes the preservation export / restore baseline, the first provider-boundary audit baseline, and the first people-centric review inbox baseline.
-The next validated follow-up is deeper 6B efficiency work: conflict grouping and continuous review on top of the new people inbox.
+Phase 6 now includes the preservation export / restore baseline, the provider-boundary audit baseline, the people-centric review inbox baseline, and the first conflict-group continuous-review baseline.
+The next validated follow-up inside 6B is richer compare and navigation ergonomics on top of these conflict groups.
 See `docs/plans/2026-03-11-phase-six-preservation-operator-efficiency-design.md` for the agreed roadmap.

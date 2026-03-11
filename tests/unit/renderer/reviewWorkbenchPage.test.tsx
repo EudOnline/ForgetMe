@@ -105,6 +105,20 @@ describe('ReviewWorkbenchPage', () => {
             hasContinuousSequence: false
           }
         ]),
+        listReviewConflictGroups: vi.fn().mockResolvedValue([
+          {
+            groupKey: 'cp-1::structured_field_candidate::school_name',
+            canonicalPersonId: 'cp-1',
+            canonicalPersonName: 'Alice Chen',
+            itemType: 'structured_field_candidate',
+            fieldKey: 'school_name',
+            pendingCount: 1,
+            distinctValues: ['北京大学'],
+            hasConflict: false,
+            nextQueueItemId: 'rq-1',
+            latestPendingCreatedAt: '2026-03-11T00:00:00.000Z'
+          }
+        ]),
         listReviewWorkbenchItems: vi.fn().mockResolvedValue([
           {
             queueItemId: 'rq-1',
@@ -142,7 +156,7 @@ describe('ReviewWorkbenchPage', () => {
     expect(await screen.findByText('project_formal_attribute')).toBeInTheDocument()
   })
 
-  it('shows a people inbox and filters workbench items by selected person', async () => {
+  it('shows conflict groups and filters workbench items by selected group', async () => {
     const getReviewWorkbenchItem = vi.fn().mockImplementation(async (queueItemId: string) => {
       if (queueItemId === 'rq-a1') {
         return buildWorkbenchDetail({
@@ -152,18 +166,30 @@ describe('ReviewWorkbenchPage', () => {
           canonicalPersonName: 'Alice Chen',
           fieldKey: 'school_name',
           displayValue: '北京大学',
-          fileName: 'alice-transcript.pdf'
+          fileName: 'alice-transcript-a.pdf'
+        })
+      }
+
+      if (queueItemId === 'rq-a2') {
+        return buildWorkbenchDetail({
+          queueItemId: 'rq-a2',
+          candidateId: 'fc-a2',
+          canonicalPersonId: 'cp-a',
+          canonicalPersonName: 'Alice Chen',
+          fieldKey: 'school_name',
+          displayValue: '清华大学',
+          fileName: 'alice-transcript-b.pdf'
         })
       }
 
       return buildWorkbenchDetail({
-        queueItemId: 'rq-b1',
-        candidateId: 'fc-b1',
-        canonicalPersonId: 'cp-b',
-        canonicalPersonName: 'Bob Li',
+        queueItemId: 'rq-a3',
+        candidateId: 'fc-a3',
+        canonicalPersonId: 'cp-a',
+        canonicalPersonName: 'Alice Chen',
         fieldKey: 'birth_date',
-        displayValue: '1991-01-01',
-        fileName: 'bob-id.pdf'
+        displayValue: '1990-01-01',
+        fileName: 'alice-id.pdf'
       })
     })
 
@@ -173,43 +199,42 @@ describe('ReviewWorkbenchPage', () => {
           {
             canonicalPersonId: 'cp-a',
             canonicalPersonName: 'Alice Chen',
-            pendingCount: 1,
-            conflictCount: 0,
-            fieldKeys: ['school_name'],
+            pendingCount: 3,
+            conflictCount: 2,
+            fieldKeys: ['birth_date', 'school_name'],
             itemTypes: ['structured_field_candidate'],
             nextQueueItemId: 'rq-a1',
-            latestPendingCreatedAt: '2026-03-11T00:00:00.000Z',
-            hasContinuousSequence: false
+            latestPendingCreatedAt: '2026-03-11T01:00:00.000Z',
+            hasContinuousSequence: true
+          }
+        ]),
+        listReviewConflictGroups: vi.fn().mockResolvedValue([
+          {
+            groupKey: 'cp-a::structured_field_candidate::school_name',
+            canonicalPersonId: 'cp-a',
+            canonicalPersonName: 'Alice Chen',
+            itemType: 'structured_field_candidate',
+            fieldKey: 'school_name',
+            pendingCount: 2,
+            distinctValues: ['北京大学', '清华大学'],
+            hasConflict: true,
+            nextQueueItemId: 'rq-a1',
+            latestPendingCreatedAt: '2026-03-11T00:05:00.000Z'
           },
           {
-            canonicalPersonId: 'cp-b',
-            canonicalPersonName: 'Bob Li',
+            groupKey: 'cp-a::structured_field_candidate::birth_date',
+            canonicalPersonId: 'cp-a',
+            canonicalPersonName: 'Alice Chen',
+            itemType: 'structured_field_candidate',
+            fieldKey: 'birth_date',
             pendingCount: 1,
-            conflictCount: 0,
-            fieldKeys: ['birth_date'],
-            itemTypes: ['structured_field_candidate'],
-            nextQueueItemId: 'rq-b1',
-            latestPendingCreatedAt: '2026-03-11T01:00:00.000Z',
-            hasContinuousSequence: false
+            distinctValues: ['1990-01-01'],
+            hasConflict: false,
+            nextQueueItemId: 'rq-a3',
+            latestPendingCreatedAt: '2026-03-11T01:00:00.000Z'
           }
         ]),
         listReviewWorkbenchItems: vi.fn().mockResolvedValue([
-          {
-            queueItemId: 'rq-b1',
-            itemType: 'structured_field_candidate',
-            candidateId: 'fc-b1',
-            status: 'pending',
-            priority: 0,
-            confidence: 0.97,
-            summary: { fieldKey: 'birth_date' },
-            canonicalPersonId: 'cp-b',
-            canonicalPersonName: 'Bob Li',
-            fieldKey: 'birth_date',
-            displayValue: '1991-01-01',
-            hasConflict: false,
-            createdAt: '2026-03-11T01:00:00.000Z',
-            reviewedAt: null
-          },
           {
             queueItemId: 'rq-a1',
             itemType: 'structured_field_candidate',
@@ -222,8 +247,40 @@ describe('ReviewWorkbenchPage', () => {
             canonicalPersonName: 'Alice Chen',
             fieldKey: 'school_name',
             displayValue: '北京大学',
-            hasConflict: false,
+            hasConflict: true,
             createdAt: '2026-03-11T00:00:00.000Z',
+            reviewedAt: null
+          },
+          {
+            queueItemId: 'rq-a2',
+            itemType: 'structured_field_candidate',
+            candidateId: 'fc-a2',
+            status: 'pending',
+            priority: 0,
+            confidence: 0.97,
+            summary: { fieldKey: 'school_name' },
+            canonicalPersonId: 'cp-a',
+            canonicalPersonName: 'Alice Chen',
+            fieldKey: 'school_name',
+            displayValue: '清华大学',
+            hasConflict: true,
+            createdAt: '2026-03-11T00:05:00.000Z',
+            reviewedAt: null
+          },
+          {
+            queueItemId: 'rq-a3',
+            itemType: 'structured_field_candidate',
+            candidateId: 'fc-a3',
+            status: 'pending',
+            priority: 0,
+            confidence: 0.96,
+            summary: { fieldKey: 'birth_date' },
+            canonicalPersonId: 'cp-a',
+            canonicalPersonName: 'Alice Chen',
+            fieldKey: 'birth_date',
+            displayValue: '1990-01-01',
+            hasConflict: false,
+            createdAt: '2026-03-11T01:00:00.000Z',
             reviewedAt: null
           }
         ]),
@@ -236,14 +293,15 @@ describe('ReviewWorkbenchPage', () => {
 
     render(<ReviewWorkbenchPage />)
 
-    expect(await screen.findByText('People Inbox')).toBeInTheDocument()
-    expect(await screen.findByRole('button', { name: 'Alice Chen' })).toBeInTheDocument()
-    expect(await screen.findByRole('button', { name: 'Bob Li' })).toBeInTheDocument()
+    expect(await screen.findByText('Conflict Groups')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'school_name' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'birth_date' })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Alice Chen' }))
+    fireEvent.click(screen.getByRole('button', { name: 'school_name' }))
 
     expect(await screen.findByRole('button', { name: '北京大学' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '清华大学' })).toBeInTheDocument()
     expect(getReviewWorkbenchItem).toHaveBeenLastCalledWith('rq-a1')
-    expect(screen.queryByRole('button', { name: '1991-01-01' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '1990-01-01' })).not.toBeInTheDocument()
   })
 })

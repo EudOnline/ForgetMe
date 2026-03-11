@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ReviewInboxPersonSummary, ReviewWorkbenchDetail, ReviewWorkbenchListItem } from '../../shared/archiveContracts'
+import type {
+  ReviewConflictGroupSummary,
+  ReviewInboxPersonSummary,
+  ReviewWorkbenchDetail,
+  ReviewWorkbenchListItem
+} from '../../shared/archiveContracts'
 import { getArchiveApi } from '../archiveApi'
 import { ReviewActionBar } from '../components/ReviewActionBar'
 import { ReviewCandidateSummaryCard } from '../components/ReviewCandidateSummaryCard'
+import { ReviewConflictGroupSidebar } from '../components/ReviewConflictGroupSidebar'
 import { ReviewEvidenceTraceCard } from '../components/ReviewEvidenceTraceCard'
 import { ReviewImpactPreviewCard } from '../components/ReviewImpactPreviewCard'
 import { ReviewInboxSidebar } from '../components/ReviewInboxSidebar'
@@ -12,12 +18,32 @@ function toPersonKey(canonicalPersonId: string | null) {
   return canonicalPersonId ?? '__unassigned__'
 }
 
+function toConflictGroupKey(item: ReviewWorkbenchListItem) {
+  return `${toPersonKey(item.canonicalPersonId)}::${item.itemType}::${item.fieldKey ?? '__unkeyed__'}`
+}
+
 function filterItemsByPerson(items: ReviewWorkbenchListItem[], personKey: string | null) {
   if (!personKey) {
     return items
   }
 
   return items.filter((item) => toPersonKey(item.canonicalPersonId) === personKey)
+}
+
+function filterItemsByConflictGroup(items: ReviewWorkbenchListItem[], groupKey: string | null) {
+  if (!groupKey) {
+    return items
+  }
+
+  return items.filter((item) => toConflictGroupKey(item) === groupKey)
+}
+
+function filterConflictGroupsByPerson(groups: ReviewConflictGroupSummary[], personKey: string | null) {
+  if (!personKey) {
+    return groups
+  }
+
+  return groups.filter((group) => toPersonKey(group.canonicalPersonId) === personKey)
 }
 
 function resolvePersonKeyFromQueueItem(items: ReviewWorkbenchListItem[], queueItemId: string | null | undefined) {
@@ -35,13 +61,16 @@ export function ReviewWorkbenchPage(props: {
   const archiveApi = useMemo(() => getArchiveApi(), [])
   const [items, setItems] = useState<ReviewWorkbenchListItem[]>([])
   const [peopleInbox, setPeopleInbox] = useState<ReviewInboxPersonSummary[]>([])
+  const [conflictGroups, setConflictGroups] = useState<ReviewConflictGroupSummary[]>([])
   const [selectedInboxPersonKey, setSelectedInboxPersonKey] = useState<string | null>(null)
+  const [selectedConflictGroupKey, setSelectedConflictGroupKey] = useState<string | null>(null)
   const [selectedQueueItemId, setSelectedQueueItemId] = useState<string | null>(props.initialQueueItemId ?? null)
   const [detail, setDetail] = useState<ReviewWorkbenchDetail | null>(null)
   const [isBusy, setIsBusy] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const selectedQueueItemIdRef = useRef<string | null>(props.initialQueueItemId ?? null)
   const selectedInboxPersonKeyRef = useRef<string | null>(null)
+  const selectedConflictGroupKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
     selectedQueueItemIdRef.current = selectedQueueItemId
@@ -51,13 +80,23 @@ export function ReviewWorkbenchPage(props: {
     selectedInboxPersonKeyRef.current = selectedInboxPersonKey
   }, [selectedInboxPersonKey])
 
-  const refreshWorkbench = useCallback(async (preferredQueueItemId?: string | null, preferredPersonKey?: string | null) => {
-    const [nextPeopleInbox, nextItems] = await Promise.all([
+  useEffect(() => {
+    selectedConflictGroupKeyRef.current = selectedConflictGroupKey
+  }, [selectedConflictGroupKey])
+
+  const refreshWorkbench = useCallback(async (
+    preferredQueueItemId?: string | null,
+    preferredPersonKey?: string | null,
+    preferredConflictGroupKey?: string | null
+  ) => {
+    const [nextPeopleInbox, nextConflictGroups, nextItems] = await Promise.all([
       archiveApi.listReviewInboxPeople(),
+      archiveApi.listReviewConflictGroups(),
       archiveApi.listReviewWorkbenchItems({ status: 'pending' })
     ])
 
     setPeopleInbox(nextPeopleInbox)
+    setConflictGroups(nextConflictGroups)
     setItems(nextItems)
 
     let resolvedPersonKey = preferredPersonKey !== undefined
@@ -65,14 +104,39 @@ export function ReviewWorkbenchPage(props: {
       : selectedInboxPersonKeyRef.current
         ?? resolvePersonKeyFromQueueItem(nextItems, preferredQueueItemId ?? selectedQueueItemIdRef.current ?? props.initialQueueItemId ?? null)
 
-    let visibleItems = filterItemsByPerson(nextItems, resolvedPersonKey)
+    let personScopedItems = filterItemsByPerson(nextItems, resolvedPersonKey)
+    if (resolvedPersonKey && personScopedItems.length === 0) {
+      resolvedPersonKey = null
+      personScopedItems = nextItems
+    }
+
+    let resolvedConflictGroupKey = preferredConflictGroupKey !== undefined
+      ? preferredConflictGroupKey
+      : selectedConflictGroupKeyRef.current
+
+    let visibleGroups = filterConflictGroupsByPerson(nextConflictGroups, resolvedPersonKey)
+    if (resolvedConflictGroupKey && !visibleGroups.some((group) => group.groupKey === resolvedConflictGroupKey)) {
+      resolvedConflictGroupKey = null
+    }
+
+    let visibleItems = filterItemsByConflictGroup(personScopedItems, resolvedConflictGroupKey)
+    if (resolvedConflictGroupKey && visibleItems.length === 0) {
+      resolvedConflictGroupKey = null
+      visibleItems = personScopedItems
+    }
+
     if (resolvedPersonKey && visibleItems.length === 0) {
       resolvedPersonKey = null
+      resolvedConflictGroupKey = null
+      personScopedItems = nextItems
+      visibleGroups = nextConflictGroups
       visibleItems = nextItems
     }
 
     setSelectedInboxPersonKey(resolvedPersonKey)
     selectedInboxPersonKeyRef.current = resolvedPersonKey
+    setSelectedConflictGroupKey(resolvedConflictGroupKey)
+    selectedConflictGroupKeyRef.current = resolvedConflictGroupKey
 
     const candidateQueueItemIds = [
       preferredQueueItemId,
@@ -117,7 +181,12 @@ export function ReviewWorkbenchPage(props: {
 
   const handleSelectPerson = async (person: ReviewInboxPersonSummary) => {
     setErrorMessage(null)
-    await refreshWorkbench(person.nextQueueItemId, toPersonKey(person.canonicalPersonId))
+    await refreshWorkbench(person.nextQueueItemId, toPersonKey(person.canonicalPersonId), null)
+  }
+
+  const handleSelectConflictGroup = async (group: ReviewConflictGroupSummary) => {
+    setErrorMessage(null)
+    await refreshWorkbench(group.nextQueueItemId, toPersonKey(group.canonicalPersonId), group.groupKey)
   }
 
   const runAction = async (action: () => Promise<unknown>) => {
@@ -129,7 +198,7 @@ export function ReviewWorkbenchPage(props: {
     setErrorMessage(null)
     try {
       await action()
-      await refreshWorkbench(undefined, selectedInboxPersonKeyRef.current)
+      await refreshWorkbench(undefined, selectedInboxPersonKeyRef.current, selectedConflictGroupKeyRef.current)
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unknown review action error')
     } finally {
@@ -143,9 +212,14 @@ export function ReviewWorkbenchPage(props: {
       && !items.some((item) => item.queueItemId === detail.queueItem.id)
   )
 
+  const visibleGroups = useMemo(
+    () => filterConflictGroupsByPerson(conflictGroups, selectedInboxPersonKey),
+    [conflictGroups, selectedInboxPersonKey]
+  )
+
   const visibleItems = useMemo(
-    () => filterItemsByPerson(items, selectedInboxPersonKey),
-    [items, selectedInboxPersonKey]
+    () => filterItemsByConflictGroup(filterItemsByPerson(items, selectedInboxPersonKey), selectedConflictGroupKey),
+    [items, selectedInboxPersonKey, selectedConflictGroupKey]
   )
 
   return (
@@ -154,12 +228,20 @@ export function ReviewWorkbenchPage(props: {
       {errorMessage ? <p role="alert">{errorMessage}</p> : null}
       {selectedItemIsStale ? <p>Selected item is no longer pending.</p> : null}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr 1fr', gap: '16px', alignItems: 'start' }}>
-        <ReviewInboxSidebar
-          people={peopleInbox}
-          selectedPersonKey={selectedInboxPersonKey}
-          onSelectPerson={handleSelectPerson}
-          onShowAll={() => void refreshWorkbench(undefined, null)}
-        />
+        <div style={{ display: 'grid', gap: '16px' }}>
+          <ReviewInboxSidebar
+            people={peopleInbox}
+            selectedPersonKey={selectedInboxPersonKey}
+            onSelectPerson={handleSelectPerson}
+            onShowAll={() => void refreshWorkbench(undefined, null, null)}
+          />
+          <ReviewConflictGroupSidebar
+            groups={visibleGroups}
+            selectedGroupKey={selectedConflictGroupKey}
+            onSelectGroup={handleSelectConflictGroup}
+            onShowAll={() => void refreshWorkbench(undefined, selectedInboxPersonKeyRef.current ?? null, null)}
+          />
+        </div>
         <ReviewWorkbenchSidebar items={visibleItems} selectedQueueItemId={selectedQueueItemId} onSelect={(queueItemId) => void handleSelect(queueItemId)} />
         <div>
           {detail ? <ReviewCandidateSummaryCard detail={detail} /> : <p>No workbench item selected.</p>}

@@ -266,6 +266,19 @@ export type ReviewInboxPersonSummary = {
   hasContinuousSequence: boolean
 }
 
+export type ReviewConflictGroupSummary = {
+  groupKey: string
+  canonicalPersonId: string | null
+  canonicalPersonName: string
+  itemType: 'structured_field_candidate' | 'profile_attribute_candidate'
+  fieldKey: string | null
+  pendingCount: number
+  distinctValues: string[]
+  hasConflict: boolean
+  nextQueueItemId: string
+  latestPendingCreatedAt: string
+}
+
 export type ReviewEvidenceTrace = {
   queueItem: ReviewQueueItem
   candidate: StructuredFieldCandidate | ProfileAttributeCandidate | null
@@ -398,6 +411,7 @@ export interface ArchiveApi {
   listReviewQueue: (input?: { status?: string }) => Promise<ReviewQueueItem[]>
   listDecisionJournal: () => Promise<DecisionJournalEntry[]>
   listReviewInboxPeople: () => Promise<ReviewInboxPersonSummary[]>
+  listReviewConflictGroups: () => Promise<ReviewConflictGroupSummary[]>
   listReviewWorkbenchItems: (input?: { itemType?: 'structured_field_candidate' | 'profile_attribute_candidate'; status?: 'pending' | 'approved' | 'rejected' | 'undone'; canonicalPersonId?: string; fieldKey?: string; hasConflict?: boolean }) => Promise<ReviewWorkbenchListItem[]>
   getReviewWorkbenchItem: (queueItemId: string) => Promise<ReviewWorkbenchDetail | null>
   approveReviewItem: (queueItemId: string) => Promise<{ status: 'approved'; journalId: string; queueItemId: string; candidateId: string }>

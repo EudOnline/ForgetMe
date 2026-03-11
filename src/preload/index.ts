@@ -25,6 +25,7 @@ const archiveApi: ArchiveApi = {
   listReviewQueue: (input) => ipcRenderer.invoke('archive:listReviewQueue', input),
   listDecisionJournal: () => ipcRenderer.invoke('archive:listDecisionJournal'),
   listReviewInboxPeople: () => ipcRenderer.invoke('archive:listReviewInboxPeople'),
+  listReviewConflictGroups: () => ipcRenderer.invoke('archive:listReviewConflictGroups'),
   listReviewWorkbenchItems: (input) => ipcRenderer.invoke('archive:listReviewWorkbenchItems', input),
   getReviewWorkbenchItem: (queueItemId) => ipcRenderer.invoke('archive:getReviewWorkbenchItem', { queueItemId }),
   approveReviewItem: (queueItemId) => ipcRenderer.invoke('archive:approveReviewItem', { queueItemId }),
