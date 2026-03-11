@@ -27,6 +27,7 @@ test('opens a structured-field review item in the workbench and refreshes approv
 
   const page = await electronApp.firstWindow()
   await page.getByText('Choose Files').click()
+  await expect(page.getByRole('button', { name: 'chat-phase5.json' })).toBeVisible()
   await page.getByText('Enrichment Jobs').click()
   await expect(page.getByText('completed')).toBeVisible({ timeout: 15_000 })
 

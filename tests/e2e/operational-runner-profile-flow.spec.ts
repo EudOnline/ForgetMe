@@ -27,6 +27,7 @@ test('runner executes a queued job and approved profile appears on the person pa
 
   const page = await electronApp.firstWindow()
   await page.getByText('Choose Files').click()
+  await expect(page.getByRole('button', { name: 'chat-phase4.json' })).toBeVisible()
   await page.getByText('Enrichment Jobs').click()
   await expect(page.getByText('completed')).toBeVisible({ timeout: 15_000 })
   await page.getByText('Review Queue').click()
