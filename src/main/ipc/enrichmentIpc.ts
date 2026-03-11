@@ -1,10 +1,11 @@
 import path from 'node:path'
 import { ipcMain } from 'electron'
-import { documentEvidenceInputSchema, enrichmentJobFilterSchema, jobIdSchema, journalIdSchema, queueItemIdSchema, rejectReviewItemInputSchema, structuredFieldCandidateFilterSchema } from '../../shared/ipcSchemas'
+import { documentEvidenceInputSchema, enrichmentAttemptFilterSchema, enrichmentJobFilterSchema, jobIdSchema, journalIdSchema, queueItemIdSchema, rejectReviewItemInputSchema, structuredFieldCandidateFilterSchema } from '../../shared/ipcSchemas'
 import type { AppPaths } from '../services/appPaths'
 import { openDatabase, runMigrations } from '../services/db'
 import { approveStructuredFieldCandidate, rejectStructuredFieldCandidate, undoStructuredFieldDecision } from '../services/enrichmentReviewService'
 import { getDocumentEvidence, listEnrichmentJobs, listStructuredFieldCandidates, rerunEnrichmentJob } from '../services/enrichmentReadService'
+import { listEnrichmentAttempts } from '../services/profileReadService'
 
 function databasePath(appPaths: AppPaths) {
   return path.join(appPaths.sqliteDir, 'archive.sqlite')
@@ -12,6 +13,7 @@ function databasePath(appPaths: AppPaths) {
 
 export function registerEnrichmentIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:listEnrichmentJobs')
+  ipcMain.removeHandler('archive:listEnrichmentAttempts')
   ipcMain.removeHandler('archive:getDocumentEvidence')
   ipcMain.removeHandler('archive:rerunEnrichmentJob')
   ipcMain.removeHandler('archive:listStructuredFieldCandidates')
@@ -26,6 +28,15 @@ export function registerEnrichmentIpc(appPaths: AppPaths) {
     const jobs = listEnrichmentJobs(db, input)
     db.close()
     return jobs
+  })
+
+  ipcMain.handle('archive:listEnrichmentAttempts', async (_event, payload) => {
+    const input = enrichmentAttemptFilterSchema.parse(payload)
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    const attempts = listEnrichmentAttempts(db, input)
+    db.close()
+    return attempts
   })
 
   ipcMain.handle('archive:getDocumentEvidence', async (_event, payload) => {

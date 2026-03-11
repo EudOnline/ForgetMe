@@ -13,6 +13,11 @@ export function EnrichmentJobsPage(props?: { onSelectFile?: (fileId: string) => 
 
   useEffect(() => {
     void refresh()
+    const timer = globalThis.setInterval(() => {
+      void refresh()
+    }, 2_000)
+
+    return () => globalThis.clearInterval(timer)
   }, [archiveApi])
 
   return (

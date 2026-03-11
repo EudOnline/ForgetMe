@@ -85,3 +85,43 @@ export function seedE2EMultimodalReviewFixture(db: ArchiveDatabase, input: { fil
 
   return { id: candidateId }
 }
+
+export function seedE2ERunnerProfileFixture(db: ArchiveDatabase, input: { fileId: string }) {
+  const existing = db.prepare(
+    `select id
+     from enrichment_jobs
+     where file_id = ? and input_hash = ?
+     limit 1`
+  ).get(input.fileId, 'e2e-runner-profile') as { id: string } | undefined
+
+  if (existing) {
+    return existing
+  }
+
+  const createdAt = new Date().toISOString()
+  const jobId = crypto.randomUUID()
+
+  db.prepare(
+    `insert into enrichment_jobs (
+      id, file_id, enhancer_type, provider, model, status, attempt_count,
+      input_hash, started_at, finished_at, error_message, usage_json, created_at, updated_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    jobId,
+    input.fileId,
+    'document_ocr',
+    'siliconflow',
+    'fixture-model',
+    'pending',
+    0,
+    'e2e-runner-profile',
+    null,
+    null,
+    null,
+    '{}',
+    createdAt,
+    createdAt
+  )
+
+  return { id: jobId }
+}

@@ -52,6 +52,7 @@ export function persistImageExtraction(db: ArchiveDatabase, input: {
   jobId: string
   extraction: ImageExtraction
 }) {
+  const fieldCandidates = [] as Array<{ candidateId: string; fieldKey: string; confidence: number }>
   const createdAt = new Date().toISOString()
   const insertEvidence = db.prepare(
     `insert into enriched_evidence (
@@ -114,8 +115,10 @@ export function persistImageExtraction(db: ArchiveDatabase, input: {
   )
 
   for (const participantFragment of input.extraction.typed?.participantFragments ?? []) {
+    const candidateId = crypto.randomUUID()
+
     insertCandidate.run(
-      crypto.randomUUID(),
+      candidateId,
       input.fileId,
       input.jobId,
       'image_participant',
@@ -129,5 +132,13 @@ export function persistImageExtraction(db: ArchiveDatabase, input: {
       'pending',
       createdAt
     )
+
+    fieldCandidates.push({
+      candidateId,
+      fieldKey: 'participant_fragment',
+      confidence: 0.8
+    })
   }
+
+  return { fieldCandidates }
 }

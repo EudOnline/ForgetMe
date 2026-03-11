@@ -1,12 +1,23 @@
 # Operational Runner & Profile Projection Phase 4 Design
 
 Date: 2026-03-11  
-Status: Proposed design draft  
+Status: Implemented on development branch  
 Project: ForgetMe
 
 ## Summary
 
 第三阶段已经把 ForgetMe 推进到了一个关键位置：系统能够保存原件、生成多模态增强证据、把高风险字段送入共享审核队列、并在批准后让搜索与人物页消费这些结果。
+
+## Implementation Snapshot
+
+截至当前开发分支，第四阶段已经落地：
+
+- 本地 enrichment runner 会自动消费 `pending enrichment_jobs`
+- 每次执行尝试都会写入 `enrichment_attempts`
+- approved structured field 会按确定性规则归属到 canonical person 或进入 profile candidate 审核
+- formal approved profile 会写入 `person_profile_attributes` 并展示在人物页
+- profile-level approve / reject / undo 继续复用共享审核与 journal 模型
+
 
 但第三阶段仍然停留在 **“架构闭环已经成立，运营闭环还没完全成立”** 的状态。
 

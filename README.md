@@ -97,7 +97,49 @@ npm run test:e2e -- tests/e2e/multimodal-review-flow.spec.ts
 npm run build
 ```
 
+### Phase Four Operational Layer
+
+Phase four extends the archive with:
+
+- a local enrichment runner that continuously consumes pending `enrichment_jobs`
+- per-attempt execution history via `enrichment_attempts`
+- deterministic attribution rules for approved structured fields
+- formal person profile projection into `person_profile_attributes`
+- profile-level candidate review and undo support using the shared `review_queue` and `decision_journal`
+
+### Phase Four Verification
+
+```bash
+npm run test:unit
+npm run test:e2e -- tests/e2e/import-batch.spec.ts
+npm run test:e2e -- tests/e2e/person-review-flow.spec.ts
+npm run test:e2e -- tests/e2e/multimodal-review-flow.spec.ts
+npm run test:e2e -- tests/e2e/operational-runner-profile-flow.spec.ts
+npm run build
+```
+
+### Phase Five Review Workbench
+
+Phase five adds a dedicated single-item review workbench for high-risk operator review:
+
+- one dedicated workbench for `structured_field_candidate` and `profile_attribute_candidate`
+- source file, source evidence, upstream candidate, and journal trace in one screen
+- approve / reject / undo actions rendered beside formal-profile impact preview
+- explicit stale-state messaging when the selected item is no longer pending
+
+### Phase Five Verification
+
+```bash
+npm run test:unit
+npm run test:e2e -- tests/e2e/import-batch.spec.ts
+npm run test:e2e -- tests/e2e/person-review-flow.spec.ts
+npm run test:e2e -- tests/e2e/multimodal-review-flow.spec.ts
+npm run test:e2e -- tests/e2e/operational-runner-profile-flow.spec.ts
+npm run test:e2e -- tests/e2e/review-workbench-single-item-flow.spec.ts
+npm run build
+```
+
 ### Current Operational Note
 
-The branch now covers queueing, persistence, review, read-model consumption, IPC, and UI for phase three.
-The `LiteLLM` gateway and extraction services are implemented, but a continuously running background worker that automatically consumes queued jobs is still a follow-up operational step.
+The local-first runner, shared review queue, formal approved profile read model, and phase-five single-item review workbench are now wired end-to-end.
+The next meaningful step is stronger operator ergonomics and carefully scoped batch-review support on top of the same auditable write path.
