@@ -177,9 +177,24 @@ npm run test:e2e -- tests/e2e/provider-boundary-audit-flow.spec.ts
 npm run build
 ```
 
+### Phase Six B1 People-Centric Inbox
+
+Phase 6B1 starts the operator-efficiency layer with a people-centric review inbox inside `Review Workbench`:
+
+- pending workbench items are grouped by canonical person before the operator drills into a single item
+- each person summary shows pending count, field coverage, conflict count, and whether a continuous sequence exists
+- selecting a person filters the workbench sidebar to that person's pending items while keeping the existing evidence / impact / undo flow intact
+
+### Phase Six B1 Verification
+
+```bash
+npm run test:unit -- tests/unit/main/reviewWorkbenchReadService.test.ts tests/unit/renderer/reviewWorkbenchPage.test.tsx
+npm run build
+```
+
 ### Current Operational Note
 
 The local-first runner, shared review queue, formal approved profile read model, and phase-five single-item review workbench are now wired end-to-end.
-Phase 6 now includes both the preservation export / restore baseline and the first provider-boundary audit baseline for remote multimodal work.
-The next validated follow-up remains operator / review efficiency on top of these preservation primitives.
+Phase 6 now includes the preservation export / restore baseline, the first provider-boundary audit baseline, and the first people-centric review inbox baseline.
+The next validated follow-up is deeper 6B efficiency work: conflict grouping and continuous review on top of the new people inbox.
 See `docs/plans/2026-03-11-phase-six-preservation-operator-efficiency-design.md` for the agreed roadmap.

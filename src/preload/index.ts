@@ -24,6 +24,7 @@ const archiveApi: ArchiveApi = {
   undoProfileAttributeDecision: (journalId) => ipcRenderer.invoke('archive:undoProfileAttributeDecision', { journalId }),
   listReviewQueue: (input) => ipcRenderer.invoke('archive:listReviewQueue', input),
   listDecisionJournal: () => ipcRenderer.invoke('archive:listDecisionJournal'),
+  listReviewInboxPeople: () => ipcRenderer.invoke('archive:listReviewInboxPeople'),
   listReviewWorkbenchItems: (input) => ipcRenderer.invoke('archive:listReviewWorkbenchItems', input),
   getReviewWorkbenchItem: (queueItemId) => ipcRenderer.invoke('archive:getReviewWorkbenchItem', { queueItemId }),
   approveReviewItem: (queueItemId) => ipcRenderer.invoke('archive:approveReviewItem', { queueItemId }),

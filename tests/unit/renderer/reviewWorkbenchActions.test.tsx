@@ -12,6 +12,21 @@ describe('ReviewWorkbenchPage actions', () => {
     const approveReviewItem = vi.fn().mockResolvedValue({ status: 'approved', journalId: 'j-1', queueItemId: 'rq-1', candidateId: 'fc-1' })
     const rejectReviewItem = vi.fn().mockResolvedValue({ status: 'rejected', journalId: 'j-2', queueItemId: 'rq-1', candidateId: 'fc-1' })
     const undoDecision = vi.fn().mockResolvedValue({ status: 'undone', journalId: 'j-1' })
+    const listReviewInboxPeople = vi
+      .fn()
+      .mockResolvedValueOnce([{
+        canonicalPersonId: 'cp-1',
+        canonicalPersonName: 'Alice Chen',
+        pendingCount: 1,
+        conflictCount: 0,
+        fieldKeys: ['school_name'],
+        itemTypes: ['structured_field_candidate'],
+        nextQueueItemId: 'rq-1',
+        latestPendingCreatedAt: '2026-03-11T00:00:00.000Z',
+        hasContinuousSequence: false
+      }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
     const listReviewWorkbenchItems = vi
       .fn()
       .mockResolvedValueOnce([
@@ -159,6 +174,7 @@ describe('ReviewWorkbenchPage actions', () => {
 
     vi.stubGlobal('window', {
       archiveApi: {
+        listReviewInboxPeople,
         listReviewWorkbenchItems,
         getReviewWorkbenchItem,
         approveReviewItem,

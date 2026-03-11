@@ -1,13 +1,14 @@
 import type {
   ProfileAttributeCandidate,
+  ReviewInboxPersonSummary,
   ReviewWorkbenchDetail,
   ReviewWorkbenchListItem,
   StructuredFieldCandidate
 } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
-import { buildReviewImpactPreview } from './reviewImpactService'
 import { listPersonProfileAttributes } from './profileReadService'
 import { getReviewEvidenceTrace } from './reviewEvidenceTraceService'
+import { buildReviewImpactPreview } from './reviewImpactService'
 
 type ReviewWorkbenchFilter = {
   itemType?: 'structured_field_candidate' | 'profile_attribute_candidate'
@@ -19,6 +20,17 @@ type ReviewWorkbenchFilter = {
 
 type ReviewQueueRow = {
   id: string
+}
+
+type ReviewInboxAccumulator = {
+  canonicalPersonId: string | null
+  canonicalPersonName: string
+  pendingCount: number
+  conflictCount: number
+  fieldKeys: Set<string>
+  itemTypes: Set<'structured_field_candidate' | 'profile_attribute_candidate'>
+  nextQueueItemId: string
+  latestPendingCreatedAt: string
 }
 
 function isStructuredCandidate(candidate: StructuredFieldCandidate | ProfileAttributeCandidate | null): candidate is StructuredFieldCandidate {
@@ -84,11 +96,7 @@ function deriveCanonicalPersonId(candidate: StructuredFieldCandidate | ProfileAt
 
 function deriveHasConflict(impactPreview: ReviewWorkbenchDetail['impactPreview']) {
   const { currentValue, nextValue } = impactPreview.approveImpact
-  return Boolean(
-    currentValue
-      && nextValue
-      && currentValue !== nextValue
-  )
+  return Boolean(currentValue && nextValue && currentValue !== nextValue)
 }
 
 function buildWorkbenchListItem(db: ArchiveDatabase, detail: Omit<ReviewWorkbenchDetail, 'item'>): ReviewWorkbenchListItem {
@@ -114,6 +122,10 @@ function buildWorkbenchListItem(db: ArchiveDatabase, detail: Omit<ReviewWorkbenc
     createdAt: detail.queueItem.createdAt,
     reviewedAt: detail.queueItem.reviewedAt
   }
+}
+
+function toInboxKey(canonicalPersonId: string | null) {
+  return canonicalPersonId ?? '__unassigned__'
 }
 
 export function getReviewWorkbenchItem(db: ArchiveDatabase, input: { queueItemId: string }): ReviewWorkbenchDetail {
@@ -157,4 +169,64 @@ export function listReviewWorkbenchItems(db: ArchiveDatabase, filter: ReviewWork
     .filter((item) => (filter.canonicalPersonId ? item.canonicalPersonId === filter.canonicalPersonId : true))
     .filter((item) => (filter.fieldKey ? item.fieldKey === filter.fieldKey : true))
     .filter((item) => (typeof filter.hasConflict === 'boolean' ? item.hasConflict === filter.hasConflict : true))
+}
+
+export function listReviewInboxPeople(db: ArchiveDatabase): ReviewInboxPersonSummary[] {
+  const items = listReviewWorkbenchItems(db, { status: 'pending' })
+  const groups = new Map<string, ReviewInboxAccumulator>()
+
+  for (const item of items) {
+    const key = toInboxKey(item.canonicalPersonId)
+    const canonicalPersonName = item.canonicalPersonName ?? 'Unassigned person'
+    const existing = groups.get(key)
+
+    if (!existing) {
+      groups.set(key, {
+        canonicalPersonId: item.canonicalPersonId,
+        canonicalPersonName,
+        pendingCount: 1,
+        conflictCount: item.hasConflict ? 1 : 0,
+        fieldKeys: new Set(item.fieldKey ? [item.fieldKey] : []),
+        itemTypes: new Set([item.itemType]),
+        nextQueueItemId: item.queueItemId,
+        latestPendingCreatedAt: item.createdAt
+      })
+      continue
+    }
+
+    existing.pendingCount += 1
+    existing.conflictCount += item.hasConflict ? 1 : 0
+    if (item.fieldKey) {
+      existing.fieldKeys.add(item.fieldKey)
+    }
+    existing.itemTypes.add(item.itemType)
+    if (item.createdAt > existing.latestPendingCreatedAt) {
+      existing.latestPendingCreatedAt = item.createdAt
+    }
+  }
+
+  return Array.from(groups.values())
+    .map((group) => ({
+      canonicalPersonId: group.canonicalPersonId,
+      canonicalPersonName: group.canonicalPersonName,
+      pendingCount: group.pendingCount,
+      conflictCount: group.conflictCount,
+      fieldKeys: Array.from(group.fieldKeys).sort((left, right) => left.localeCompare(right)),
+      itemTypes: Array.from(group.itemTypes).sort((left, right) => left.localeCompare(right)) as Array<'structured_field_candidate' | 'profile_attribute_candidate'>,
+      nextQueueItemId: group.nextQueueItemId,
+      latestPendingCreatedAt: group.latestPendingCreatedAt,
+      hasContinuousSequence: group.pendingCount > 1
+    }))
+    .sort((left, right) => {
+      if (right.pendingCount !== left.pendingCount) {
+        return right.pendingCount - left.pendingCount
+      }
+
+      const nameCompare = left.canonicalPersonName.localeCompare(right.canonicalPersonName)
+      if (nameCompare !== 0) {
+        return nameCompare
+      }
+
+      return left.nextQueueItemId.localeCompare(right.nextQueueItemId)
+    })
 }

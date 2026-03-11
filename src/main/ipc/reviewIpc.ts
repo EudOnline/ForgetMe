@@ -4,7 +4,7 @@ import { journalIdSchema, queueItemIdSchema, rejectReviewItemInputSchema, review
 import type { AppPaths } from '../services/appPaths'
 import { openDatabase, runMigrations } from '../services/db'
 import { approveReviewItem, listDecisionJournal, listReviewQueue, rejectReviewItem, undoDecision } from '../services/reviewQueueService'
-import { getReviewWorkbenchItem, listReviewWorkbenchItems } from '../services/reviewWorkbenchReadService'
+import { getReviewWorkbenchItem, listReviewInboxPeople, listReviewWorkbenchItems } from '../services/reviewWorkbenchReadService'
 
 function databasePath(appPaths: AppPaths) {
   return path.join(appPaths.sqliteDir, 'archive.sqlite')
@@ -13,6 +13,7 @@ function databasePath(appPaths: AppPaths) {
 export function registerReviewIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:listReviewQueue')
   ipcMain.removeHandler('archive:listDecisionJournal')
+  ipcMain.removeHandler('archive:listReviewInboxPeople')
   ipcMain.removeHandler('archive:listReviewWorkbenchItems')
   ipcMain.removeHandler('archive:getReviewWorkbenchItem')
   ipcMain.removeHandler('archive:approveReviewItem')
@@ -32,6 +33,14 @@ export function registerReviewIpc(appPaths: AppPaths) {
     const db = openDatabase(databasePath(appPaths))
     runMigrations(db)
     const items = listDecisionJournal(db)
+    db.close()
+    return items
+  })
+
+  ipcMain.handle('archive:listReviewInboxPeople', async () => {
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    const items = listReviewInboxPeople(db)
     db.close()
     return items
   })

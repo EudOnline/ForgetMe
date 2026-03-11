@@ -1,43 +1,102 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ReviewWorkbenchDetail, ReviewWorkbenchListItem } from '../../shared/archiveContracts'
+import type { ReviewInboxPersonSummary, ReviewWorkbenchDetail, ReviewWorkbenchListItem } from '../../shared/archiveContracts'
 import { getArchiveApi } from '../archiveApi'
 import { ReviewActionBar } from '../components/ReviewActionBar'
 import { ReviewCandidateSummaryCard } from '../components/ReviewCandidateSummaryCard'
 import { ReviewEvidenceTraceCard } from '../components/ReviewEvidenceTraceCard'
 import { ReviewImpactPreviewCard } from '../components/ReviewImpactPreviewCard'
+import { ReviewInboxSidebar } from '../components/ReviewInboxSidebar'
 import { ReviewWorkbenchSidebar } from '../components/ReviewWorkbenchSidebar'
+
+function toPersonKey(canonicalPersonId: string | null) {
+  return canonicalPersonId ?? '__unassigned__'
+}
+
+function filterItemsByPerson(items: ReviewWorkbenchListItem[], personKey: string | null) {
+  if (!personKey) {
+    return items
+  }
+
+  return items.filter((item) => toPersonKey(item.canonicalPersonId) === personKey)
+}
+
+function resolvePersonKeyFromQueueItem(items: ReviewWorkbenchListItem[], queueItemId: string | null | undefined) {
+  if (!queueItemId) {
+    return null
+  }
+
+  const matched = items.find((item) => item.queueItemId === queueItemId)
+  return matched ? toPersonKey(matched.canonicalPersonId) : null
+}
 
 export function ReviewWorkbenchPage(props: {
   initialQueueItemId?: string | null
 }) {
   const archiveApi = useMemo(() => getArchiveApi(), [])
   const [items, setItems] = useState<ReviewWorkbenchListItem[]>([])
+  const [peopleInbox, setPeopleInbox] = useState<ReviewInboxPersonSummary[]>([])
+  const [selectedInboxPersonKey, setSelectedInboxPersonKey] = useState<string | null>(null)
   const [selectedQueueItemId, setSelectedQueueItemId] = useState<string | null>(props.initialQueueItemId ?? null)
   const [detail, setDetail] = useState<ReviewWorkbenchDetail | null>(null)
   const [isBusy, setIsBusy] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const selectedQueueItemIdRef = useRef<string | null>(props.initialQueueItemId ?? null)
+  const selectedInboxPersonKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
     selectedQueueItemIdRef.current = selectedQueueItemId
   }, [selectedQueueItemId])
 
-  const refreshWorkbench = useCallback(async (preferredQueueItemId?: string | null) => {
-    const nextItems = await archiveApi.listReviewWorkbenchItems({ status: 'pending' })
+  useEffect(() => {
+    selectedInboxPersonKeyRef.current = selectedInboxPersonKey
+  }, [selectedInboxPersonKey])
+
+  const refreshWorkbench = useCallback(async (preferredQueueItemId?: string | null, preferredPersonKey?: string | null) => {
+    const [nextPeopleInbox, nextItems] = await Promise.all([
+      archiveApi.listReviewInboxPeople(),
+      archiveApi.listReviewWorkbenchItems({ status: 'pending' })
+    ])
+
+    setPeopleInbox(nextPeopleInbox)
     setItems(nextItems)
 
-    const resolvedQueueItemId = preferredQueueItemId
-      ?? selectedQueueItemIdRef.current
-      ?? props.initialQueueItemId
-      ?? nextItems[0]?.queueItemId
-      ?? null
+    let resolvedPersonKey = preferredPersonKey !== undefined
+      ? preferredPersonKey
+      : selectedInboxPersonKeyRef.current
+        ?? resolvePersonKeyFromQueueItem(nextItems, preferredQueueItemId ?? selectedQueueItemIdRef.current ?? props.initialQueueItemId ?? null)
 
-    selectedQueueItemIdRef.current = resolvedQueueItemId
-    setSelectedQueueItemId(resolvedQueueItemId)
+    let visibleItems = filterItemsByPerson(nextItems, resolvedPersonKey)
+    if (resolvedPersonKey && visibleItems.length === 0) {
+      resolvedPersonKey = null
+      visibleItems = nextItems
+    }
+
+    setSelectedInboxPersonKey(resolvedPersonKey)
+    selectedInboxPersonKeyRef.current = resolvedPersonKey
+
+    const candidateQueueItemIds = [
+      preferredQueueItemId,
+      selectedQueueItemIdRef.current,
+      props.initialQueueItemId
+    ].filter((value): value is string => Boolean(value))
+
+    const resolvedQueueItemId = candidateQueueItemIds.find((queueItemId) => visibleItems.some((item) => item.queueItemId === queueItemId))
+      ?? visibleItems[0]?.queueItemId
+      ?? null
+    const staleQueueItemId = candidateQueueItemIds[0] ?? null
+
+    selectedQueueItemIdRef.current = resolvedQueueItemId ?? staleQueueItemId
+    setSelectedQueueItemId(resolvedQueueItemId ?? staleQueueItemId)
 
     if (!resolvedQueueItemId) {
-      setDetail(null)
-      return null
+      if (!staleQueueItemId) {
+        setDetail(null)
+        return null
+      }
+
+      const staleDetail = await archiveApi.getReviewWorkbenchItem(staleQueueItemId)
+      setDetail(staleDetail)
+      return staleDetail
     }
 
     const nextDetail = await archiveApi.getReviewWorkbenchItem(resolvedQueueItemId)
@@ -56,6 +115,11 @@ export function ReviewWorkbenchPage(props: {
     setDetail(await archiveApi.getReviewWorkbenchItem(queueItemId))
   }
 
+  const handleSelectPerson = async (person: ReviewInboxPersonSummary) => {
+    setErrorMessage(null)
+    await refreshWorkbench(person.nextQueueItemId, toPersonKey(person.canonicalPersonId))
+  }
+
   const runAction = async (action: () => Promise<unknown>) => {
     if (!detail) {
       return
@@ -65,7 +129,7 @@ export function ReviewWorkbenchPage(props: {
     setErrorMessage(null)
     try {
       await action()
-      await refreshWorkbench(detail.queueItem.id)
+      await refreshWorkbench(undefined, selectedInboxPersonKeyRef.current)
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unknown review action error')
     } finally {
@@ -79,13 +143,24 @@ export function ReviewWorkbenchPage(props: {
       && !items.some((item) => item.queueItemId === detail.queueItem.id)
   )
 
+  const visibleItems = useMemo(
+    () => filterItemsByPerson(items, selectedInboxPersonKey),
+    [items, selectedInboxPersonKey]
+  )
+
   return (
     <section>
       <h1>Review Workbench</h1>
       {errorMessage ? <p role="alert">{errorMessage}</p> : null}
       {selectedItemIsStale ? <p>Selected item is no longer pending.</p> : null}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr', gap: '16px', alignItems: 'start' }}>
-        <ReviewWorkbenchSidebar items={items} selectedQueueItemId={selectedQueueItemId} onSelect={(queueItemId) => void handleSelect(queueItemId)} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr 1fr', gap: '16px', alignItems: 'start' }}>
+        <ReviewInboxSidebar
+          people={peopleInbox}
+          selectedPersonKey={selectedInboxPersonKey}
+          onSelectPerson={handleSelectPerson}
+          onShowAll={() => void refreshWorkbench(undefined, null)}
+        />
+        <ReviewWorkbenchSidebar items={visibleItems} selectedQueueItemId={selectedQueueItemId} onSelect={(queueItemId) => void handleSelect(queueItemId)} />
         <div>
           {detail ? <ReviewCandidateSummaryCard detail={detail} /> : <p>No workbench item selected.</p>}
           {detail ? <ReviewEvidenceTraceCard trace={detail.trace} /> : null}
