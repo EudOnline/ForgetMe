@@ -100,6 +100,18 @@ export const reviewWorkbenchFilterSchema = z.object({
   hasConflict: z.boolean().optional()
 }).optional().default({})
 
+export const directoryPathSchema = z.string().min(1)
+
+export const backupExportInputSchema = z.object({
+  destinationRoot: directoryPathSchema
+})
+
+export const restoreBackupInputSchema = z.object({
+  exportRoot: directoryPathSchema,
+  targetRoot: directoryPathSchema,
+  overwrite: z.boolean().optional()
+})
+
 export const journalIdSchema = z.object({
   journalId: z.string().min(1)
 })

@@ -296,6 +296,45 @@ export type ReviewWorkbenchDetail = {
   currentProfileAttributes: PersonProfileAttribute[]
 }
 
+export type BackupManifestEntry = {
+  relativePath: string
+  fileSize: number
+  sha256: string
+}
+
+export type BackupManifest = {
+  formatVersion: 'phase6a1'
+  appVersion: string
+  createdAt: string
+  exportRootName: string
+  databaseSnapshot: BackupManifestEntry
+  vaultEntries: BackupManifestEntry[]
+  tableCounts: Record<string, number>
+}
+
+export type BackupExportResult = {
+  status: 'exported'
+  exportRoot: string
+  manifestPath: string
+  vaultEntryCount: number
+  totalBytes: number
+  manifest: BackupManifest
+}
+
+export type RestoreCheckResult = {
+  name: string
+  status: 'passed' | 'failed'
+  detail: string
+}
+
+export type RestoreRunResult = {
+  status: 'restored' | 'failed'
+  exportRoot: string
+  targetRoot: string
+  restoredAt: string
+  checks: RestoreCheckResult[]
+}
+
 export type CreateImportBatchInput = {
   sourcePaths: string[]
   sourceLabel: string
@@ -303,6 +342,11 @@ export type CreateImportBatchInput = {
 
 export interface ArchiveApi {
   selectImportFiles: () => Promise<string[]>
+  selectBackupExportDestination: () => Promise<string | null>
+  selectBackupExportSource: () => Promise<string | null>
+  selectRestoreTargetDirectory: () => Promise<string | null>
+  createBackupExport: (input: { destinationRoot: string }) => Promise<BackupExportResult | null>
+  restoreBackupExport: (input: { exportRoot: string; targetRoot: string; overwrite?: boolean }) => Promise<RestoreRunResult | null>
   createImportBatch: (input: CreateImportBatchInput) => Promise<ImportBatchSummary>
   listImportBatches: () => Promise<ImportBatchSummary[]>
   getImportBatch: (batchId: string) => Promise<ImportBatchSummary | null>

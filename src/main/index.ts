@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import { join } from 'node:path'
 import { app, BrowserWindow } from 'electron'
 import { registerArchiveIpc } from './ipc/archiveIpc'
+import { registerPreservationIpc } from './ipc/preservationIpc'
 import { registerEnrichmentIpc } from './ipc/enrichmentIpc'
 import { registerPeopleIpc } from './ipc/peopleIpc'
 import { registerReviewIpc } from './ipc/reviewIpc'
@@ -58,6 +59,7 @@ let enrichmentRunner: ReturnType<typeof createEnrichmentRunner> | null = null
 app.whenReady().then(() => {
   const appPaths = ensureAppPaths(resolveAppDataRoot())
   registerArchiveIpc(appPaths)
+  registerPreservationIpc(appPaths)
   registerEnrichmentIpc(appPaths)
   registerPeopleIpc(appPaths)
   registerReviewIpc(appPaths)

@@ -3,6 +3,11 @@ import type { ArchiveApi } from '../shared/archiveContracts'
 
 const archiveApi: ArchiveApi = {
   selectImportFiles: () => ipcRenderer.invoke('archive:selectImportFiles'),
+  selectBackupExportDestination: () => ipcRenderer.invoke('archive:selectBackupExportDestination'),
+  selectBackupExportSource: () => ipcRenderer.invoke('archive:selectBackupExportSource'),
+  selectRestoreTargetDirectory: () => ipcRenderer.invoke('archive:selectRestoreTargetDirectory'),
+  createBackupExport: (input) => ipcRenderer.invoke('archive:createBackupExport', input),
+  restoreBackupExport: (input) => ipcRenderer.invoke('archive:restoreBackupExport', input),
   createImportBatch: (input) => ipcRenderer.invoke('archive:createImportBatch', input),
   listImportBatches: () => ipcRenderer.invoke('archive:listImportBatches'),
   getImportBatch: (batchId) => ipcRenderer.invoke('archive:getImportBatch', { batchId }),

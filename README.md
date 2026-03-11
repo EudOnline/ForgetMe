@@ -139,7 +139,29 @@ npm run test:e2e -- tests/e2e/review-workbench-single-item-flow.spec.ts
 npm run build
 ```
 
+### Phase Six A Preservation Baseline
+
+Phase 6A1 adds the first preservation baseline on top of the existing local archive:
+
+- export the current local archive into a directory package with `manifest.json`, `database/archive.sqlite`, and copied `vault/originals` objects
+- restore an export package into a fresh app-data root and run baseline integrity checks against the manifest
+- expose a dedicated `Preservation` page for export / restore actions
+
+Current limitation:
+
+- the export artifact is a directory package, not a compressed or encrypted archive yet
+
+### Phase Six A Verification
+
+```bash
+npm run test:unit -- tests/unit/shared/phaseSixContracts.test.ts
+npm run test:unit -- tests/unit/main/backupManifestService.test.ts tests/unit/main/backupExportService.test.ts tests/unit/main/restoreService.test.ts
+npm run test:e2e -- tests/e2e/preservation-export-restore-flow.spec.ts
+npm run build
+```
+
 ### Current Operational Note
 
 The local-first runner, shared review queue, formal approved profile read model, and phase-five single-item review workbench are now wired end-to-end.
-The next meaningful step is stronger operator ergonomics and carefully scoped batch-review support on top of the same auditable write path.
+The project has now started phase 6 with the export / restore preservation baseline, and the next validated follow-up is provider boundary + redaction policy work under phase 6A2.
+See `docs/plans/2026-03-11-phase-six-preservation-operator-efficiency-design.md` for the agreed roadmap.

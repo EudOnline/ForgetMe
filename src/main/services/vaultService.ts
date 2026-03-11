@@ -16,13 +16,13 @@ export type FrozenOriginalRecord = {
   frozenAbsolutePath: string
 }
 
-function sha256File(sourcePath: string) {
+export function hashFileSha256(sourcePath: string) {
   const buffer = fs.readFileSync(sourcePath)
   return crypto.createHash('sha256').update(buffer).digest('hex')
 }
 
 export async function freezeOriginal(appPaths: AppPaths, _batchId: string, sourcePath: string): Promise<Omit<FrozenOriginalRecord, 'duplicateClass'>> {
-  const sha256 = sha256File(sourcePath)
+  const sha256 = hashFileSha256(sourcePath)
   const extension = path.extname(sourcePath)
   const destinationDir = path.join(appPaths.vaultOriginalsDir, sha256.slice(0, 2))
   const frozenAbsolutePath = path.join(destinationDir, `${sha256}${extension}`)

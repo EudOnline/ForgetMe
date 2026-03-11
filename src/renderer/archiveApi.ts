@@ -1,6 +1,7 @@
 import type {
   ArchiveApi,
   ArchiveSearchResult,
+  BackupExportResult,
   CanonicalPersonDetail,
   CanonicalPersonSummary,
   CreateImportBatchInput,
@@ -13,6 +14,7 @@ import type {
   PersonProfileAttribute,
   PersonTimelineEvent,
   ProfileAttributeCandidate,
+  RestoreRunResult,
   ReviewQueueItem,
   ReviewWorkbenchDetail,
   ReviewWorkbenchListItem,
@@ -27,6 +29,11 @@ declare global {
 
 const fallbackApi: ArchiveApi = {
   selectImportFiles: async () => [],
+  selectBackupExportDestination: async () => null,
+  selectBackupExportSource: async () => null,
+  selectRestoreTargetDirectory: async () => null,
+  createBackupExport: async (_input: { destinationRoot: string }) => null as BackupExportResult | null,
+  restoreBackupExport: async (_input: { exportRoot: string; targetRoot: string; overwrite?: boolean }) => null as RestoreRunResult | null,
   createImportBatch: async (_input: CreateImportBatchInput) => ({ batchId: '', sourceLabel: '', createdAt: '', files: [] }),
   listImportBatches: async () => [] as ImportBatchSummary[],
   getImportBatch: async () => null,
@@ -68,6 +75,11 @@ function createIpcArchiveApi(): ArchiveApi | null {
 
   return {
     selectImportFiles: () => ipcRenderer.invoke('archive:selectImportFiles'),
+    selectBackupExportDestination: () => ipcRenderer.invoke('archive:selectBackupExportDestination'),
+    selectBackupExportSource: () => ipcRenderer.invoke('archive:selectBackupExportSource'),
+    selectRestoreTargetDirectory: () => ipcRenderer.invoke('archive:selectRestoreTargetDirectory'),
+    createBackupExport: (input) => ipcRenderer.invoke('archive:createBackupExport', input),
+    restoreBackupExport: (input) => ipcRenderer.invoke('archive:restoreBackupExport', input),
     createImportBatch: (input) => ipcRenderer.invoke('archive:createImportBatch', input),
     listImportBatches: () => ipcRenderer.invoke('archive:listImportBatches'),
     getImportBatch: (batchId) => ipcRenderer.invoke('archive:getImportBatch', { batchId }),

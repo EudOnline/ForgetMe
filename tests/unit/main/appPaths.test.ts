@@ -14,4 +14,12 @@ describe('ensureAppPaths', () => {
     expect(fs.existsSync(paths.importReportsDir)).toBe(true)
     expect(fs.existsSync(paths.sqliteDir)).toBe(true)
   })
+
+  it('creates preservation report directories', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase6-paths-'))
+    const paths = ensureAppPaths(root)
+
+    expect(fs.existsSync(paths.importReportsDir)).toBe(true)
+    expect(fs.existsSync(paths.preservationReportsDir)).toBe(true)
+  })
 })

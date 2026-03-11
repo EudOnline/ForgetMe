@@ -15,3 +15,14 @@ describe('archiveApi workbench methods', () => {
     await expect(archiveApi.getReviewWorkbenchItem('rq-1')).resolves.toBeNull()
   })
 })
+
+describe('archiveApi preservation methods', () => {
+  it('exposes export and restore methods in the fallback API', async () => {
+    vi.stubGlobal('window', {})
+
+    const archiveApi = getArchiveApi()
+
+    await expect(archiveApi.createBackupExport({ destinationRoot: '/tmp/export-root' })).resolves.toEqual(null)
+    await expect(archiveApi.restoreBackupExport({ exportRoot: '/tmp/export-1', targetRoot: '/tmp/restore-root' })).resolves.toEqual(null)
+  })
+})
