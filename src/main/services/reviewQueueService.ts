@@ -3,6 +3,7 @@ import type { ArchiveDatabase } from './db'
 import { chooseCanonicalPersonName } from './canonicalPeopleService'
 import { approveStructuredFieldCandidate, rejectStructuredFieldCandidate, undoStructuredFieldDecision } from './enrichmentReviewService'
 import { appendDecisionJournal, listDecisionJournal, markDecisionUndone } from './journalService'
+import { approveProfileAttributeCandidate, rejectProfileAttributeCandidate, undoProfileAttributeDecision } from './profileCandidateReviewService'
 
 type ReviewQueueItemRow = {
   id: string
@@ -293,6 +294,9 @@ export function approveReviewItem(db: ArchiveDatabase, input: { queueItemId: str
   if (queueItem.itemType === 'structured_field_candidate') {
     return approveStructuredFieldCandidate(db, input)
   }
+  if (queueItem.itemType === 'profile_attribute_candidate') {
+    return approveProfileAttributeCandidate(db, input)
+  }
 
   return inTransaction(db, () => {
     if (queueItem.status !== 'pending') {
@@ -315,6 +319,9 @@ export function rejectReviewItem(db: ArchiveDatabase, input: { queueItemId: stri
   const queueItem = getReviewQueueItem(db, input.queueItemId)
   if (queueItem.itemType === 'structured_field_candidate') {
     return rejectStructuredFieldCandidate(db, input)
+  }
+  if (queueItem.itemType === 'profile_attribute_candidate') {
+    return rejectProfileAttributeCandidate(db, input)
   }
 
   return inTransaction(db, () => {
@@ -375,6 +382,9 @@ export function undoDecision(db: ArchiveDatabase, input: { journalId: string; ac
   }
   if (journal.targetType === 'structured_field_candidate') {
     return undoStructuredFieldDecision(db, input)
+  }
+  if (journal.targetType === 'profile_attribute_candidate') {
+    return undoProfileAttributeDecision(db, input)
   }
 
   return inTransaction(db, () => {

@@ -7,6 +7,7 @@ import { registerPeopleIpc } from './ipc/peopleIpc'
 import { registerReviewIpc } from './ipc/reviewIpc'
 import { registerSearchIpc } from './ipc/searchIpc'
 import { ensureAppPaths } from './services/appPaths'
+import { createEnrichmentRunner } from './services/enrichmentRunnerService'
 
 const resolveAppDataRoot = () => {
   if (process.env.FORGETME_E2E_USER_DATA_DIR) {
@@ -52,6 +53,8 @@ const createWindow = () => {
   }
 }
 
+let enrichmentRunner: ReturnType<typeof createEnrichmentRunner> | null = null
+
 app.whenReady().then(() => {
   const appPaths = ensureAppPaths(resolveAppDataRoot())
   registerArchiveIpc(appPaths)
@@ -59,6 +62,7 @@ app.whenReady().then(() => {
   registerPeopleIpc(appPaths)
   registerReviewIpc(appPaths)
   registerSearchIpc(appPaths)
+  enrichmentRunner = createEnrichmentRunner({ appPaths })
   createWindow()
 
   app.on('activate', () => {
@@ -66,6 +70,10 @@ app.whenReady().then(() => {
       createWindow()
     }
   })
+})
+
+app.on('before-quit', () => {
+  enrichmentRunner?.stop()
 })
 
 app.on('window-all-closed', () => {

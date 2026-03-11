@@ -1,9 +1,11 @@
 import path from 'node:path'
 import { ipcMain } from 'electron'
-import { canonicalPersonIdSchema, relationshipLabelInputSchema } from '../../shared/ipcSchemas'
+import { canonicalPersonIdSchema, journalIdSchema, personProfileAttributeFilterSchema, profileAttributeCandidateFilterSchema, queueItemIdSchema, rejectReviewItemInputSchema, relationshipLabelInputSchema } from '../../shared/ipcSchemas'
 import type { AppPaths } from '../services/appPaths'
 import { openDatabase, runMigrations } from '../services/db'
 import { getPersonGraph, setRelationshipLabel } from '../services/graphService'
+import { approveProfileAttributeCandidate, rejectProfileAttributeCandidate, undoProfileAttributeDecision } from '../services/profileCandidateReviewService'
+import { listPersonProfileAttributes, listProfileAttributeCandidates } from '../services/profileReadService'
 import { getCanonicalPerson, getPeopleList, getPersonTimeline } from '../services/timelineService'
 
 function databasePath(appPaths: AppPaths) {
@@ -16,6 +18,11 @@ export function registerPeopleIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:getPersonTimeline')
   ipcMain.removeHandler('archive:getPersonGraph')
   ipcMain.removeHandler('archive:setRelationshipLabel')
+  ipcMain.removeHandler('archive:listPersonProfileAttributes')
+  ipcMain.removeHandler('archive:listProfileAttributeCandidates')
+  ipcMain.removeHandler('archive:approveProfileAttributeCandidate')
+  ipcMain.removeHandler('archive:rejectProfileAttributeCandidate')
+  ipcMain.removeHandler('archive:undoProfileAttributeDecision')
 
   ipcMain.handle('archive:listCanonicalPeople', async () => {
     const db = openDatabase(databasePath(appPaths))
@@ -57,6 +64,51 @@ export function registerPeopleIpc(appPaths: AppPaths) {
     const db = openDatabase(databasePath(appPaths))
     runMigrations(db)
     const result = setRelationshipLabel(db, input)
+    db.close()
+    return result
+  })
+
+  ipcMain.handle('archive:listPersonProfileAttributes', async (_event, payload) => {
+    const input = personProfileAttributeFilterSchema.parse(payload)
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    const attributes = listPersonProfileAttributes(db, input)
+    db.close()
+    return attributes
+  })
+
+  ipcMain.handle('archive:listProfileAttributeCandidates', async (_event, payload) => {
+    const input = profileAttributeCandidateFilterSchema.parse(payload)
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    const candidates = listProfileAttributeCandidates(db, input)
+    db.close()
+    return candidates
+  })
+
+  ipcMain.handle('archive:approveProfileAttributeCandidate', async (_event, payload) => {
+    const { queueItemId } = queueItemIdSchema.parse(payload)
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    const result = approveProfileAttributeCandidate(db, { queueItemId, actor: 'local-user' })
+    db.close()
+    return result
+  })
+
+  ipcMain.handle('archive:rejectProfileAttributeCandidate', async (_event, payload) => {
+    const input = rejectReviewItemInputSchema.parse(payload)
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    const result = rejectProfileAttributeCandidate(db, { queueItemId: input.queueItemId, actor: 'local-user', note: input.note })
+    db.close()
+    return result
+  })
+
+  ipcMain.handle('archive:undoProfileAttributeDecision', async (_event, payload) => {
+    const { journalId } = journalIdSchema.parse(payload)
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    const result = undoProfileAttributeDecision(db, { journalId, actor: 'local-user' })
     db.close()
     return result
   })

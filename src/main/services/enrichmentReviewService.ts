@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import type { ArchiveDatabase } from './db'
 import { appendDecisionJournal, markDecisionUndone } from './journalService'
+import { projectApprovedFieldToProfile } from './profileProjectionService'
 
 function inTransaction<T>(db: ArchiveDatabase, callback: () => T) {
   db.exec('begin immediate')
@@ -158,6 +159,7 @@ export function approveStructuredFieldCandidate(db: ArchiveDatabase, input: {
     })
 
     db.prepare('update structured_field_candidates set approved_journal_id = ? where id = ?').run(journal.journalId, candidate.id)
+    projectApprovedFieldToProfile(db, { evidenceId, approvedJournalId: journal.journalId })
 
     return {
       status: 'approved' as const,
@@ -236,6 +238,9 @@ export function undoStructuredFieldDecision(db: ArchiveDatabase, input: {
     }
 
     if (undoPayload.evidenceId) {
+      const updatedAt = new Date().toISOString()
+      db.prepare('update person_profile_attributes set status = ?, source_evidence_id = null, updated_at = ? where source_evidence_id = ? and status = ?').run('undone', updatedAt, undoPayload.evidenceId, 'active')
+      db.prepare('update profile_attribute_candidates set source_evidence_id = null where source_evidence_id = ? and status = ?').run(undoPayload.evidenceId, 'pending')
       db.prepare('delete from enriched_evidence where id = ?').run(undoPayload.evidenceId)
     }
     if (undoPayload.candidateId) {

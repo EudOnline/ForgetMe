@@ -105,6 +105,7 @@ export function persistDocumentExtraction(db: ArchiveDatabase, input: {
   jobId: string
   extraction: DocumentExtraction
 }) {
+  const fieldCandidates = [] as Array<{ candidateId: string; fieldKey: string; confidence: number }>
   const createdAt = new Date().toISOString()
   const insertArtifact = db.prepare(
     'insert into enrichment_artifacts (id, job_id, artifact_type, payload_json, created_at) values (?, ?, ?, ?, ?)'
@@ -162,7 +163,7 @@ export function persistDocumentExtraction(db: ArchiveDatabase, input: {
   )
 
   if (!input.extraction.typed) {
-    return
+    return { fieldCandidates }
   }
 
   for (const field of input.extraction.typed.fields) {
@@ -171,8 +172,10 @@ export function persistDocumentExtraction(db: ArchiveDatabase, input: {
       continue
     }
 
+    const candidateId = crypto.randomUUID()
+
     insertCandidate.run(
-      crypto.randomUUID(),
+      candidateId,
       input.fileId,
       input.jobId,
       field.fieldType,
@@ -186,5 +189,13 @@ export function persistDocumentExtraction(db: ArchiveDatabase, input: {
       'pending',
       createdAt
     )
+
+    fieldCandidates.push({
+      candidateId,
+      fieldKey: field.fieldKey,
+      confidence: 0.9
+    })
   }
+
+  return { fieldCandidates }
 }

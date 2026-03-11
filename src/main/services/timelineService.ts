@@ -1,5 +1,6 @@
 import type { ArchiveDatabase } from './db'
 import { loadApprovedEnrichmentIndex } from './enrichedSearchService'
+import { getApprovedProfileByCanonicalPerson } from './profileReadService'
 
 function getCanonicalPersonFileIds(db: ArchiveDatabase, canonicalPersonId: string) {
   const anchorRows = db.prepare(
@@ -116,6 +117,7 @@ export function getCanonicalPerson(db: ArchiveDatabase, input: { canonicalPerson
     manualLabels: JSON.parse(person.manualLabelsJson),
     aliases,
     approvedFields,
+    approvedProfile: getApprovedProfileByCanonicalPerson(db, { canonicalPersonId: input.canonicalPersonId }),
     status: person.status
   }
 }

@@ -30,12 +30,27 @@ export const enrichmentJobFilterSchema = z.object({
   fileId: z.string().min(1).optional()
 }).optional().default({})
 
+export const enrichmentAttemptFilterSchema = z.object({
+  jobId: z.string().min(1).optional(),
+  status: z.enum(['processing', 'completed', 'failed', 'cancelled']).optional()
+}).optional().default({})
+
 export const documentEvidenceInputSchema = z.object({
   fileId: z.string().min(1)
 })
 
 export const structuredFieldCandidateFilterSchema = z.object({
   fileId: z.string().min(1).optional(),
+  status: z.enum(['pending', 'approved', 'rejected', 'undone']).optional()
+}).optional().default({})
+
+export const personProfileAttributeFilterSchema = z.object({
+  canonicalPersonId: z.string().min(1).optional(),
+  status: z.enum(['active', 'superseded', 'undone']).optional()
+}).optional().default({})
+
+export const profileAttributeCandidateFilterSchema = z.object({
+  canonicalPersonId: z.string().min(1).optional(),
   status: z.enum(['pending', 'approved', 'rejected', 'undone']).optional()
 }).optional().default({})
 
@@ -69,6 +84,21 @@ export const reviewActionSchema = z.discriminatedUnion('action', [
 export const queueItemIdSchema = z.object({
   queueItemId: z.string().min(1)
 })
+
+const reviewWorkbenchItemTypeSchema = z.enum(['structured_field_candidate', 'profile_attribute_candidate'])
+const reviewWorkbenchStatusSchema = z.enum(['pending', 'approved', 'rejected', 'undone'])
+
+export const reviewWorkbenchItemSchema = z.object({
+  queueItemId: z.string().min(1)
+})
+
+export const reviewWorkbenchFilterSchema = z.object({
+  itemType: reviewWorkbenchItemTypeSchema.optional(),
+  status: reviewWorkbenchStatusSchema.optional(),
+  canonicalPersonId: z.string().min(1).optional(),
+  fieldKey: z.string().min(1).optional(),
+  hasConflict: z.boolean().optional()
+}).optional().default({})
 
 export const journalIdSchema = z.object({
   journalId: z.string().min(1)

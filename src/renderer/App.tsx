@@ -10,6 +10,7 @@ import { ImportPage } from './pages/ImportPage'
 import { PeoplePage } from './pages/PeoplePage'
 import { PersonDetailPage } from './pages/PersonDetailPage'
 import { ReviewQueuePage } from './pages/ReviewQueuePage'
+import { ReviewWorkbenchPage } from './pages/ReviewWorkbenchPage'
 import { SearchPage } from './pages/SearchPage'
 
 export default function App() {
@@ -18,7 +19,8 @@ export default function App() {
   const [selectedBatch, setSelectedBatch] = useState<ImportBatchSummary | null>(null)
   const [selectedCanonicalPersonId, setSelectedCanonicalPersonId] = useState<string | null>(null)
   const [selectedEvidenceFileId, setSelectedEvidenceFileId] = useState<string | null>(null)
-  const [page, setPage] = useState<'import' | 'batches' | 'detail' | 'search' | 'people' | 'person' | 'review' | 'enrichment' | 'evidence'>('import')
+  const [selectedReviewWorkbenchQueueItemId, setSelectedReviewWorkbenchQueueItemId] = useState<string | null>(null)
+  const [page, setPage] = useState<'import' | 'batches' | 'detail' | 'search' | 'people' | 'person' | 'review' | 'review-workbench' | 'enrichment' | 'evidence'>('import')
 
   useEffect(() => {
     void archiveApi.listImportBatches().then(setBatches)
@@ -50,6 +52,7 @@ export default function App() {
           <button type="button" onClick={() => setPage('search')}>Search</button>
           <button type="button" onClick={() => setPage('people')}>People</button>
           <button type="button" onClick={() => setPage('review')}>Review Queue</button>
+          <button type="button" onClick={() => setPage('review-workbench')}>Review Workbench</button>
           <button type="button" onClick={() => setPage('enrichment')}>Enrichment Jobs</button>
           <button type="button" onClick={() => setPage('evidence')}>Document Evidence</button>
         </nav>
@@ -61,7 +64,8 @@ export default function App() {
       {page === 'search' ? <SearchPage /> : null}
       {page === 'people' ? <PeoplePage onSelectPerson={handleSelectPerson} /> : null}
       {page === 'person' ? <PersonDetailPage canonicalPersonId={selectedCanonicalPersonId} /> : null}
-      {page === 'review' ? <ReviewQueuePage /> : null}
+      {page === 'review' ? <ReviewQueuePage onOpenWorkbench={(queueItemId) => { setSelectedReviewWorkbenchQueueItemId(queueItemId); setPage('review-workbench') }} /> : null}
+      {page === 'review-workbench' ? <ReviewWorkbenchPage initialQueueItemId={selectedReviewWorkbenchQueueItemId} /> : null}
       {page === 'enrichment' ? <EnrichmentJobsPage onSelectFile={handleSelectEvidenceFile} /> : null}
       {page === 'evidence' ? <DocumentEvidencePage fileId={selectedEvidenceFileId} /> : null}
     </main>

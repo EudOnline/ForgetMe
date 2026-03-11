@@ -5,7 +5,7 @@ import type { AppPaths } from './appPaths'
 import { ensureCanonicalPeopleForAnchors } from './canonicalPeopleService'
 import { generatePersonMergeCandidates } from './candidateService'
 import { classifyExactDuplicate, countExistingHashes } from './dedupService'
-import { seedE2EMultimodalReviewFixture } from './e2eMultimodalFixtureService'
+import { seedE2EMultimodalReviewFixture, seedE2ERunnerProfileFixture } from './e2eMultimodalFixtureService'
 import { enqueueEnrichmentJobs } from './enrichmentDispatchService'
 import { openDatabase, runMigrations } from './db'
 import { parseFrozenFile } from './parserRegistry'
@@ -120,6 +120,10 @@ export async function createImportBatch(input: {
 
   if (process.env.FORGETME_E2E_MULTIMODAL_FIXTURE === '1' && files.length > 0 && anchors.length > 0) {
     seedE2EMultimodalReviewFixture(db, { fileId: files[0].fileId })
+  }
+
+  if (process.env.FORGETME_E2E_RUNNER_PROFILE_FIXTURE === '1' && files.length > 0 && anchors.length > 0) {
+    seedE2ERunnerProfileFixture(db, { fileId: files[0].fileId })
   }
 
   db.prepare('update import_batches set status = ? where id = ?').run('ready', batchId)

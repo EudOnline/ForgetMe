@@ -16,6 +16,8 @@ export function EnrichmentJobTable(props: {
           <th>Type</th>
           <th>File</th>
           <th>Status</th>
+          <th>Attempts</th>
+          <th>Last Error</th>
           <th>Provider</th>
           <th>Actions</th>
         </tr>
@@ -26,6 +28,8 @@ export function EnrichmentJobTable(props: {
             <td>{job.enhancerType}</td>
             <td>{job.fileName}</td>
             <td>{job.status}</td>
+            <td>{job.attemptCount}</td>
+            <td>{job.errorMessage ?? '—'}</td>
             <td>{job.provider}</td>
             <td>
               <button type="button" onClick={() => void props.onRerun?.(job.id)}>Rerun</button>
