@@ -4,15 +4,15 @@ import { normalizeImageExtraction, persistImageExtraction } from './imageUnderst
 import { resolveModelRoute, callLiteLLM } from './modelGatewayService'
 import { queueStructuredFieldCandidate } from './enrichmentReviewService'
 import { completeEnrichmentJob, failEnrichmentJob } from './enrichmentRunnerService'
+import {
+  buildProviderBoundaryRequest,
+  persistProviderEgressError,
+  persistProviderEgressRequest,
+  persistProviderEgressResponse,
+  type ProviderBoundaryJob
+} from './providerBoundaryService'
 
-type ExecutionJobRow = {
-  id: string
-  fileId: string
-  fileName: string
-  frozenPath: string
-  enhancerType: 'document_ocr' | 'image_understanding' | 'chat_screenshot'
-  provider: string
-  model: string
+type ExecutionJobRow = ProviderBoundaryJob & {
   status: string
 }
 
@@ -31,6 +31,9 @@ function getExecutionJob(db: ArchiveDatabase, jobId: string) {
       ej.file_id as fileId,
       vf.file_name as fileName,
       vf.frozen_path as frozenPath,
+      vf.sha256 as fileSha256,
+      vf.extension as extension,
+      vf.mime_type as mimeType,
       ej.enhancer_type as enhancerType,
       ej.provider as provider,
       ej.model as model,
@@ -121,7 +124,10 @@ function loadPendingStructuredFieldCandidates(db: ArchiveDatabase, jobId: string
   }>
 }
 
-async function defaultModelCaller(input: { job: ExecutionJobRow }) {
+async function defaultModelCaller(input: {
+  job: ExecutionJobRow
+  requestEnvelope: Record<string, unknown>
+}) {
   if (process.env.FORGETME_E2E_RUNNER_PROFILE_FIXTURE === '1') {
     const receivedAt = new Date().toISOString()
 
@@ -160,15 +166,11 @@ async function defaultModelCaller(input: { job: ExecutionJobRow }) {
     messages: [
       {
         role: 'system',
-        content: 'Return JSON only. Extract structured evidence from the provided local file reference.'
+        content: 'Return JSON only. Extract structured evidence from the provided sanitized local archive reference.'
       },
       {
         role: 'user',
-        content: JSON.stringify({
-          enhancerType: input.job.enhancerType,
-          fileName: input.job.fileName,
-          frozenPath: input.job.frozenPath
-        })
+        content: JSON.stringify(input.requestEnvelope)
       }
     ],
     responseFormat: { type: 'json_object' }
@@ -177,13 +179,31 @@ async function defaultModelCaller(input: { job: ExecutionJobRow }) {
 
 export async function executeEnrichmentJob(db: ArchiveDatabase, input: {
   jobId: string
-  callModel?: (input: { job: ExecutionJobRow }) => Promise<ModelCallResult>
+  callModel?: (input: { job: ExecutionJobRow; requestEnvelope: Record<string, unknown> }) => Promise<ModelCallResult>
 }) {
   const job = getExecutionJob(db, input.jobId)
   const callModel = input.callModel ?? defaultModelCaller
+  const boundary = buildProviderBoundaryRequest({ job })
+  const requestStartedAt = new Date().toISOString()
+  const artifactId = persistProviderEgressRequest(db, {
+    job: boundary.job,
+    policyKey: boundary.policyKey,
+    requestEnvelope: boundary.requestEnvelope,
+    redactionSummary: boundary.redactionSummary,
+    createdAt: requestStartedAt
+  })
 
   try {
-    const modelResult = await callModel({ job })
+    const modelResult = await callModel({
+      job,
+      requestEnvelope: boundary.requestEnvelope
+    })
+    persistProviderEgressResponse(db, {
+      artifactId,
+      payload: modelResult.payload,
+      createdAt: modelResult.receivedAt || new Date().toISOString()
+    })
+
     const extractionPayload = parseExtractionPayload(modelResult.payload)
 
     if (job.enhancerType === 'document_ocr') {
@@ -253,6 +273,15 @@ export async function executeEnrichmentJob(db: ArchiveDatabase, input: {
   } catch (error) {
     const finishedAt = new Date().toISOString()
     const errorMessage = error instanceof Error ? error.message : 'Unknown enrichment execution failure'
+
+    persistProviderEgressError(db, {
+      artifactId,
+      payload: {
+        errorKind: error instanceof SyntaxError ? 'parse_error' : 'execution_error',
+        errorMessage
+      },
+      createdAt: finishedAt
+    })
 
     failEnrichmentJob(db, {
       jobId: job.id,

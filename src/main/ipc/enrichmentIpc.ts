@@ -4,7 +4,7 @@ import { documentEvidenceInputSchema, enrichmentAttemptFilterSchema, enrichmentJ
 import type { AppPaths } from '../services/appPaths'
 import { openDatabase, runMigrations } from '../services/db'
 import { approveStructuredFieldCandidate, rejectStructuredFieldCandidate, undoStructuredFieldDecision } from '../services/enrichmentReviewService'
-import { getDocumentEvidence, listEnrichmentJobs, listStructuredFieldCandidates, rerunEnrichmentJob } from '../services/enrichmentReadService'
+import { getDocumentEvidence, listEnrichmentJobs, listProviderEgressArtifacts, listStructuredFieldCandidates, rerunEnrichmentJob } from '../services/enrichmentReadService'
 import { listEnrichmentAttempts } from '../services/profileReadService'
 
 function databasePath(appPaths: AppPaths) {
@@ -14,6 +14,7 @@ function databasePath(appPaths: AppPaths) {
 export function registerEnrichmentIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:listEnrichmentJobs')
   ipcMain.removeHandler('archive:listEnrichmentAttempts')
+  ipcMain.removeHandler('archive:listProviderEgressArtifacts')
   ipcMain.removeHandler('archive:getDocumentEvidence')
   ipcMain.removeHandler('archive:rerunEnrichmentJob')
   ipcMain.removeHandler('archive:listStructuredFieldCandidates')
@@ -37,6 +38,15 @@ export function registerEnrichmentIpc(appPaths: AppPaths) {
     const attempts = listEnrichmentAttempts(db, input)
     db.close()
     return attempts
+  })
+
+  ipcMain.handle('archive:listProviderEgressArtifacts', async (_event, payload) => {
+    const { jobId } = jobIdSchema.parse(payload)
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    const artifacts = listProviderEgressArtifacts(db, { jobId })
+    db.close()
+    return artifacts
   })
 
   ipcMain.handle('archive:getDocumentEvidence', async (_event, payload) => {

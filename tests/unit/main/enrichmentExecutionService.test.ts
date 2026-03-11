@@ -13,7 +13,7 @@ function setupDatabase() {
 }
 
 describe('executeEnrichmentJob', () => {
-  it('routes document jobs into OCR persistence and review queueing', async () => {
+  it('routes document jobs into OCR persistence, review queueing, and provider boundary audit', async () => {
     const db = setupDatabase()
     const createdAt = '2026-03-11T00:00:00.000Z'
 
@@ -26,33 +26,41 @@ describe('executeEnrichmentJob', () => {
 
     const result = await executeEnrichmentJob(db, {
       jobId: 'job-1',
-      callModel: async () => ({
-        provider: 'siliconflow',
-        model: 'model-a',
-        usage: { prompt_tokens: 10 },
-        receivedAt: createdAt,
-        payload: {
-          choices: [{
-            message: {
-              content: JSON.stringify({
-                documentType: 'transcript',
-                rawText: '学校 北京大学',
-                layoutBlocks: [{ page: 1, text: '学校 北京大学' }],
-                fields: {
-                  school_name: '北京大学',
-                  student_name: 'Alice Chen'
-                }
-              })
-            }
-          }]
+      callModel: async ({ requestEnvelope }) => {
+        expect(JSON.stringify(requestEnvelope)).not.toContain('/tmp/transcript.pdf')
+        expect(JSON.stringify(requestEnvelope)).toContain('vault://file/f-1')
+
+        return {
+          provider: 'siliconflow',
+          model: 'model-a',
+          usage: { prompt_tokens: 10 },
+          receivedAt: createdAt,
+          payload: {
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  documentType: 'transcript',
+                  rawText: '学校 北京大学',
+                  layoutBlocks: [{ page: 1, text: '学校 北京大学' }],
+                  fields: {
+                    school_name: '北京大学',
+                    student_name: 'Alice Chen'
+                  }
+                })
+              }
+            }]
+          }
         }
-      })
+      }
     })
 
     expect(result.status).toBe('completed')
     expect((db.prepare('select count(*) as count from enrichment_artifacts where job_id = ?').get('job-1') as { count: number }).count).toBe(2)
     expect((db.prepare('select count(*) as count from structured_field_candidates where job_id = ?').get('job-1') as { count: number }).count).toBe(2)
     expect((db.prepare('select count(*) as count from review_queue where candidate_id in (select id from structured_field_candidates where job_id = ?)').get('job-1') as { count: number }).count).toBe(2)
+    expect((db.prepare('select count(*) as count from provider_egress_artifacts where job_id = ?').get('job-1') as { count: number }).count).toBe(1)
+    expect((db.prepare('select count(*) as count from provider_egress_events where event_type = ?').get('request') as { count: number }).count).toBe(1)
+    expect((db.prepare('select count(*) as count from provider_egress_events where event_type = ?').get('response') as { count: number }).count).toBe(1)
     db.close()
   })
 })

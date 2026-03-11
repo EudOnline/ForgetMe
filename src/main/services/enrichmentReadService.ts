@@ -134,6 +134,73 @@ export function listStructuredFieldCandidates(db: ArchiveDatabase, input?: {
   }))
 }
 
+export function listProviderEgressArtifacts(db: ArchiveDatabase, input: { jobId: string }) {
+  const artifactRows = db.prepare(
+    `select
+      pea.id as artifactId,
+      pea.job_id as jobId,
+      pea.file_id as fileId,
+      vf.file_name as fileName,
+      pea.provider as provider,
+      pea.model as model,
+      pea.enhancer_type as enhancerType,
+      pea.policy_key as policyKey,
+      pea.request_hash as requestHash,
+      pea.redaction_summary_json as redactionSummaryJson,
+      pea.created_at as createdAt
+     from provider_egress_artifacts pea
+     join vault_files vf on vf.id = pea.file_id
+     where pea.job_id = ?
+     order by pea.created_at desc, pea.id desc`
+  ).all(input.jobId) as Array<{
+    artifactId: string
+    jobId: string
+    fileId: string
+    fileName: string
+    provider: string
+    model: string
+    enhancerType: string
+    policyKey: string
+    requestHash: string
+    redactionSummaryJson: string
+    createdAt: string
+  }>
+
+  return artifactRows.map((row) => ({
+    artifactId: row.artifactId,
+    jobId: row.jobId,
+    fileId: row.fileId,
+    fileName: row.fileName,
+    provider: row.provider,
+    model: row.model,
+    enhancerType: row.enhancerType,
+    policyKey: row.policyKey,
+    requestHash: row.requestHash,
+    redactionSummary: parseJson<Record<string, unknown>>(row.redactionSummaryJson),
+    createdAt: row.createdAt,
+    events: (db.prepare(
+      `select
+        id,
+        event_type as eventType,
+        payload_json as payloadJson,
+        created_at as createdAt
+       from provider_egress_events
+       where artifact_id = ?
+       order by created_at asc, id asc`
+    ).all(row.artifactId) as Array<{
+      id: string
+      eventType: 'request' | 'response' | 'error'
+      payloadJson: string
+      createdAt: string
+    }>).map((event) => ({
+      id: event.id,
+      eventType: event.eventType,
+      payload: parseJson<Record<string, unknown>>(event.payloadJson),
+      createdAt: event.createdAt
+    }))
+  }))
+}
+
 export function getDocumentEvidence(db: ArchiveDatabase, input: { fileId: string }) {
   const file = db.prepare(
     `select id, file_name as fileName

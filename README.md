@@ -160,8 +160,26 @@ npm run test:e2e -- tests/e2e/preservation-export-restore-flow.spec.ts
 npm run build
 ```
 
+### Phase Six A2 Provider Boundary Baseline
+
+Phase 6A2 adds the first auditable provider-boundary baseline for remote multimodal enrichment:
+
+- outbound remote requests now use a metadata-only envelope instead of leaking absolute local filesystem paths
+- baseline redaction policies are persisted in SQLite and currently remove `frozenPath` from the provider request shape
+- request / response / error boundary events are recorded into provider egress audit tables for later inspection
+- `Enrichment Jobs` now exposes a `Boundary` action so operators can inspect the first boundary audit directly in the app
+
+### Phase Six A2 Verification
+
+```bash
+npm run test:unit -- tests/unit/main/dbPhaseSixA2.test.ts tests/unit/main/providerBoundaryService.test.ts tests/unit/main/enrichmentExecutionService.test.ts tests/unit/main/enrichmentReadService.test.ts tests/unit/renderer/enrichmentJobsPage.test.tsx
+npm run test:e2e -- tests/e2e/provider-boundary-audit-flow.spec.ts
+npm run build
+```
+
 ### Current Operational Note
 
 The local-first runner, shared review queue, formal approved profile read model, and phase-five single-item review workbench are now wired end-to-end.
-The project has now started phase 6 with the export / restore preservation baseline, and the next validated follow-up is provider boundary + redaction policy work under phase 6A2.
+Phase 6 now includes both the preservation export / restore baseline and the first provider-boundary audit baseline for remote multimodal work.
+The next validated follow-up remains operator / review efficiency on top of these preservation primitives.
 See `docs/plans/2026-03-11-phase-six-preservation-operator-efficiency-design.md` for the agreed roadmap.

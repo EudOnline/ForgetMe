@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
-import { getDocumentEvidence, listEnrichmentJobs, listStructuredFieldCandidates, rerunEnrichmentJob } from '../../../src/main/services/enrichmentReadService'
+import { getDocumentEvidence, listEnrichmentJobs, listProviderEgressArtifacts, listStructuredFieldCandidates, rerunEnrichmentJob } from '../../../src/main/services/enrichmentReadService'
 
 function setupDatabase() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-enrichment-read-'))
@@ -95,6 +95,38 @@ describe('enrichmentReadService', () => {
     expect(rerun.id).not.toBe('job-1')
     expect((db.prepare('select count(*) as count from enrichment_jobs where file_id = ?').get('f-1') as { count: number }).count).toBe(2)
     expect(db.prepare('select status from enrichment_jobs where id = ?').get('job-1')).toEqual({ status: 'completed' })
+    db.close()
+  })
+
+
+  it('lists provider boundary audit artifacts with parsed request and response events', () => {
+    const db = setupDatabase()
+    const createdAt = '2026-03-12T00:00:00.000Z'
+
+    db.prepare('insert into import_batches (id, source_label, status, created_at) values (?, ?, ?, ?)').run('b-1', 'boundary-read', 'ready', createdAt)
+    db.prepare('insert into vault_files (id, batch_id, source_path, frozen_path, file_name, extension, mime_type, file_size, sha256, duplicate_class, parser_status, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run('f-1', 'b-1', '/tmp/transcript.pdf', '/tmp/transcript.pdf', 'transcript.pdf', '.pdf', 'application/pdf', 1, 'hash-1', 'unique', 'parsed', createdAt)
+    db.prepare(`insert into enrichment_jobs (
+      id, file_id, enhancer_type, provider, model, status, attempt_count, input_hash,
+      started_at, finished_at, error_message, usage_json, created_at, updated_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run('job-1', 'f-1', 'document_ocr', 'siliconflow', 'model-a', 'completed', 1, null, createdAt, createdAt, null, '{}', createdAt, createdAt)
+    db.prepare('insert into redaction_policies (id, policy_key, enhancer_type, status, rules_json, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?)').run('rp-1', 'document_ocr.remote_baseline', 'document_ocr', 'active', '{"removedFields":["frozenPath"]}', createdAt, createdAt)
+    db.prepare('insert into provider_egress_artifacts (id, job_id, file_id, provider, model, enhancer_type, policy_key, request_hash, redaction_summary_json, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run('pea-1', 'job-1', 'f-1', 'siliconflow', 'model-a', 'document_ocr', 'document_ocr.remote_baseline', 'request-hash-1', '{"removedFields":["frozenPath"]}', createdAt)
+    db.prepare('insert into provider_egress_events (id, artifact_id, event_type, payload_json, created_at) values (?, ?, ?, ?, ?)').run('pee-1', 'pea-1', 'request', '{"fileRef":"vault://file/f-1"}', createdAt)
+    db.prepare('insert into provider_egress_events (id, artifact_id, event_type, payload_json, created_at) values (?, ?, ?, ?, ?)').run('pee-2', 'pea-1', 'response', '{"choices":[]}', createdAt)
+
+    const artifacts = listProviderEgressArtifacts(db, { jobId: 'job-1' })
+
+    expect(artifacts).toEqual([
+      expect.objectContaining({
+        artifactId: 'pea-1',
+        policyKey: 'document_ocr.remote_baseline',
+        fileName: 'transcript.pdf',
+        events: [
+          expect.objectContaining({ eventType: 'request', payload: { fileRef: 'vault://file/f-1' } }),
+          expect.objectContaining({ eventType: 'response', payload: { choices: [] } })
+        ]
+      })
+    ])
     db.close()
   })
 

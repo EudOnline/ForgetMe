@@ -68,6 +68,28 @@ export type EnrichmentAttempt = {
   createdAt: string
 }
 
+export type ProviderEgressEvent = {
+  id: string
+  eventType: 'request' | 'response' | 'error'
+  payload: Record<string, unknown>
+  createdAt: string
+}
+
+export type ProviderEgressArtifact = {
+  artifactId: string
+  jobId: string
+  fileId: string
+  fileName: string
+  provider: string
+  model: string
+  enhancerType: string
+  policyKey: string
+  requestHash: string
+  redactionSummary: Record<string, unknown>
+  createdAt: string
+  events: ProviderEgressEvent[]
+}
+
 export type StructuredFieldCandidate = {
   id: string
   fileId: string
@@ -371,6 +393,7 @@ export interface ArchiveApi {
   setRelationshipLabel: (input: { fromPersonId: string; toPersonId: string; label: string }) => Promise<{ id: string; status: 'approved' }>
   listEnrichmentJobs: (input?: { status?: 'pending' | 'processing' | 'completed' | 'failed'; fileId?: string }) => Promise<EnrichmentJob[]>
   listEnrichmentAttempts: (input?: { jobId?: string; status?: 'processing' | 'completed' | 'failed' | 'cancelled' }) => Promise<EnrichmentAttempt[]>
+  listProviderEgressArtifacts: (jobId: string) => Promise<ProviderEgressArtifact[]>
   getDocumentEvidence: (fileId: string) => Promise<DocumentEvidence | null>
   rerunEnrichmentJob: (jobId: string) => Promise<EnrichmentJob | null>
   listStructuredFieldCandidates: (input?: { fileId?: string; status?: 'pending' | 'approved' | 'rejected' | 'undone' }) => Promise<StructuredFieldCandidate[]>

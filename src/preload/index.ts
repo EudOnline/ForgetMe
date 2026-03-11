@@ -32,6 +32,7 @@ const archiveApi: ArchiveApi = {
   setRelationshipLabel: (input) => ipcRenderer.invoke('archive:setRelationshipLabel', input),
   listEnrichmentJobs: (input) => ipcRenderer.invoke('archive:listEnrichmentJobs', input),
   listEnrichmentAttempts: (input) => ipcRenderer.invoke('archive:listEnrichmentAttempts', input),
+  listProviderEgressArtifacts: (jobId) => ipcRenderer.invoke('archive:listProviderEgressArtifacts', { jobId }),
   getDocumentEvidence: (fileId) => ipcRenderer.invoke('archive:getDocumentEvidence', { fileId }),
   rerunEnrichmentJob: (jobId) => ipcRenderer.invoke('archive:rerunEnrichmentJob', { jobId }),
   listStructuredFieldCandidates: (input) => ipcRenderer.invoke('archive:listStructuredFieldCandidates', input),

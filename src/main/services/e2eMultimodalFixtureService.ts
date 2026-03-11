@@ -1,6 +1,33 @@
 import crypto from 'node:crypto'
 import type { ArchiveDatabase } from './db'
 import { queueStructuredFieldCandidate } from './enrichmentReviewService'
+import {
+  buildProviderBoundaryRequest,
+  persistProviderEgressRequest,
+  persistProviderEgressResponse
+} from './providerBoundaryService'
+
+function loadFixtureFile(db: ArchiveDatabase, fileId: string) {
+  return db.prepare(
+    `select
+      id,
+      file_name as fileName,
+      frozen_path as frozenPath,
+      sha256 as fileSha256,
+      extension,
+      mime_type as mimeType
+     from vault_files
+     where id = ?
+     limit 1`
+  ).get(fileId) as {
+    id: string
+    fileName: string
+    frozenPath: string
+    fileSha256: string
+    extension: string | null
+    mimeType: string | null
+  } | undefined
+}
 
 export function seedE2EMultimodalReviewFixture(db: ArchiveDatabase, input: { fileId: string }) {
   const existing = db.prepare(
@@ -12,6 +39,11 @@ export function seedE2EMultimodalReviewFixture(db: ArchiveDatabase, input: { fil
 
   if (existing) {
     return existing
+  }
+
+  const file = loadFixtureFile(db, input.fileId)
+  if (!file) {
+    throw new Error(`Fixture file not found for provider boundary seed: ${input.fileId}`)
   }
 
   const createdAt = new Date().toISOString()
@@ -39,6 +71,38 @@ export function seedE2EMultimodalReviewFixture(db: ArchiveDatabase, input: { fil
     createdAt,
     createdAt
   )
+
+  const boundaryRequest = buildProviderBoundaryRequest({
+    job: {
+      id: jobId,
+      fileId: file.id,
+      fileName: file.fileName,
+      frozenPath: file.frozenPath,
+      fileSha256: file.fileSha256,
+      extension: file.extension,
+      mimeType: file.mimeType,
+      enhancerType: 'document_ocr',
+      provider: 'siliconflow',
+      model: 'fixture-model'
+    }
+  })
+
+  const boundaryArtifactId = persistProviderEgressRequest(db, {
+    job: boundaryRequest.job,
+    policyKey: boundaryRequest.policyKey,
+    requestEnvelope: boundaryRequest.requestEnvelope,
+    redactionSummary: boundaryRequest.redactionSummary,
+    createdAt
+  })
+
+  persistProviderEgressResponse(db, {
+    artifactId: boundaryArtifactId,
+    payload: {
+      fixture: true,
+      status: 'ok'
+    },
+    createdAt
+  })
 
   db.prepare('insert into enrichment_artifacts (id, job_id, artifact_type, payload_json, created_at) values (?, ?, ?, ?, ?)').run(
     crypto.randomUUID(),

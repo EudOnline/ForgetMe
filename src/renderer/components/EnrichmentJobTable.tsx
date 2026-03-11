@@ -4,6 +4,7 @@ export function EnrichmentJobTable(props: {
   jobs: EnrichmentJob[]
   onRerun?: (jobId: string) => void | Promise<void>
   onInspectFile?: (fileId: string) => void
+  onInspectBoundary?: (jobId: string) => void | Promise<void>
 }) {
   if (props.jobs.length === 0) {
     return <p>No enrichment jobs yet.</p>
@@ -34,6 +35,7 @@ export function EnrichmentJobTable(props: {
             <td>
               <button type="button" onClick={() => void props.onRerun?.(job.id)}>Rerun</button>
               <button type="button" onClick={() => props.onInspectFile?.(job.fileId)}>Inspect</button>
+              <button type="button" onClick={() => void props.onInspectBoundary?.(job.id)}>Boundary</button>
             </td>
           </tr>
         ))}
