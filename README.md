@@ -199,6 +199,8 @@ Phase 6B2 now extends `Review Workbench` with the first conflict-group and conti
 - pending items are grouped by `canonical person + item type + field key`
 - each group shows pending count, distinct candidate values, and whether the group is currently in conflict
 - selecting a group filters the workbench sidebar to that group only
+- a `Conflict Compare` panel summarizes distinct values and their current counts inside the selected group
+- `Previous` / `Next` plus `j` / `k` navigation move through the current visible scope without changing write-path semantics
 - after approve / reject, the workbench keeps the current group context when possible and falls back to the current person when the group is exhausted
 
 ### Phase Six B2 Verification
@@ -212,6 +214,6 @@ npx playwright test tests/e2e/review-workbench-single-item-flow.spec.ts
 ### Current Operational Note
 
 The local-first runner, shared review queue, formal approved profile read model, and phase-five single-item review workbench are now wired end-to-end.
-Phase 6 now includes the preservation export / restore baseline, the provider-boundary audit baseline, the people-centric review inbox baseline, and the first conflict-group continuous-review baseline.
-The next validated follow-up inside 6B is richer compare and navigation ergonomics on top of these conflict groups.
+Phase 6 now includes the preservation export / restore baseline, the provider-boundary audit baseline, the people-centric review inbox baseline, and the conflict-group compare / continuous-navigation slice inside 6B2.
+The next validated follow-up inside 6B is 6B3: safe batch approval, decision batch journaling, and replay / undo on top of the current conflict-group workflow.
 See `docs/plans/2026-03-11-phase-six-preservation-operator-efficiency-design.md` for the agreed roadmap.

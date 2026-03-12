@@ -8,7 +8,12 @@ import type {
 import { getArchiveApi } from '../archiveApi'
 import { ReviewActionBar } from '../components/ReviewActionBar'
 import { ReviewCandidateSummaryCard } from '../components/ReviewCandidateSummaryCard'
+import {
+  ReviewConflictCompareCard,
+  type ReviewConflictCompareValueCount
+} from '../components/ReviewConflictCompareCard'
 import { ReviewConflictGroupSidebar } from '../components/ReviewConflictGroupSidebar'
+import { ReviewContinuousNavigationBar } from '../components/ReviewContinuousNavigationBar'
 import { ReviewEvidenceTraceCard } from '../components/ReviewEvidenceTraceCard'
 import { ReviewImpactPreviewCard } from '../components/ReviewImpactPreviewCard'
 import { ReviewInboxSidebar } from '../components/ReviewInboxSidebar'
@@ -20,6 +25,10 @@ function toPersonKey(canonicalPersonId: string | null) {
 
 function toConflictGroupKey(item: ReviewWorkbenchListItem) {
   return `${toPersonKey(item.canonicalPersonId)}::${item.itemType}::${item.fieldKey ?? '__unkeyed__'}`
+}
+
+function toCompareValue(item: ReviewWorkbenchListItem) {
+  return item.displayValue || item.fieldKey || item.itemType
 }
 
 function filterItemsByPerson(items: ReviewWorkbenchListItem[], personKey: string | null) {
@@ -53,6 +62,47 @@ function resolvePersonKeyFromQueueItem(items: ReviewWorkbenchListItem[], queueIt
 
   const matched = items.find((item) => item.queueItemId === queueItemId)
   return matched ? toPersonKey(matched.canonicalPersonId) : null
+}
+
+function buildDistinctValueCounts(items: ReviewWorkbenchListItem[], preferredOrder: string[]) {
+  const counts = new Map<string, number>()
+  for (const item of items) {
+    const value = toCompareValue(item)
+    counts.set(value, (counts.get(value) ?? 0) + 1)
+  }
+
+  const results: ReviewConflictCompareValueCount[] = []
+  const seen = new Set<string>()
+
+  for (const value of preferredOrder) {
+    if (seen.has(value)) {
+      continue
+    }
+
+    results.push({ value, count: counts.get(value) ?? 0 })
+    seen.add(value)
+  }
+
+  for (const item of items) {
+    const value = toCompareValue(item)
+    if (seen.has(value)) {
+      continue
+    }
+
+    results.push({ value, count: counts.get(value) ?? 0 })
+    seen.add(value)
+  }
+
+  return results
+}
+
+function isEditableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+
+  const tagName = target.tagName.toLowerCase()
+  return tagName === 'input' || tagName === 'textarea' || target.isContentEditable
 }
 
 export function ReviewWorkbenchPage(props: {
@@ -172,12 +222,12 @@ export function ReviewWorkbenchPage(props: {
     void refreshWorkbench(props.initialQueueItemId ?? null)
   }, [props.initialQueueItemId, refreshWorkbench])
 
-  const handleSelect = async (queueItemId: string) => {
+  const handleSelect = useCallback(async (queueItemId: string) => {
     setErrorMessage(null)
     selectedQueueItemIdRef.current = queueItemId
     setSelectedQueueItemId(queueItemId)
     setDetail(await archiveApi.getReviewWorkbenchItem(queueItemId))
-  }
+  }, [archiveApi])
 
   const handleSelectPerson = async (person: ReviewInboxPersonSummary) => {
     setErrorMessage(null)
@@ -222,6 +272,92 @@ export function ReviewWorkbenchPage(props: {
     [items, selectedInboxPersonKey, selectedConflictGroupKey]
   )
 
+  const selectedConflictGroup = useMemo(
+    () => selectedConflictGroupKey
+      ? visibleGroups.find((group) => group.groupKey === selectedConflictGroupKey)
+        ?? conflictGroups.find((group) => group.groupKey === selectedConflictGroupKey)
+        ?? null
+      : null,
+    [conflictGroups, selectedConflictGroupKey, visibleGroups]
+  )
+
+  const compareSummary = useMemo(() => {
+    if (!selectedConflictGroup) {
+      return null
+    }
+
+    return {
+      fieldKey: selectedConflictGroup.fieldKey,
+      pendingCount: visibleItems.length,
+      distinctValuesWithCounts: buildDistinctValueCounts(visibleItems, selectedConflictGroup.distinctValues),
+      hasConflict: selectedConflictGroup.hasConflict
+    }
+  }, [selectedConflictGroup, visibleItems])
+
+  const selectedVisibleItemIndex = useMemo(
+    () => visibleItems.findIndex((item) => item.queueItemId === selectedQueueItemId),
+    [selectedQueueItemId, visibleItems]
+  )
+
+  const currentNavigationIndex = visibleItems.length === 0
+    ? 0
+    : selectedVisibleItemIndex >= 0
+      ? selectedVisibleItemIndex + 1
+      : 1
+
+  const navigateToIndex = useCallback(async (index: number) => {
+    const nextItem = visibleItems[index]
+    if (!nextItem || nextItem.queueItemId === selectedQueueItemIdRef.current) {
+      return
+    }
+
+    await handleSelect(nextItem.queueItemId)
+  }, [handleSelect, visibleItems])
+
+  const handleNavigatePrevious = useCallback(async () => {
+    if (selectedVisibleItemIndex <= 0) {
+      return
+    }
+
+    await navigateToIndex(selectedVisibleItemIndex - 1)
+  }, [navigateToIndex, selectedVisibleItemIndex])
+
+  const handleNavigateNext = useCallback(async () => {
+    if (selectedVisibleItemIndex < 0 || selectedVisibleItemIndex >= visibleItems.length - 1) {
+      return
+    }
+
+    await navigateToIndex(selectedVisibleItemIndex + 1)
+  }, [navigateToIndex, selectedVisibleItemIndex, visibleItems.length])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) {
+        return
+      }
+
+      if (isEditableTarget(event.target)) {
+        return
+      }
+
+      if (event.key === 'j' || event.key === 'ArrowDown') {
+        event.preventDefault()
+        void handleNavigateNext()
+        return
+      }
+
+      if (event.key === 'k' || event.key === 'ArrowUp') {
+        event.preventDefault()
+        void handleNavigatePrevious()
+      }
+    }
+
+    globalThis.addEventListener('keydown', handleKeyDown)
+    return () => {
+      globalThis.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [handleNavigateNext, handleNavigatePrevious])
+
   return (
     <section>
       <h1>Review Workbench</h1>
@@ -244,6 +380,24 @@ export function ReviewWorkbenchPage(props: {
         </div>
         <ReviewWorkbenchSidebar items={visibleItems} selectedQueueItemId={selectedQueueItemId} onSelect={(queueItemId) => void handleSelect(queueItemId)} />
         <div>
+          {compareSummary ? (
+            <ReviewConflictCompareCard
+              fieldKey={compareSummary.fieldKey}
+              pendingCount={compareSummary.pendingCount}
+              distinctValuesWithCounts={compareSummary.distinctValuesWithCounts}
+              hasConflict={compareSummary.hasConflict}
+            />
+          ) : null}
+          {visibleItems.length > 0 ? (
+            <ReviewContinuousNavigationBar
+              currentIndex={currentNavigationIndex}
+              totalCount={visibleItems.length}
+              canGoPrevious={selectedVisibleItemIndex > 0}
+              canGoNext={selectedVisibleItemIndex >= 0 && selectedVisibleItemIndex < visibleItems.length - 1}
+              onPrevious={handleNavigatePrevious}
+              onNext={handleNavigateNext}
+            />
+          ) : null}
           {detail ? <ReviewCandidateSummaryCard detail={detail} /> : <p>No workbench item selected.</p>}
           {detail ? <ReviewEvidenceTraceCard trace={detail.trace} /> : null}
         </div>
@@ -258,6 +412,7 @@ export function ReviewWorkbenchPage(props: {
               onReject={() => void runAction(() => archiveApi.rejectReviewItem({ queueItemId: detail.queueItem.id }))}
               onUndo={() => {
                 const journalId = detail.impactPreview.undoImpact.affectedJournalId
+
                 if (!journalId) {
                   return
                 }
