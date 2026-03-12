@@ -139,23 +139,20 @@ npm run test:e2e -- tests/e2e/review-workbench-single-item-flow.spec.ts
 npm run build
 ```
 
-### Phase Six A Preservation Baseline
+### Phase Six A Preservation & Recovery
 
-Phase 6A1 adds the first preservation baseline on top of the existing local archive:
+Phase 6A now covers the full first preservation slice on top of the existing local archive:
 
-- export the current local archive into a directory package with `manifest.json`, `database/archive.sqlite`, and copied `vault/originals` objects
-- restore an export package into a fresh app-data root and run baseline integrity checks against the manifest
-- expose a dedicated `Preservation` page for export / restore actions
-
-Current limitation:
-
-- the export artifact is a directory package, not a compressed or encrypted archive yet
+- export the current local archive into a manifest-backed package with optional password-based encrypted payloads
+- restore a package into a fresh app-data root and run integrity checks against the manifest
+- run repeatable recovery drills with per-check expected / actual diff details
+- expose a dedicated `Preservation` page for export, restore, encrypted package handling, and drill reporting
 
 ### Phase Six A Verification
 
 ```bash
 npm run test:unit -- tests/unit/shared/phaseSixContracts.test.ts
-npm run test:unit -- tests/unit/main/backupManifestService.test.ts tests/unit/main/backupExportService.test.ts tests/unit/main/restoreService.test.ts
+npm run test:unit -- tests/unit/main/backupManifestService.test.ts tests/unit/main/backupExportService.test.ts tests/unit/main/restoreService.test.ts tests/unit/renderer/preservationPage.test.tsx
 npm run test:e2e -- tests/e2e/preservation-export-restore-flow.spec.ts
 npm run build
 ```
@@ -211,19 +208,20 @@ npm run build
 npx playwright test tests/e2e/review-workbench-single-item-flow.spec.ts
 ```
 
-### Phase Six B3 Safe Batch Approval
+### Phase Six B3 Safe Batch Approval & Replay
 
-Phase 6B3 adds the first tightly-scoped batch decision flow on top of the conflict-group workbench:
+Phase 6B3 now completes the first tightly-scoped batch decision and replay flow on top of the conflict-group workbench:
 
 - only the current selected `profile_attribute_candidate` group can show `Batch Approve`
 - the backend hard-gates the flow to `>= 2 pending + no conflict + same group`
 - confirmation creates a dedicated `decision_batch` journal while still expanding to member decision journals
-- the existing undo history entry point now shows batch-friendly summaries and supports `Undo Batch`
+- the existing undo history entry point now shows batch-friendly summaries, supports `Undo Batch`, and exposes replay details
+- review history can be filtered by keyword, and `Search` now returns decision-journal hits beside archive file hits
 
 ### Phase Six B3 Verification
 
 ```bash
-npm run test:unit -- tests/unit/main/reviewQueueService.test.ts tests/unit/shared/phaseSixContracts.test.ts tests/unit/renderer/archiveApi.test.ts tests/unit/renderer/reviewWorkbenchPage.test.tsx tests/unit/renderer/reviewQueuePage.test.tsx tests/unit/renderer/reviewWorkbenchActions.test.tsx
+npm run test:unit -- tests/unit/main/reviewQueueService.test.ts tests/unit/main/searchService.test.ts tests/unit/shared/phaseSixContracts.test.ts tests/unit/renderer/archiveApi.test.ts tests/unit/renderer/reviewWorkbenchPage.test.tsx tests/unit/renderer/reviewQueuePage.test.tsx tests/unit/renderer/reviewWorkbenchActions.test.tsx tests/unit/renderer/searchPage.test.tsx
 npx playwright test tests/e2e/review-workbench-single-item-flow.spec.ts tests/e2e/review-workbench-safe-batch-flow.spec.ts
 npm run build
 ```
@@ -231,6 +229,5 @@ npm run build
 ### Current Operational Note
 
 The local-first runner, shared review queue, formal approved profile read model, and phase-five single-item review workbench are now wired end-to-end.
-Phase 6 now includes the preservation export / restore baseline, the provider-boundary audit baseline, the people-centric review inbox baseline, the conflict-group compare / continuous-navigation slice inside 6B2, and the first safe batch approval slice in 6B3.
-The next validated follow-up inside 6B is the second half of 6B3: journal replay / search on top of the current batch journaling and undo baseline.
+Phase 6 is now complete: it includes encrypted preservation exports, restore verification and repeatable recovery drills, provider-boundary audit logging, the people-centric review inbox, conflict-group compare / continuous navigation, safe batch approval, and searchable / replayable decision history.
 See `docs/plans/2026-03-11-phase-six-preservation-operator-efficiency-design.md` for the agreed roadmap.

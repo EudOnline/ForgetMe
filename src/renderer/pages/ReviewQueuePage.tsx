@@ -10,11 +10,16 @@ export function ReviewQueuePage(props: {
   const archiveApi = useMemo(() => getArchiveApi(), [])
   const [items, setItems] = useState<ReviewQueueItem[]>([])
   const [journal, setJournal] = useState<DecisionJournalEntry[]>([])
+  const [journalQuery, setJournalQuery] = useState('')
+  const [appliedJournalQuery, setAppliedJournalQuery] = useState('')
+  const [selectedJournal, setSelectedJournal] = useState<DecisionJournalEntry | null>(null)
 
   const refresh = useCallback(async () => {
     setItems(await archiveApi.listReviewQueue({ status: 'pending' }))
-    setJournal(await archiveApi.listDecisionJournal())
-  }, [archiveApi])
+    const nextJournal = await archiveApi.listDecisionJournal(appliedJournalQuery ? { query: appliedJournalQuery } : undefined) ?? []
+    setJournal(nextJournal)
+    setSelectedJournal((current) => nextJournal.find((entry) => entry.id === current?.id) ?? current ?? nextJournal[0] ?? null)
+  }, [archiveApi, appliedJournalQuery])
 
   useEffect(() => {
     void refresh()
@@ -45,7 +50,28 @@ export function ReviewQueuePage(props: {
       ) : null}
       <ReviewQueueTable items={items} onApprove={handleApprove} onReject={handleReject} />
       <h2>Undo History</h2>
-      <UndoHistoryTable entries={journal} onUndo={handleUndo} />
+      <form
+        onSubmit={(event) => {
+          event.preventDefault()
+          setAppliedJournalQuery(journalQuery)
+        }}
+      >
+        <label>
+          Search history
+          <input value={journalQuery} onChange={(event) => setJournalQuery(event.target.value)} />
+        </label>
+        <button type="submit">Filter History</button>
+      </form>
+      <UndoHistoryTable entries={journal} onUndo={handleUndo} onReplay={setSelectedJournal} />
+      {selectedJournal ? (
+        <section>
+          <h3>Replay Detail</h3>
+          <p>{selectedJournal.replaySummary ?? selectedJournal.decisionType}</p>
+          <p>{selectedJournal.actor}</p>
+          <pre>{JSON.stringify(selectedJournal.operationPayload, null, 2)}</pre>
+          <pre>{JSON.stringify(selectedJournal.undoPayload, null, 2)}</pre>
+        </section>
+      ) : null}
     </section>
   )
 }

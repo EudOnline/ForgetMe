@@ -2,6 +2,7 @@ import path from 'node:path'
 import type { AppPaths } from './appPaths'
 import { openDatabase, runMigrations } from './db'
 import { buildEnrichedSearchRow, loadApprovedEnrichmentIndex } from './enrichedSearchService'
+import { searchDecisionJournal as searchDecisionJournalEntries } from './journalService'
 
 function databasePath(appPaths: AppPaths) {
   return path.join(appPaths.sqliteDir, 'archive.sqlite')
@@ -88,4 +89,24 @@ export async function searchArchive(input: {
     .filter((row) => (input.duplicateClass ? row.duplicateClass === input.duplicateClass : true))
     .filter((row) => (input.personName ? row.matchedPeople.some((name) => name.includes(input.personName!)) : true))
     .map(({ haystack, ...row }) => row)
+}
+
+export async function searchDecisionJournal(input: {
+  appPaths: AppPaths
+  query?: string
+  decisionType?: string
+  targetType?: string
+}) {
+  const db = openDatabase(databasePath(input.appPaths))
+  runMigrations(db)
+
+  try {
+    return searchDecisionJournalEntries(db, {
+      query: input.query,
+      decisionType: input.decisionType,
+      targetType: input.targetType
+    })
+  } finally {
+    db.close()
+  }
 }

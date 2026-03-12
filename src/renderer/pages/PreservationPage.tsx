@@ -7,10 +7,13 @@ export function PreservationPage() {
   const [destinationRoot, setDestinationRoot] = useState('')
   const [exportRoot, setExportRoot] = useState('')
   const [targetRoot, setTargetRoot] = useState('')
+  const [exportPassword, setExportPassword] = useState('')
+  const [restorePassword, setRestorePassword] = useState('')
   const [isWorking, setIsWorking] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
   const [lastExport, setLastExport] = useState<BackupExportResult | null>(null)
   const [lastRestore, setLastRestore] = useState<RestoreRunResult | null>(null)
+  const [lastDrill, setLastDrill] = useState<RestoreRunResult | null>(null)
 
   const handlePickExportDestination = async () => {
     const selected = await archiveApi.selectBackupExportDestination()
@@ -45,7 +48,10 @@ export function PreservationPage() {
 
     setDestinationRoot(nextDestinationRoot)
     try {
-      const result = await archiveApi.createBackupExport({ destinationRoot: nextDestinationRoot })
+      const result = await archiveApi.createBackupExport({
+        destinationRoot: nextDestinationRoot,
+        encryptionPassword: exportPassword || undefined
+      })
       if (result) {
         setLastExport(result)
         setExportRoot(result.exportRoot)
@@ -73,13 +79,48 @@ export function PreservationPage() {
     setExportRoot(nextExportRoot)
     setTargetRoot(nextTargetRoot)
     try {
-      const result = await archiveApi.restoreBackupExport({ exportRoot: nextExportRoot, targetRoot: nextTargetRoot })
+      const result = await archiveApi.restoreBackupExport({
+        exportRoot: nextExportRoot,
+        targetRoot: nextTargetRoot,
+        encryptionPassword: restorePassword || undefined
+      })
       if (result) {
         setLastRestore(result)
         setStatusMessage(result.checks.every((check) => check.status === 'passed') ? 'Restore checks passed' : 'Restore checks failed')
       }
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : 'Restore failed')
+    }
+
+    setIsWorking(false)
+  }
+
+  const handleRecoveryDrill = async () => {
+    setIsWorking(true)
+    setStatusMessage('')
+
+    const nextExportRoot = exportRoot || lastExport?.exportRoot || await archiveApi.selectBackupExportSource()
+    const nextTargetRoot = targetRoot || await archiveApi.selectRestoreTargetDirectory()
+
+    if (!nextExportRoot || !nextTargetRoot) {
+      setIsWorking(false)
+      return
+    }
+
+    setExportRoot(nextExportRoot)
+    setTargetRoot(nextTargetRoot)
+    try {
+      const result = await archiveApi.runRecoveryDrill({
+        exportRoot: nextExportRoot,
+        targetRoot: nextTargetRoot,
+        encryptionPassword: restorePassword || undefined
+      })
+      if (result) {
+        setLastDrill(result)
+        setStatusMessage(result.summary.failedCount === 0 ? 'Recovery drill passed' : 'Recovery drill failed')
+      }
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : 'Recovery drill failed')
     }
 
     setIsWorking(false)
@@ -105,14 +146,42 @@ export function PreservationPage() {
         <div>{targetRoot || 'No restore target selected.'}</div>
       </div>
 
+      <label>
+        Export password
+        <input type="password" value={exportPassword} onChange={(event) => setExportPassword(event.target.value)} />
+      </label>
+
+      <label>
+        Restore password
+        <input type="password" value={restorePassword} onChange={(event) => setRestorePassword(event.target.value)} />
+      </label>
+
       <div>
         <button type="button" onClick={() => void handleExport()} disabled={isWorking}>Export Archive</button>
         <button type="button" onClick={() => void handleRestore()} disabled={isWorking}>Restore Archive</button>
+        <button type="button" onClick={() => void handleRecoveryDrill()} disabled={isWorking}>Run Recovery Drill</button>
       </div>
 
       {statusMessage ? <p>{statusMessage}</p> : null}
       {lastExport ? <p>Last export: {lastExport.exportRoot}</p> : null}
       {lastRestore ? <p>Last restore target: {lastRestore.targetRoot}</p> : null}
+      {lastDrill ? <p>Last recovery drill target: {lastDrill.targetRoot}</p> : null}
+      {lastDrill ? (
+        <div>
+          <h3>Recovery Drill Report</h3>
+          <p>{lastDrill.summary.passedCount} passed · {lastDrill.summary.failedCount} failed</p>
+          <ul>
+            {lastDrill.checks.map((check) => (
+              <li key={check.name}>
+                <strong>{check.name}</strong>
+                <div>{check.detail}</div>
+                {check.expected ? <pre>{JSON.stringify(check.expected, null, 2)}</pre> : null}
+                {check.actual ? <pre>{JSON.stringify(check.actual, null, 2)}</pre> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </section>
   )
 }

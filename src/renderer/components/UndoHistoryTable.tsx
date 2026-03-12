@@ -9,6 +9,10 @@ function readPositiveNumber(value: unknown) {
 }
 
 function formatDecision(entry: DecisionJournalEntry) {
+  if (entry.decisionLabel) {
+    return entry.decisionLabel
+  }
+
   if (entry.targetType === 'decision_batch' && entry.decisionType === 'approve_safe_review_group') {
     return 'Safe batch approve'
   }
@@ -17,6 +21,10 @@ function formatDecision(entry: DecisionJournalEntry) {
 }
 
 function formatTarget(entry: DecisionJournalEntry) {
+  if (entry.targetLabel) {
+    return entry.targetLabel
+  }
+
   if (entry.targetType !== 'decision_batch') {
     return entry.targetType
   }
@@ -44,6 +52,7 @@ function formatUndoLabel(entry: DecisionJournalEntry) {
 export function UndoHistoryTable(props: {
   entries: DecisionJournalEntry[]
   onUndo?: (journalId: string) => void
+  onReplay?: (entry: DecisionJournalEntry) => void
 }) {
   if (props.entries.length === 0) {
     return <p>No review history yet.</p>
@@ -55,6 +64,7 @@ export function UndoHistoryTable(props: {
         <tr>
           <th>Decision</th>
           <th>Target</th>
+          <th>Replay</th>
           <th>Undo</th>
         </tr>
       </thead>
@@ -63,6 +73,9 @@ export function UndoHistoryTable(props: {
           <tr key={entry.id}>
             <td>{formatDecision(entry)}</td>
             <td>{formatTarget(entry)}</td>
+            <td>
+              <button type="button" onClick={() => props.onReplay?.(entry)}>Replay</button>
+            </td>
             <td>
               {entry.undoneAt ? 'Undone' : (
                 <button type="button" onClick={() => props.onUndo?.(entry.id)}>{formatUndoLabel(entry)}</button>

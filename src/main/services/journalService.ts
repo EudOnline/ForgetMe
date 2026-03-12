@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import type { DecisionJournalEntry, DecisionJournalSearchResult } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
 
 export function appendDecisionJournal(db: ArchiveDatabase, input: {
@@ -37,7 +38,67 @@ export function markDecisionUndone(db: ArchiveDatabase, input: { journalId: stri
   return { journalId: input.journalId, undoneAt }
 }
 
-export function listDecisionJournal(db: ArchiveDatabase) {
+function readString(value: unknown) {
+  return typeof value === 'string' && value.length > 0 ? value : null
+}
+
+function readPositiveNumber(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
+}
+
+function formatDecisionLabel(entry: Pick<DecisionJournalEntry, 'decisionType' | 'targetType'>) {
+  if (entry.targetType === 'decision_batch' && entry.decisionType === 'approve_safe_review_group') {
+    return 'Safe batch approve'
+  }
+
+  return entry.decisionType
+}
+
+function formatTargetLabel(entry: Pick<DecisionJournalEntry, 'targetType' | 'operationPayload'>) {
+  if (entry.targetType !== 'decision_batch') {
+    return entry.targetType
+  }
+
+  const personName = readString(entry.operationPayload.canonicalPersonName)
+  const fieldKey = readString(entry.operationPayload.fieldKey)
+  const itemCount = readPositiveNumber(entry.operationPayload.itemCount)
+  const summaryParts = [
+    personName,
+    fieldKey,
+    itemCount ? `${itemCount} ${itemCount === 1 ? 'item' : 'items'}` : null
+  ].filter((value): value is string => Boolean(value))
+
+  if (summaryParts.length > 0) {
+    return summaryParts.join(' · ')
+  }
+
+  return 'Decision batch'
+}
+
+function buildReplaySummary(entry: Pick<DecisionJournalEntry, 'decisionType' | 'targetType' | 'operationPayload'>) {
+  return `${formatDecisionLabel(entry)} · ${formatTargetLabel(entry)}`
+}
+
+function buildSearchHaystack(entry: DecisionJournalEntry) {
+  return [
+    entry.id,
+    entry.decisionType,
+    entry.targetType,
+    entry.targetId,
+    entry.actor,
+    entry.decisionLabel,
+    entry.targetLabel,
+    entry.replaySummary,
+    JSON.stringify(entry.operationPayload),
+    JSON.stringify(entry.undoPayload)
+  ].join(' ').toLowerCase()
+}
+
+export function listDecisionJournal(db: ArchiveDatabase, input?: {
+  query?: string
+  decisionType?: string
+  targetType?: string
+}) {
   const rows = db.prepare(
     `select
       id,
@@ -65,16 +126,58 @@ export function listDecisionJournal(db: ArchiveDatabase) {
     undoneBy: string | null
   }>
 
-  return rows.map((row) => ({
-    id: row.id,
-    decisionType: row.decisionType,
-    targetType: row.targetType,
-    targetId: row.targetId,
-    operationPayload: JSON.parse(row.operationPayloadJson),
-    undoPayload: JSON.parse(row.undoPayloadJson),
-    actor: row.actor,
-    createdAt: row.createdAt,
-    undoneAt: row.undoneAt,
-    undoneBy: row.undoneBy
+  const entries = rows.map((row) => {
+    const baseEntry: DecisionJournalEntry = {
+      id: row.id,
+      decisionType: row.decisionType,
+      targetType: row.targetType,
+      targetId: row.targetId,
+      operationPayload: JSON.parse(row.operationPayloadJson),
+      undoPayload: JSON.parse(row.undoPayloadJson),
+      actor: row.actor,
+      createdAt: row.createdAt,
+      undoneAt: row.undoneAt,
+      undoneBy: row.undoneBy
+    }
+    const decisionLabel = formatDecisionLabel(baseEntry)
+    const targetLabel = formatTargetLabel(baseEntry)
+
+    return {
+      ...baseEntry,
+      decisionLabel,
+      targetLabel,
+      replaySummary: `${decisionLabel} · ${targetLabel}`
+    }
+  })
+
+  return entries.filter((entry) => {
+    if (input?.decisionType && entry.decisionType !== input.decisionType) {
+      return false
+    }
+    if (input?.targetType && entry.targetType !== input.targetType) {
+      return false
+    }
+    if (input?.query && !buildSearchHaystack(entry).includes(input.query.toLowerCase())) {
+      return false
+    }
+    return true
+  })
+}
+
+export function searchDecisionJournal(db: ArchiveDatabase, input?: {
+  query?: string
+  decisionType?: string
+  targetType?: string
+}) {
+  return listDecisionJournal(db, input).map((entry): DecisionJournalSearchResult => ({
+    journalId: entry.id,
+    decisionType: entry.decisionType,
+    targetType: entry.targetType,
+    decisionLabel: entry.decisionLabel ?? formatDecisionLabel(entry),
+    targetLabel: entry.targetLabel ?? formatTargetLabel(entry),
+    replaySummary: entry.replaySummary ?? buildReplaySummary(entry),
+    actor: entry.actor,
+    createdAt: entry.createdAt,
+    undoneAt: entry.undoneAt
   }))
 }
