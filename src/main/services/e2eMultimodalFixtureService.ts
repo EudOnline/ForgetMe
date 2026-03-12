@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import type { ArchiveDatabase } from './db'
 import { queueStructuredFieldCandidate } from './enrichmentReviewService'
+import { queueProfileAttributeCandidate } from './profileProjectionService'
 import {
   buildProviderBoundaryRequest,
   persistProviderEgressRequest,
@@ -27,6 +28,26 @@ function loadFixtureFile(db: ArchiveDatabase, fileId: string) {
     extension: string | null
     mimeType: string | null
   } | undefined
+}
+
+function loadLinkedCanonicalPersonId(db: ArchiveDatabase, fileId: string) {
+  const row = db.prepare(
+    `select pm.canonical_person_id as canonicalPersonId
+     from relations r
+     join person_memberships pm
+       on pm.anchor_person_id = r.source_id
+      and pm.status = 'active'
+     join canonical_people cp
+       on cp.id = pm.canonical_person_id
+      and cp.status = 'approved'
+     where r.source_type = 'person'
+       and r.target_type = 'file'
+       and r.target_id = ?
+     order by pm.canonical_person_id asc
+     limit 1`
+  ).get(fileId) as { canonicalPersonId: string } | undefined
+
+  return row?.canonicalPersonId ?? null
 }
 
 export function seedE2EMultimodalReviewFixture(db: ArchiveDatabase, input: { fileId: string }) {
@@ -188,4 +209,86 @@ export function seedE2ERunnerProfileFixture(db: ArchiveDatabase, input: { fileId
   )
 
   return { id: jobId }
+}
+
+export function seedE2ESafeBatchFixture(db: ArchiveDatabase, input: { fileId: string }) {
+  const existingCount = db.prepare(
+    `select count(*) as count
+     from profile_attribute_candidates
+     where source_file_id = ?
+       and attribute_key = ?
+       and reason_code = ?`
+  ).get(input.fileId, 'school_name', 'e2e_safe_batch') as { count: number }
+
+  if (existingCount.count >= 2) {
+    return { count: existingCount.count }
+  }
+
+  const canonicalPersonId = loadLinkedCanonicalPersonId(db, input.fileId)
+  if (!canonicalPersonId) {
+    throw new Error(`Safe batch fixture could not resolve canonical person for file: ${input.fileId}`)
+  }
+
+  const createdAt = new Date().toISOString()
+  const jobId = crypto.randomUUID()
+
+  db.prepare(
+    `insert into enrichment_jobs (
+      id, file_id, enhancer_type, provider, model, status, attempt_count,
+      input_hash, started_at, finished_at, error_message, usage_json, created_at, updated_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    jobId,
+    input.fileId,
+    'profile_projection',
+    'fixture',
+    'fixture-safe-batch',
+    'completed',
+    1,
+    'e2e-safe-batch',
+    createdAt,
+    createdAt,
+    null,
+    JSON.stringify({ fixture: true }),
+    createdAt,
+    createdAt
+  )
+
+  for (const suffix of ['1', '2']) {
+    const evidenceId = crypto.randomUUID()
+    db.prepare(
+      `insert into enriched_evidence (
+        id, file_id, job_id, evidence_type, payload_json, risk_level, status, created_at, updated_at
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      evidenceId,
+      input.fileId,
+      jobId,
+      'approved_structured_field',
+      JSON.stringify({ fieldKey: 'school_name', value: '北京大学', fixture: true, ordinal: suffix }),
+      'low',
+      'approved',
+      createdAt,
+      createdAt
+    )
+
+    queueProfileAttributeCandidate(db, {
+      proposedCanonicalPersonId: canonicalPersonId,
+      sourceFileId: input.fileId,
+      sourceEvidenceId: evidenceId,
+      sourceCandidateId: null,
+      attributeGroup: 'education',
+      attributeKey: 'school_name',
+      valueJson: JSON.stringify({ value: '北京大学' }),
+      proposalBasis: {
+        matchedRule: 'e2e_safe_batch',
+        fixture: true,
+        ordinal: suffix
+      },
+      reasonCode: 'e2e_safe_batch',
+      confidence: 0.99
+    })
+  }
+
+  return { count: 2 }
 }

@@ -85,6 +85,10 @@ export const queueItemIdSchema = z.object({
   queueItemId: z.string().min(1)
 })
 
+export const approveSafeReviewGroupInputSchema = z.object({
+  groupKey: z.string().min(1)
+})
+
 const reviewWorkbenchItemTypeSchema = z.enum(['structured_field_candidate', 'profile_attribute_candidate'])
 const reviewWorkbenchStatusSchema = z.enum(['pending', 'approved', 'rejected', 'undone'])
 

@@ -82,76 +82,81 @@ function displayValueFromValueJson(valueJson: string) {
   return valueJson
 }
 
+export function approveProfileAttributeCandidateInTransaction(db: ArchiveDatabase, input: {
+  queueItemId: string
+  actor: string
+}) {
+  const queueItem = getQueueItem(db, input.queueItemId)
+  if (queueItem.itemType !== 'profile_attribute_candidate') {
+    throw new Error(`Unsupported review item type: ${queueItem.itemType}`)
+  }
+
+  const candidate = getProfileCandidate(db, queueItem.candidateId)
+  if (!candidate.proposedCanonicalPersonId) {
+    throw new Error(`Profile attribute candidate is missing canonical person: ${candidate.id}`)
+  }
+
+  const reviewedAt = new Date().toISOString()
+  const attributeId = crypto.randomUUID()
+  db.prepare(
+    `insert into person_profile_attributes (
+      id, canonical_person_id, attribute_group, attribute_key, value_json, display_value,
+      source_file_id, source_evidence_id, source_candidate_id, provenance_json,
+      confidence, status, approved_journal_id, created_at, updated_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    attributeId,
+    candidate.proposedCanonicalPersonId,
+    candidate.attributeGroup,
+    candidate.attributeKey,
+    candidate.valueJson,
+    displayValueFromValueJson(candidate.valueJson),
+    candidate.sourceFileId,
+    candidate.sourceEvidenceId,
+    candidate.sourceCandidateId,
+    candidate.proposalBasisJson,
+    candidate.confidence,
+    'active',
+    null,
+    reviewedAt,
+    reviewedAt
+  )
+
+  db.prepare('update profile_attribute_candidates set status = ?, reviewed_at = ? where id = ?').run('approved', reviewedAt, candidate.id)
+  db.prepare('update review_queue set status = ?, reviewed_at = ? where id = ?').run('approved', reviewedAt, queueItem.id)
+
+  const journal = appendDecisionJournal(db, {
+    decisionType: 'approve_profile_attribute_candidate',
+    targetType: 'profile_attribute_candidate',
+    targetId: candidate.id,
+    operationPayload: {
+      queueItemId: queueItem.id,
+      attributeId
+    },
+    undoPayload: {
+      queueItemId: queueItem.id,
+      candidateId: candidate.id,
+      attributeId
+    },
+    actor: input.actor
+  })
+
+  db.prepare('update profile_attribute_candidates set approved_journal_id = ? where id = ?').run(journal.journalId, candidate.id)
+  db.prepare('update person_profile_attributes set approved_journal_id = ? where id = ?').run(journal.journalId, attributeId)
+
+  return {
+    status: 'approved' as const,
+    journalId: journal.journalId,
+    queueItemId: queueItem.id,
+    candidateId: candidate.id
+  }
+}
+
 export function approveProfileAttributeCandidate(db: ArchiveDatabase, input: {
   queueItemId: string
   actor: string
 }) {
-  return inTransaction(db, () => {
-    const queueItem = getQueueItem(db, input.queueItemId)
-    if (queueItem.itemType !== 'profile_attribute_candidate') {
-      throw new Error(`Unsupported review item type: ${queueItem.itemType}`)
-    }
-
-    const candidate = getProfileCandidate(db, queueItem.candidateId)
-    if (!candidate.proposedCanonicalPersonId) {
-      throw new Error(`Profile attribute candidate is missing canonical person: ${candidate.id}`)
-    }
-
-    const reviewedAt = new Date().toISOString()
-    const attributeId = crypto.randomUUID()
-    db.prepare(
-      `insert into person_profile_attributes (
-        id, canonical_person_id, attribute_group, attribute_key, value_json, display_value,
-        source_file_id, source_evidence_id, source_candidate_id, provenance_json,
-        confidence, status, approved_journal_id, created_at, updated_at
-      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      attributeId,
-      candidate.proposedCanonicalPersonId,
-      candidate.attributeGroup,
-      candidate.attributeKey,
-      candidate.valueJson,
-      displayValueFromValueJson(candidate.valueJson),
-      candidate.sourceFileId,
-      candidate.sourceEvidenceId,
-      candidate.sourceCandidateId,
-      candidate.proposalBasisJson,
-      candidate.confidence,
-      'active',
-      null,
-      reviewedAt,
-      reviewedAt
-    )
-
-    db.prepare('update profile_attribute_candidates set status = ?, reviewed_at = ? where id = ?').run('approved', reviewedAt, candidate.id)
-    db.prepare('update review_queue set status = ?, reviewed_at = ? where id = ?').run('approved', reviewedAt, queueItem.id)
-
-    const journal = appendDecisionJournal(db, {
-      decisionType: 'approve_profile_attribute_candidate',
-      targetType: 'profile_attribute_candidate',
-      targetId: candidate.id,
-      operationPayload: {
-        queueItemId: queueItem.id,
-        attributeId
-      },
-      undoPayload: {
-        queueItemId: queueItem.id,
-        candidateId: candidate.id,
-        attributeId
-      },
-      actor: input.actor
-    })
-
-    db.prepare('update profile_attribute_candidates set approved_journal_id = ? where id = ?').run(journal.journalId, candidate.id)
-    db.prepare('update person_profile_attributes set approved_journal_id = ? where id = ?').run(journal.journalId, attributeId)
-
-    return {
-      status: 'approved' as const,
-      journalId: journal.journalId,
-      queueItemId: queueItem.id,
-      candidateId: candidate.id
-    }
-  })
+  return inTransaction(db, () => approveProfileAttributeCandidateInTransaction(db, input))
 }
 
 export function rejectProfileAttributeCandidate(db: ArchiveDatabase, input: {
@@ -199,53 +204,58 @@ export function rejectProfileAttributeCandidate(db: ArchiveDatabase, input: {
   })
 }
 
+export function undoProfileAttributeDecisionInTransaction(db: ArchiveDatabase, input: {
+  journalId: string
+  actor: string
+}) {
+  const journal = db.prepare(
+    `select id, target_type as targetType, undo_payload_json as undoPayloadJson, undone_at as undoneAt
+     from decision_journal where id = ?`
+  ).get(input.journalId) as {
+    id: string
+    targetType: string
+    undoPayloadJson: string
+    undoneAt: string | null
+  } | undefined
+
+  if (!journal) {
+    throw new Error(`Decision journal not found: ${input.journalId}`)
+  }
+  if (journal.undoneAt) {
+    throw new Error(`Decision already undone: ${input.journalId}`)
+  }
+  if (journal.targetType !== 'profile_attribute_candidate') {
+    throw new Error(`Unsupported journal target type: ${journal.targetType}`)
+  }
+
+  const undoPayload = JSON.parse(journal.undoPayloadJson) as {
+    queueItemId?: string
+    candidateId?: string
+    attributeId?: string
+  }
+  const updatedAt = new Date().toISOString()
+
+  if (undoPayload.attributeId) {
+    db.prepare('update person_profile_attributes set status = ?, updated_at = ? where id = ?').run('undone', updatedAt, undoPayload.attributeId)
+  }
+  if (undoPayload.candidateId) {
+    db.prepare('update profile_attribute_candidates set status = ? where id = ?').run('undone', undoPayload.candidateId)
+  }
+  if (undoPayload.queueItemId) {
+    db.prepare('update review_queue set status = ?, reviewed_at = ? where id = ?').run('undone', updatedAt, undoPayload.queueItemId)
+  }
+
+  markDecisionUndone(db, { journalId: input.journalId, actor: input.actor })
+
+  return {
+    status: 'undone' as const,
+    journalId: input.journalId
+  }
+}
+
 export function undoProfileAttributeDecision(db: ArchiveDatabase, input: {
   journalId: string
   actor: string
 }) {
-  return inTransaction(db, () => {
-    const journal = db.prepare(
-      `select id, target_type as targetType, undo_payload_json as undoPayloadJson, undone_at as undoneAt
-       from decision_journal where id = ?`
-    ).get(input.journalId) as {
-      id: string
-      targetType: string
-      undoPayloadJson: string
-      undoneAt: string | null
-    } | undefined
-
-    if (!journal) {
-      throw new Error(`Decision journal not found: ${input.journalId}`)
-    }
-    if (journal.undoneAt) {
-      throw new Error(`Decision already undone: ${input.journalId}`)
-    }
-    if (journal.targetType !== 'profile_attribute_candidate') {
-      throw new Error(`Unsupported journal target type: ${journal.targetType}`)
-    }
-
-    const undoPayload = JSON.parse(journal.undoPayloadJson) as {
-      queueItemId?: string
-      candidateId?: string
-      attributeId?: string
-    }
-    const updatedAt = new Date().toISOString()
-
-    if (undoPayload.attributeId) {
-      db.prepare('update person_profile_attributes set status = ?, updated_at = ? where id = ?').run('undone', updatedAt, undoPayload.attributeId)
-    }
-    if (undoPayload.candidateId) {
-      db.prepare('update profile_attribute_candidates set status = ? where id = ?').run('undone', undoPayload.candidateId)
-    }
-    if (undoPayload.queueItemId) {
-      db.prepare('update review_queue set status = ?, reviewed_at = ? where id = ?').run('undone', updatedAt, undoPayload.queueItemId)
-    }
-
-    markDecisionUndone(db, { journalId: input.journalId, actor: input.actor })
-
-    return {
-      status: 'undone' as const,
-      journalId: input.journalId
-    }
-  })
+  return inTransaction(db, () => undoProfileAttributeDecisionInTransaction(db, input))
 }

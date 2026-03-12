@@ -13,6 +13,18 @@ describe('archiveApi workbench methods', () => {
 
     await expect(archiveApi.listReviewWorkbenchItems({ itemType: 'structured_field_candidate' })).resolves.toEqual([])
     await expect(archiveApi.getReviewWorkbenchItem('rq-1')).resolves.toBeNull()
+    await expect(archiveApi.approveSafeReviewGroup({ groupKey: 'cp-1::profile_attribute_candidate::school_name' })).resolves.toEqual({
+      status: 'approved',
+      batchId: '',
+      journalId: '',
+      groupKey: 'cp-1::profile_attribute_candidate::school_name',
+      itemCount: 0,
+      canonicalPersonId: null,
+      canonicalPersonName: null,
+      itemType: 'profile_attribute_candidate',
+      fieldKey: null,
+      queueItemIds: []
+    })
   })
 })
 

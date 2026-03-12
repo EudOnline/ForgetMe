@@ -1,9 +1,9 @@
 import path from 'node:path'
 import { ipcMain } from 'electron'
-import { journalIdSchema, queueItemIdSchema, rejectReviewItemInputSchema, reviewQueueListInputSchema, reviewWorkbenchFilterSchema, reviewWorkbenchItemSchema } from '../../shared/ipcSchemas'
+import { approveSafeReviewGroupInputSchema, journalIdSchema, queueItemIdSchema, rejectReviewItemInputSchema, reviewQueueListInputSchema, reviewWorkbenchFilterSchema, reviewWorkbenchItemSchema } from '../../shared/ipcSchemas'
 import type { AppPaths } from '../services/appPaths'
 import { openDatabase, runMigrations } from '../services/db'
-import { approveReviewItem, listDecisionJournal, listReviewQueue, rejectReviewItem, undoDecision } from '../services/reviewQueueService'
+import { approveReviewItem, approveSafeReviewGroup, listDecisionJournal, listReviewQueue, rejectReviewItem, undoDecision } from '../services/reviewQueueService'
 import { getReviewWorkbenchItem, listReviewConflictGroups, listReviewInboxPeople, listReviewWorkbenchItems } from '../services/reviewWorkbenchReadService'
 
 function databasePath(appPaths: AppPaths) {
@@ -18,6 +18,7 @@ export function registerReviewIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:listReviewWorkbenchItems')
   ipcMain.removeHandler('archive:getReviewWorkbenchItem')
   ipcMain.removeHandler('archive:approveReviewItem')
+  ipcMain.removeHandler('archive:approveSafeReviewGroup')
   ipcMain.removeHandler('archive:rejectReviewItem')
   ipcMain.removeHandler('archive:undoDecision')
 
@@ -84,6 +85,15 @@ export function registerReviewIpc(appPaths: AppPaths) {
     const db = openDatabase(databasePath(appPaths))
     runMigrations(db)
     const result = approveReviewItem(db, { queueItemId, actor: 'local-user' })
+    db.close()
+    return result
+  })
+
+  ipcMain.handle('archive:approveSafeReviewGroup', async (_event, payload) => {
+    const input = approveSafeReviewGroupInputSchema.parse(payload)
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    const result = approveSafeReviewGroup(db, { ...input, actor: 'local-user' })
     db.close()
     return result
   })

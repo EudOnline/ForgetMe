@@ -29,6 +29,7 @@ const archiveApi: ArchiveApi = {
   listReviewWorkbenchItems: (input) => ipcRenderer.invoke('archive:listReviewWorkbenchItems', input),
   getReviewWorkbenchItem: (queueItemId) => ipcRenderer.invoke('archive:getReviewWorkbenchItem', { queueItemId }),
   approveReviewItem: (queueItemId) => ipcRenderer.invoke('archive:approveReviewItem', { queueItemId }),
+  approveSafeReviewGroup: (input) => ipcRenderer.invoke('archive:approveSafeReviewGroup', input),
   rejectReviewItem: (input) => ipcRenderer.invoke('archive:rejectReviewItem', input),
   undoDecision: (journalId) => ipcRenderer.invoke('archive:undoDecision', { journalId }),
   setRelationshipLabel: (input) => ipcRenderer.invoke('archive:setRelationshipLabel', input),

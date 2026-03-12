@@ -237,6 +237,19 @@ export type DecisionJournalEntry = {
   undoneBy: string | null
 }
 
+export type SafeReviewGroupApprovalResult = {
+  status: 'approved'
+  batchId: string
+  journalId: string
+  groupKey: string
+  itemCount: number
+  canonicalPersonId: string | null
+  canonicalPersonName: string | null
+  itemType: 'profile_attribute_candidate'
+  fieldKey: string | null
+  queueItemIds: string[]
+}
+
 export type ReviewWorkbenchListItem = {
   queueItemId: string
   itemType: 'structured_field_candidate' | 'profile_attribute_candidate'
@@ -415,6 +428,7 @@ export interface ArchiveApi {
   listReviewWorkbenchItems: (input?: { itemType?: 'structured_field_candidate' | 'profile_attribute_candidate'; status?: 'pending' | 'approved' | 'rejected' | 'undone'; canonicalPersonId?: string; fieldKey?: string; hasConflict?: boolean }) => Promise<ReviewWorkbenchListItem[]>
   getReviewWorkbenchItem: (queueItemId: string) => Promise<ReviewWorkbenchDetail | null>
   approveReviewItem: (queueItemId: string) => Promise<{ status: 'approved'; journalId: string; queueItemId: string; candidateId: string }>
+  approveSafeReviewGroup: (input: { groupKey: string }) => Promise<SafeReviewGroupApprovalResult>
   rejectReviewItem: (input: { queueItemId: string; note?: string }) => Promise<{ status: 'rejected'; journalId: string; queueItemId: string; candidateId: string }>
   undoDecision: (journalId: string) => Promise<{ status: 'undone'; journalId: string }>
   setRelationshipLabel: (input: { fromPersonId: string; toPersonId: string; label: string }) => Promise<{ id: string; status: 'approved' }>

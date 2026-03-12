@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { backupExportInputSchema, restoreBackupInputSchema } from '../../../src/shared/ipcSchemas'
+import { approveSafeReviewGroupInputSchema, backupExportInputSchema, restoreBackupInputSchema } from '../../../src/shared/ipcSchemas'
 
 describe('phase-six preservation schemas', () => {
   it('accepts backup export input', () => {
@@ -8,5 +8,9 @@ describe('phase-six preservation schemas', () => {
 
   it('accepts restore input', () => {
     expect(restoreBackupInputSchema.parse({ exportRoot: '/tmp/export-1', targetRoot: '/tmp/restore-root' })).toBeTruthy()
+  })
+
+  it('accepts safe review group batch input', () => {
+    expect(approveSafeReviewGroupInputSchema.parse({ groupKey: 'cp-1::profile_attribute_candidate::school_name' })).toBeTruthy()
   })
 })

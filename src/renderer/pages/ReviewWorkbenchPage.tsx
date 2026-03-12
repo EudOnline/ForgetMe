@@ -117,6 +117,7 @@ export function ReviewWorkbenchPage(props: {
   const [selectedQueueItemId, setSelectedQueueItemId] = useState<string | null>(props.initialQueueItemId ?? null)
   const [detail, setDetail] = useState<ReviewWorkbenchDetail | null>(null)
   const [isBusy, setIsBusy] = useState(false)
+  const [isBatchConfirming, setIsBatchConfirming] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const selectedQueueItemIdRef = useRef<string | null>(props.initialQueueItemId ?? null)
   const selectedInboxPersonKeyRef = useRef<string | null>(null)
@@ -256,6 +257,24 @@ export function ReviewWorkbenchPage(props: {
     }
   }
 
+  const runBatchApprove = async () => {
+    if (!batchApprovalSummary) {
+      return
+    }
+
+    setIsBusy(true)
+    setErrorMessage(null)
+    try {
+      await archiveApi.approveSafeReviewGroup({ groupKey: batchApprovalSummary.groupKey })
+      setIsBatchConfirming(false)
+      await refreshWorkbench(undefined, selectedInboxPersonKeyRef.current, batchApprovalSummary.groupKey)
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unknown batch approval error')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
   const selectedItemIsStale = Boolean(
     detail
       && detail.queueItem.status !== 'pending'
@@ -293,6 +312,31 @@ export function ReviewWorkbenchPage(props: {
       hasConflict: selectedConflictGroup.hasConflict
     }
   }, [selectedConflictGroup, visibleItems])
+
+  const batchApprovalSummary = useMemo(() => {
+    if (!selectedConflictGroup) {
+      return null
+    }
+    if (selectedConflictGroup.itemType !== 'profile_attribute_candidate') {
+      return null
+    }
+    if (selectedConflictGroup.hasConflict || visibleItems.length < 2) {
+      return null
+    }
+
+    return {
+      groupKey: selectedConflictGroup.groupKey,
+      fieldKey: selectedConflictGroup.fieldKey,
+      canonicalPersonName: selectedConflictGroup.canonicalPersonName,
+      itemCount: visibleItems.length
+    }
+  }, [selectedConflictGroup, visibleItems])
+
+  useEffect(() => {
+    if (!batchApprovalSummary) {
+      setIsBatchConfirming(false)
+    }
+  }, [batchApprovalSummary])
 
   const selectedVisibleItemIndex = useMemo(
     () => visibleItems.findIndex((item) => item.queueItemId === selectedQueueItemId),
@@ -380,6 +424,34 @@ export function ReviewWorkbenchPage(props: {
         </div>
         <ReviewWorkbenchSidebar items={visibleItems} selectedQueueItemId={selectedQueueItemId} onSelect={(queueItemId) => void handleSelect(queueItemId)} />
         <div>
+          {batchApprovalSummary ? (
+            <section>
+              <h2>Safe Batch Approval</h2>
+              <dl>
+                <dt>Person</dt>
+                <dd>{batchApprovalSummary.canonicalPersonName}</dd>
+                <dt>Field</dt>
+                <dd>{batchApprovalSummary.fieldKey ?? 'unknown'}</dd>
+                <dt>Items</dt>
+                <dd>{batchApprovalSummary.itemCount} items</dd>
+              </dl>
+              {isBatchConfirming ? (
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <span>Creates a batch journal and remains undoable.</span>
+                  <button type="button" onClick={() => void runBatchApprove()} disabled={isBusy}>
+                    Confirm Batch Approve
+                  </button>
+                  <button type="button" onClick={() => setIsBatchConfirming(false)} disabled={isBusy}>
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => setIsBatchConfirming(true)} disabled={isBusy}>
+                  Batch Approve
+                </button>
+              )}
+            </section>
+          ) : null}
           {compareSummary ? (
             <ReviewConflictCompareCard
               fieldKey={compareSummary.fieldKey}

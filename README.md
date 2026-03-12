@@ -211,9 +211,26 @@ npm run build
 npx playwright test tests/e2e/review-workbench-single-item-flow.spec.ts
 ```
 
+### Phase Six B3 Safe Batch Approval
+
+Phase 6B3 adds the first tightly-scoped batch decision flow on top of the conflict-group workbench:
+
+- only the current selected `profile_attribute_candidate` group can show `Batch Approve`
+- the backend hard-gates the flow to `>= 2 pending + no conflict + same group`
+- confirmation creates a dedicated `decision_batch` journal while still expanding to member decision journals
+- the existing undo history entry point now shows batch-friendly summaries and supports `Undo Batch`
+
+### Phase Six B3 Verification
+
+```bash
+npm run test:unit -- tests/unit/main/reviewQueueService.test.ts tests/unit/shared/phaseSixContracts.test.ts tests/unit/renderer/archiveApi.test.ts tests/unit/renderer/reviewWorkbenchPage.test.tsx tests/unit/renderer/reviewQueuePage.test.tsx tests/unit/renderer/reviewWorkbenchActions.test.tsx
+npx playwright test tests/e2e/review-workbench-single-item-flow.spec.ts tests/e2e/review-workbench-safe-batch-flow.spec.ts
+npm run build
+```
+
 ### Current Operational Note
 
 The local-first runner, shared review queue, formal approved profile read model, and phase-five single-item review workbench are now wired end-to-end.
-Phase 6 now includes the preservation export / restore baseline, the provider-boundary audit baseline, the people-centric review inbox baseline, and the conflict-group compare / continuous-navigation slice inside 6B2.
-The next validated follow-up inside 6B is 6B3: safe batch approval, decision batch journaling, and replay / undo on top of the current conflict-group workflow.
+Phase 6 now includes the preservation export / restore baseline, the provider-boundary audit baseline, the people-centric review inbox baseline, the conflict-group compare / continuous-navigation slice inside 6B2, and the first safe batch approval slice in 6B3.
+The next validated follow-up inside 6B is the second half of 6B3: journal replay / search on top of the current batch journaling and undo baseline.
 See `docs/plans/2026-03-11-phase-six-preservation-operator-efficiency-design.md` for the agreed roadmap.
