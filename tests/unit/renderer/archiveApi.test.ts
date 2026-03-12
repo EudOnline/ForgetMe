@@ -51,3 +51,13 @@ describe('archiveApi preservation methods', () => {
     })).resolves.toEqual(null)
   })
 })
+
+describe('archiveApi dossier methods', () => {
+  it('exposes person dossier reads in the fallback API', async () => {
+    vi.stubGlobal('window', {})
+
+    const archiveApi = getArchiveApi()
+
+    await expect(archiveApi.getPersonDossier('cp-1')).resolves.toBeNull()
+  })
+})

@@ -212,6 +212,74 @@ export type PersonGraph = {
   }>
 }
 
+export const DOSSIER_DISPLAY_TYPES = [
+  'approved_fact',
+  'derived_summary',
+  'open_conflict',
+  'coverage_gap'
+] as const
+
+export type DossierDisplayType = (typeof DOSSIER_DISPLAY_TYPES)[number]
+
+export type PersonDossierEvidenceRef = {
+  kind: 'file' | 'evidence' | 'candidate' | 'journal'
+  id: string
+  label: string
+}
+
+export type PersonDossierIdentityCard = {
+  primaryDisplayName: string
+  aliases: string[]
+  manualLabels: string[]
+  firstSeenAt: string | null
+  lastSeenAt: string | null
+  evidenceCount: number
+  displayType: DossierDisplayType
+}
+
+export type PersonDossierSectionItem = {
+  id: string
+  label: string
+  value: string
+  displayType: DossierDisplayType
+  evidenceRefs: PersonDossierEvidenceRef[]
+}
+
+export type PersonDossierSection = {
+  sectionKey: string
+  title: string
+  displayType: DossierDisplayType
+  items: PersonDossierSectionItem[]
+}
+
+export type PersonDossierTimelineHighlight = {
+  eventId: string
+  title: string
+  timeStart: string
+  timeEnd: string
+  summary: string | null
+  displayType: DossierDisplayType
+  evidenceRefs: PersonDossierEvidenceRef[]
+}
+
+export type PersonDossierRelationshipSummary = {
+  personId: string
+  displayName: string
+  sharedFileCount: number
+  manualLabel: string | null
+  displayType: DossierDisplayType
+  evidenceRefs: PersonDossierEvidenceRef[]
+}
+
+export type PersonDossier = {
+  person: CanonicalPersonDetail
+  identityCard: PersonDossierIdentityCard
+  thematicSections: PersonDossierSection[]
+  timelineHighlights: PersonDossierTimelineHighlight[]
+  relationshipSummary: PersonDossierRelationshipSummary[]
+  evidenceBacktrace: PersonDossierEvidenceRef[]
+}
+
 export type ReviewQueueItem = {
   id: string
   itemType: string
@@ -451,6 +519,7 @@ export interface ArchiveApi {
   logicalDeleteBatch: (batchId: string) => Promise<{ status: 'deleted'; batchId: string; deletedAt: string }>
   listCanonicalPeople: () => Promise<CanonicalPersonSummary[]>
   getCanonicalPerson: (canonicalPersonId: string) => Promise<CanonicalPersonDetail | null>
+  getPersonDossier: (canonicalPersonId: string) => Promise<PersonDossier | null>
   getPersonTimeline: (canonicalPersonId: string) => Promise<PersonTimelineEvent[]>
   getPersonGraph: (canonicalPersonId: string) => Promise<PersonGraph>
   listPersonProfileAttributes: (input?: { canonicalPersonId?: string; status?: 'active' | 'superseded' | 'undone' }) => Promise<PersonProfileAttribute[]>

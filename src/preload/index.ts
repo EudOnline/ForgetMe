@@ -16,6 +16,7 @@ const archiveApi: ArchiveApi = {
   logicalDeleteBatch: (batchId) => ipcRenderer.invoke('archive:deleteBatch', { batchId }),
   listCanonicalPeople: () => ipcRenderer.invoke('archive:listCanonicalPeople'),
   getCanonicalPerson: (canonicalPersonId) => ipcRenderer.invoke('archive:getCanonicalPerson', { canonicalPersonId }),
+  getPersonDossier: (canonicalPersonId) => ipcRenderer.invoke('archive:getPersonDossier', { canonicalPersonId }),
   getPersonTimeline: (canonicalPersonId) => ipcRenderer.invoke('archive:getPersonTimeline', { canonicalPersonId }),
   getPersonGraph: (canonicalPersonId) => ipcRenderer.invoke('archive:getPersonGraph', { canonicalPersonId }),
   listPersonProfileAttributes: (input) => ipcRenderer.invoke('archive:listPersonProfileAttributes', input),

@@ -65,7 +65,7 @@ export default function App() {
       {page === 'detail' ? <BatchDetailPage batch={selectedBatch} /> : null}
       {page === 'search' ? <SearchPage /> : null}
       {page === 'people' ? <PeoplePage onSelectPerson={handleSelectPerson} /> : null}
-      {page === 'person' ? <PersonDetailPage canonicalPersonId={selectedCanonicalPersonId} /> : null}
+      {page === 'person' ? <PersonDetailPage canonicalPersonId={selectedCanonicalPersonId} onOpenEvidenceFile={handleSelectEvidenceFile} /> : null}
       {page === 'review' ? <ReviewQueuePage onOpenWorkbench={(queueItemId) => { setSelectedReviewWorkbenchQueueItemId(queueItemId); setPage('review-workbench') }} /> : null}
       {page === 'review-workbench' ? <ReviewWorkbenchPage initialQueueItemId={selectedReviewWorkbenchQueueItemId} /> : null}
       {page === 'preservation' ? <PreservationPage /> : null}

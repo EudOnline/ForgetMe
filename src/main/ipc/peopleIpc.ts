@@ -5,6 +5,7 @@ import type { AppPaths } from '../services/appPaths'
 import { openDatabase, runMigrations } from '../services/db'
 import { getPersonGraph, setRelationshipLabel } from '../services/graphService'
 import { approveProfileAttributeCandidate, rejectProfileAttributeCandidate, undoProfileAttributeDecision } from '../services/profileCandidateReviewService'
+import { getPersonDossier } from '../services/personDossierService'
 import { listPersonProfileAttributes, listProfileAttributeCandidates } from '../services/profileReadService'
 import { getCanonicalPerson, getPeopleList, getPersonTimeline } from '../services/timelineService'
 
@@ -15,6 +16,7 @@ function databasePath(appPaths: AppPaths) {
 export function registerPeopleIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:listCanonicalPeople')
   ipcMain.removeHandler('archive:getCanonicalPerson')
+  ipcMain.removeHandler('archive:getPersonDossier')
   ipcMain.removeHandler('archive:getPersonTimeline')
   ipcMain.removeHandler('archive:getPersonGraph')
   ipcMain.removeHandler('archive:setRelationshipLabel')
@@ -39,6 +41,15 @@ export function registerPeopleIpc(appPaths: AppPaths) {
     const person = getCanonicalPerson(db, { canonicalPersonId })
     db.close()
     return person
+  })
+
+  ipcMain.handle('archive:getPersonDossier', async (_event, payload) => {
+    const { canonicalPersonId } = canonicalPersonIdSchema.parse(payload)
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    const dossier = getPersonDossier(db, { canonicalPersonId })
+    db.close()
+    return dossier
   })
 
   ipcMain.handle('archive:getPersonTimeline', async (_event, payload) => {

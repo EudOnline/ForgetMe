@@ -1,35 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { CanonicalPersonDetail, PersonGraph, PersonTimelineEvent } from '../../shared/archiveContracts'
+import type { PersonDossier } from '../../shared/archiveContracts'
 import { getArchiveApi } from '../archiveApi'
-import { PersonSummaryCard } from '../components/PersonSummaryCard'
-import { PersonTimeline } from '../components/PersonTimeline'
-import { RelationshipGraph } from '../components/RelationshipGraph'
+import { PersonDossierView } from '../components/PersonDossierView'
 
-export function PersonDetailPage(props: { canonicalPersonId: string | null }) {
+export function PersonDetailPage(props: { canonicalPersonId: string | null; onOpenEvidenceFile?: (fileId: string) => void }) {
   const archiveApi = useMemo(() => getArchiveApi(), [])
-  const [person, setPerson] = useState<CanonicalPersonDetail | null>(null)
-  const [timeline, setTimeline] = useState<PersonTimelineEvent[]>([])
-  const [graph, setGraph] = useState<PersonGraph>({ nodes: [], edges: [] })
+  const [dossier, setDossier] = useState<PersonDossier | null>(null)
 
   useEffect(() => {
     if (!props.canonicalPersonId) {
-      setPerson(null)
-      setTimeline([])
-      setGraph({ nodes: [], edges: [] })
+      setDossier(null)
       return
     }
 
-    void archiveApi.getCanonicalPerson(props.canonicalPersonId).then(setPerson)
-    void archiveApi.getPersonTimeline(props.canonicalPersonId).then(setTimeline)
-    void archiveApi.getPersonGraph(props.canonicalPersonId).then(setGraph)
+    void archiveApi.getPersonDossier(props.canonicalPersonId).then(setDossier)
   }, [archiveApi, props.canonicalPersonId])
 
-  return (
-    <section>
-      <h1>Person Detail</h1>
-      <PersonSummaryCard person={person} />
-      <PersonTimeline events={timeline} />
-      <RelationshipGraph graph={graph} />
-    </section>
-  )
+  return <PersonDossierView dossier={dossier} onOpenEvidenceFile={props.onOpenEvidenceFile} />
 }

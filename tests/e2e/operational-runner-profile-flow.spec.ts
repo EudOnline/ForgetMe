@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron } from '@playwright/test'
 
-test('runner executes a queued job and approved profile appears on the person page', async () => {
+test('runner executes a queued job and dossier baseline appears on the person page', async () => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase4-e2e-'))
   const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase4-fixtures-'))
   const chatFixture = path.join(fixtureDir, 'chat-phase4.json')
@@ -35,7 +35,9 @@ test('runner executes a queued job and approved profile appears on the person pa
   await page.getByText('Approve').click()
   await page.getByText('People').click()
   await page.getByRole('button', { name: /^Alice Chen$/ }).click()
-  await expect(page.getByText('Approved Profile')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Person Dossier' })).toBeVisible()
+  await expect(page.getByText('Thematic Portrait')).toBeVisible()
+  await expect(page.getByText('Evidence Backtrace')).toBeVisible()
   await expect(page.locator('li').filter({ hasText: '北京大学' }).first()).toBeVisible()
   await electronApp.close()
 })
