@@ -227,14 +227,29 @@ export type ReviewQueueItem = {
 export type DecisionJournalEntry = {
   id: string
   decisionType: string
+  decisionLabel?: string
   targetType: string
   targetId: string
+  targetLabel?: string
+  replaySummary?: string
   operationPayload: Record<string, unknown>
   undoPayload: Record<string, unknown>
   actor: string
   createdAt: string
   undoneAt: string | null
   undoneBy: string | null
+}
+
+export type DecisionJournalSearchResult = {
+  journalId: string
+  decisionType: string
+  targetType: string
+  decisionLabel: string
+  targetLabel: string
+  replaySummary: string
+  actor: string
+  createdAt: string
+  undoneAt: string | null
 }
 
 export type SafeReviewGroupApprovalResult = {
@@ -370,6 +385,18 @@ export type BackupManifest = {
   databaseSnapshot: BackupManifestEntry
   vaultEntries: BackupManifestEntry[]
   tableCounts: Record<string, number>
+  package?: {
+    mode: 'directory'
+  } | {
+    mode: 'encrypted'
+    encryptedArtifactRelativePath: string
+    algorithm: 'aes-256-gcm'
+    kdf: 'scrypt'
+    saltBase64: string
+    ivBase64: string
+    authTagBase64: string
+    payloadEncoding: 'gzip-json-v1'
+  }
 }
 
 export type BackupExportResult = {
@@ -378,6 +405,8 @@ export type BackupExportResult = {
   manifestPath: string
   vaultEntryCount: number
   totalBytes: number
+  packageMode: 'directory' | 'encrypted'
+  encryptedArtifactPath: string | null
   manifest: BackupManifest
 }
 
@@ -385,13 +414,20 @@ export type RestoreCheckResult = {
   name: string
   status: 'passed' | 'failed'
   detail: string
+  expected?: Record<string, unknown>
+  actual?: Record<string, unknown>
 }
 
 export type RestoreRunResult = {
   status: 'restored' | 'failed'
+  mode: 'restore' | 'recovery_drill'
   exportRoot: string
   targetRoot: string
   restoredAt: string
+  summary: {
+    passedCount: number
+    failedCount: number
+  }
   checks: RestoreCheckResult[]
 }
 
@@ -405,8 +441,9 @@ export interface ArchiveApi {
   selectBackupExportDestination: () => Promise<string | null>
   selectBackupExportSource: () => Promise<string | null>
   selectRestoreTargetDirectory: () => Promise<string | null>
-  createBackupExport: (input: { destinationRoot: string }) => Promise<BackupExportResult | null>
-  restoreBackupExport: (input: { exportRoot: string; targetRoot: string; overwrite?: boolean }) => Promise<RestoreRunResult | null>
+  createBackupExport: (input: { destinationRoot: string; encryptionPassword?: string }) => Promise<BackupExportResult | null>
+  restoreBackupExport: (input: { exportRoot: string; targetRoot: string; overwrite?: boolean; encryptionPassword?: string }) => Promise<RestoreRunResult | null>
+  runRecoveryDrill: (input: { exportRoot: string; targetRoot: string; overwrite?: boolean; encryptionPassword?: string }) => Promise<RestoreRunResult | null>
   createImportBatch: (input: CreateImportBatchInput) => Promise<ImportBatchSummary>
   listImportBatches: () => Promise<ImportBatchSummary[]>
   getImportBatch: (batchId: string) => Promise<ImportBatchSummary | null>
@@ -422,7 +459,8 @@ export interface ArchiveApi {
   rejectProfileAttributeCandidate: (input: { queueItemId: string; note?: string }) => Promise<{ status: 'rejected'; journalId: string; queueItemId: string; candidateId: string }>
   undoProfileAttributeDecision: (journalId: string) => Promise<{ status: 'undone'; journalId: string }>
   listReviewQueue: (input?: { status?: string }) => Promise<ReviewQueueItem[]>
-  listDecisionJournal: () => Promise<DecisionJournalEntry[]>
+  listDecisionJournal: (input?: { query?: string; decisionType?: string; targetType?: string }) => Promise<DecisionJournalEntry[]>
+  searchDecisionJournal: (input?: { query?: string; decisionType?: string; targetType?: string }) => Promise<DecisionJournalSearchResult[]>
   listReviewInboxPeople: () => Promise<ReviewInboxPersonSummary[]>
   listReviewConflictGroups: () => Promise<ReviewConflictGroupSummary[]>
   listReviewWorkbenchItems: (input?: { itemType?: 'structured_field_candidate' | 'profile_attribute_candidate'; status?: 'pending' | 'approved' | 'rejected' | 'undone'; canonicalPersonId?: string; fieldKey?: string; hasConflict?: boolean }) => Promise<ReviewWorkbenchListItem[]>

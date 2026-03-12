@@ -25,6 +25,12 @@ export const reviewQueueListInputSchema = z.object({
   status: z.string().min(1).optional()
 }).optional().default({})
 
+export const decisionJournalFilterSchema = z.object({
+  query: z.string().min(1).optional(),
+  decisionType: z.string().min(1).optional(),
+  targetType: z.string().min(1).optional()
+}).optional().default({})
+
 export const enrichmentJobFilterSchema = z.object({
   status: z.enum(['pending', 'processing', 'completed', 'failed']).optional(),
   fileId: z.string().min(1).optional()
@@ -107,13 +113,15 @@ export const reviewWorkbenchFilterSchema = z.object({
 export const directoryPathSchema = z.string().min(1)
 
 export const backupExportInputSchema = z.object({
-  destinationRoot: directoryPathSchema
+  destinationRoot: directoryPathSchema,
+  encryptionPassword: z.string().min(1).optional()
 })
 
 export const restoreBackupInputSchema = z.object({
   exportRoot: directoryPathSchema,
   targetRoot: directoryPathSchema,
-  overwrite: z.boolean().optional()
+  overwrite: z.boolean().optional(),
+  encryptionPassword: z.string().min(1).optional()
 })
 
 export const journalIdSchema = z.object({

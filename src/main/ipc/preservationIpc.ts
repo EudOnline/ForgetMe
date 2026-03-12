@@ -1,7 +1,7 @@
 import { dialog, ipcMain } from 'electron'
 import type { AppPaths } from '../services/appPaths'
 import { createBackupExport } from '../services/backupExportService'
-import { restoreBackupExport } from '../services/restoreService'
+import { restoreBackupExport, runRecoveryDrill } from '../services/restoreService'
 import { backupExportInputSchema, restoreBackupInputSchema } from '../../shared/ipcSchemas'
 
 async function selectDirectory(envKey: string) {
@@ -23,6 +23,7 @@ export function registerPreservationIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:selectRestoreTargetDirectory')
   ipcMain.removeHandler('archive:createBackupExport')
   ipcMain.removeHandler('archive:restoreBackupExport')
+  ipcMain.removeHandler('archive:runRecoveryDrill')
 
   ipcMain.handle('archive:selectBackupExportDestination', async () => selectDirectory('FORGETME_E2E_BACKUP_DESTINATION_DIR'))
   ipcMain.handle('archive:selectBackupExportSource', async () => selectDirectory('FORGETME_E2E_BACKUP_SOURCE_DIR'))
@@ -36,5 +37,10 @@ export function registerPreservationIpc(appPaths: AppPaths) {
   ipcMain.handle('archive:restoreBackupExport', async (_event, payload) => {
     const input = restoreBackupInputSchema.parse(payload)
     return restoreBackupExport(input)
+  })
+
+  ipcMain.handle('archive:runRecoveryDrill', async (_event, payload) => {
+    const input = restoreBackupInputSchema.parse(payload)
+    return runRecoveryDrill(input)
   })
 }

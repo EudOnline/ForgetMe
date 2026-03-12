@@ -25,4 +25,30 @@ describe('createBackupExport', () => {
     expect(fs.existsSync(path.join(result.exportRoot, 'vault', 'originals', 'ab', 'abcdef.txt'))).toBe(true)
     db.close()
   })
+
+  it('writes an encrypted archive artifact without leaving plaintext database and vault copies in the export package', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase6-export-encrypted-src-'))
+    const destinationRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase6-export-encrypted-dst-'))
+    const appPaths = ensureAppPaths(root)
+    const db = openDatabase(path.join(appPaths.sqliteDir, 'archive.sqlite'))
+    runMigrations(db)
+
+    const objectPath = path.join(appPaths.vaultOriginalsDir, 'ab', 'abcdef.txt')
+    fs.mkdirSync(path.dirname(objectPath), { recursive: true })
+    fs.writeFileSync(objectPath, 'hello encrypted preservation')
+
+    const result = await createBackupExport({
+      appPaths,
+      destinationRoot,
+      encryptionPassword: 'correct horse battery staple'
+    })
+
+    expect(result.packageMode).toBe('encrypted')
+    expect(result.encryptedArtifactPath).toBeTruthy()
+    expect(fs.existsSync(result.manifestPath)).toBe(true)
+    expect(fs.existsSync(result.encryptedArtifactPath!)).toBe(true)
+    expect(fs.existsSync(path.join(result.exportRoot, 'database', 'archive.sqlite'))).toBe(false)
+    expect(fs.existsSync(path.join(result.exportRoot, 'vault', 'originals', 'ab', 'abcdef.txt'))).toBe(false)
+    db.close()
+  })
 })

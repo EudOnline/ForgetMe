@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
-import { approveReviewItem, approveSafeReviewGroup, rejectReviewItem, undoDecision } from '../../../src/main/services/reviewQueueService'
+import { approveReviewItem, approveSafeReviewGroup, listDecisionJournal, rejectReviewItem, undoDecision } from '../../../src/main/services/reviewQueueService'
 
 function setupDatabase() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-review-queue-'))
@@ -271,5 +271,34 @@ it('rejects safe batch approval for structured field groups', () => {
     groupKey: 'cp-structured::structured_field_candidate::school_name',
     actor: 'local-user'
   })).toThrow(/profile attribute groups/i)
+  db.close()
+})
+
+it('filters decision journal history by query and returns replay summaries', () => {
+  const db = setupDatabase()
+  const createdAt = '2026-03-12T00:00:00.000Z'
+
+  seedProfileBatchFixture(db, {
+    createdAt,
+    canonicalPersonId: 'cp-journal',
+    canonicalPersonName: 'Alice Chen',
+    fieldKey: 'school_name',
+    values: ['北京大学', '北京大学']
+  })
+
+  approveSafeReviewGroup(db, {
+    groupKey: 'cp-journal::profile_attribute_candidate::school_name',
+    actor: 'local-user'
+  })
+
+  const matching = listDecisionJournal(db, { query: 'Alice Chen' })
+  const nonMatching = listDecisionJournal(db, { query: 'Bob' })
+
+  expect(matching[0]).toEqual(expect.objectContaining({
+    decisionType: 'approve_safe_review_group',
+    targetType: 'decision_batch',
+    replaySummary: 'Safe batch approve · Alice Chen · school_name · 2 items'
+  }))
+  expect(nonMatching).toEqual([])
   db.close()
 })

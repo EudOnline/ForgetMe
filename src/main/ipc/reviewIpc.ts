@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { ipcMain } from 'electron'
-import { approveSafeReviewGroupInputSchema, journalIdSchema, queueItemIdSchema, rejectReviewItemInputSchema, reviewQueueListInputSchema, reviewWorkbenchFilterSchema, reviewWorkbenchItemSchema } from '../../shared/ipcSchemas'
+import { approveSafeReviewGroupInputSchema, decisionJournalFilterSchema, journalIdSchema, queueItemIdSchema, rejectReviewItemInputSchema, reviewQueueListInputSchema, reviewWorkbenchFilterSchema, reviewWorkbenchItemSchema } from '../../shared/ipcSchemas'
 import type { AppPaths } from '../services/appPaths'
 import { openDatabase, runMigrations } from '../services/db'
 import { approveReviewItem, approveSafeReviewGroup, listDecisionJournal, listReviewQueue, rejectReviewItem, undoDecision } from '../services/reviewQueueService'
@@ -31,10 +31,11 @@ export function registerReviewIpc(appPaths: AppPaths) {
     return items
   })
 
-  ipcMain.handle('archive:listDecisionJournal', async () => {
+  ipcMain.handle('archive:listDecisionJournal', async (_event, payload) => {
+    const input = decisionJournalFilterSchema.parse(payload)
     const db = openDatabase(databasePath(appPaths))
     runMigrations(db)
-    const items = listDecisionJournal(db)
+    const items = listDecisionJournal(db, input)
     db.close()
     return items
   })

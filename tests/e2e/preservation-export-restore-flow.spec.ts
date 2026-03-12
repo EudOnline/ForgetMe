@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron } from '@playwright/test'
 
-test('exports and restores a local archive package from the Preservation page', async () => {
+test('exports an encrypted archive package, restores it, and runs a repeatable recovery drill', async () => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase6-e2e-user-'))
   const exportDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase6-e2e-export-'))
   const restoreDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase6-e2e-restore-'))
@@ -24,10 +24,24 @@ test('exports and restores a local archive package from the Preservation page', 
   await expect(page.getByRole('button', { name: 'sample-chat.txt' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Preservation' }).click()
+  await page.getByLabel('Export password').fill('secret-preservation')
+  await page.getByLabel('Restore password').fill('secret-preservation')
   await page.getByRole('button', { name: 'Export Archive' }).click()
   await expect(page.getByText('Export completed')).toBeVisible()
+
+  const exportRoots = fs.readdirSync(exportDir)
+  expect(exportRoots.length).toBeGreaterThan(0)
+  const exportRoot = path.join(exportDir, exportRoots[0]!)
+  expect(fs.existsSync(path.join(exportRoot, 'manifest.json'))).toBe(true)
+  expect(fs.existsSync(path.join(exportRoot, 'package', 'archive.enc'))).toBe(true)
+  expect(fs.existsSync(path.join(exportRoot, 'database', 'archive.sqlite'))).toBe(false)
+
   await page.getByRole('button', { name: 'Restore Archive' }).click()
   await expect(page.getByText('Restore checks passed')).toBeVisible()
+  await page.getByRole('button', { name: 'Run Recovery Drill' }).click()
+  await expect(page.getByText('Recovery drill passed')).toBeVisible()
+  await page.getByRole('button', { name: 'Run Recovery Drill' }).click()
+  await expect(page.getByText('Recovery drill passed')).toBeVisible()
 
   await electronApp.close()
 })

@@ -79,4 +79,89 @@ describe('ReviewQueuePage', () => {
     expect(listDecisionJournal).toHaveBeenCalledTimes(2)
     expect(listReviewQueue).toHaveBeenCalledTimes(2)
   })
+
+  it('filters journal history and opens a replay detail pane', async () => {
+    const listReviewQueue = vi.fn().mockResolvedValue([])
+    const listDecisionJournal = vi
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          id: 'journal-batch-1',
+          decisionType: 'approve_safe_review_group',
+          targetType: 'decision_batch',
+          targetId: 'batch-1',
+          replaySummary: 'Safe batch approve · Alice Chen · school_name · 2 items',
+          targetLabel: 'Alice Chen · school_name · 2 items',
+          decisionLabel: 'Safe batch approve',
+          operationPayload: {
+            batchId: 'batch-1',
+            canonicalPersonName: 'Alice Chen',
+            fieldKey: 'school_name',
+            itemCount: 2
+          },
+          undoPayload: {
+            batchId: 'batch-1',
+            memberJournalIds: ['journal-1', 'journal-2']
+          },
+          actor: 'reviewer',
+          createdAt: '2026-03-12T00:00:00.000Z',
+          undoneAt: null,
+          undoneBy: null
+        }
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'journal-batch-1',
+          decisionType: 'approve_safe_review_group',
+          targetType: 'decision_batch',
+          targetId: 'batch-1',
+          replaySummary: 'Safe batch approve · Alice Chen · school_name · 2 items',
+          targetLabel: 'Alice Chen · school_name · 2 items',
+          decisionLabel: 'Safe batch approve',
+          operationPayload: {
+            batchId: 'batch-1',
+            canonicalPersonName: 'Alice Chen',
+            fieldKey: 'school_name',
+            itemCount: 2
+          },
+          undoPayload: {
+            batchId: 'batch-1',
+            memberJournalIds: ['journal-1', 'journal-2']
+          },
+          actor: 'reviewer',
+          createdAt: '2026-03-12T00:00:00.000Z',
+          undoneAt: null,
+          undoneBy: null
+        }
+      ])
+
+    vi.stubGlobal('window', {
+      archiveApi: {
+        listReviewQueue,
+        listDecisionJournal,
+        approveReviewItem: vi.fn(),
+        rejectReviewItem: vi.fn(),
+        undoDecision: vi.fn()
+      }
+    })
+
+    render(<ReviewQueuePage />)
+
+    expect(await screen.findByText('Safe batch approve')).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Search history'), { target: { value: 'Alice Chen' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Filter History' }))
+    })
+
+    expect(listDecisionJournal).toHaveBeenLastCalledWith({ query: 'Alice Chen' })
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Replay' }))
+    })
+
+    expect(await screen.findByText('Replay Detail')).toBeInTheDocument()
+    expect(screen.getByText('reviewer')).toBeInTheDocument()
+    expect(screen.getByText(/memberJournalIds/i)).toBeInTheDocument()
+  })
 })

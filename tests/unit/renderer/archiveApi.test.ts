@@ -13,6 +13,8 @@ describe('archiveApi workbench methods', () => {
 
     await expect(archiveApi.listReviewWorkbenchItems({ itemType: 'structured_field_candidate' })).resolves.toEqual([])
     await expect(archiveApi.getReviewWorkbenchItem('rq-1')).resolves.toBeNull()
+    await expect(archiveApi.listDecisionJournal({ query: 'Alice Chen' })).resolves.toEqual([])
+    await expect(archiveApi.searchDecisionJournal({ query: 'Alice Chen' })).resolves.toEqual([])
     await expect(archiveApi.approveSafeReviewGroup({ groupKey: 'cp-1::profile_attribute_candidate::school_name' })).resolves.toEqual({
       status: 'approved',
       batchId: '',
@@ -34,7 +36,18 @@ describe('archiveApi preservation methods', () => {
 
     const archiveApi = getArchiveApi()
 
-    await expect(archiveApi.createBackupExport({ destinationRoot: '/tmp/export-root' })).resolves.toEqual(null)
-    await expect(archiveApi.restoreBackupExport({ exportRoot: '/tmp/export-1', targetRoot: '/tmp/restore-root' })).resolves.toEqual(null)
+    await expect(archiveApi.createBackupExport({
+      destinationRoot: '/tmp/export-root',
+      encryptionPassword: 'correct horse battery staple'
+    })).resolves.toEqual(null)
+    await expect(archiveApi.restoreBackupExport({
+      exportRoot: '/tmp/export-1',
+      targetRoot: '/tmp/restore-root',
+      encryptionPassword: 'correct horse battery staple'
+    })).resolves.toEqual(null)
+    await expect(archiveApi.runRecoveryDrill({
+      exportRoot: '/tmp/export-1',
+      targetRoot: '/tmp/restore-root'
+    })).resolves.toEqual(null)
   })
 })
