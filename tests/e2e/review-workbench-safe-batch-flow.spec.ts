@@ -26,6 +26,7 @@ test('approves a safe profile batch and undoes it from review history', async ()
 
   const page = await electronApp.firstWindow()
   await page.getByText('Choose Files').click()
+  await expect(page.getByText('chat-phase6b3.json')).toBeVisible({ timeout: 15_000 })
 
   await page.getByText('Review Workbench').click()
   const groupButton = page.locator('button').filter({ hasText: 'school_name' }).first()
