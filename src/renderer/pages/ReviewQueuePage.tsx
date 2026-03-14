@@ -6,20 +6,30 @@ import { UndoHistoryTable } from '../components/UndoHistoryTable'
 
 export function ReviewQueuePage(props: {
   onOpenWorkbench?: (queueItemId: string | null) => void
+  initialJournalQuery?: string | null
+  initialSelectedJournalId?: string | null
 }) {
   const archiveApi = useMemo(() => getArchiveApi(), [])
   const [items, setItems] = useState<ReviewQueueItem[]>([])
   const [journal, setJournal] = useState<DecisionJournalEntry[]>([])
-  const [journalQuery, setJournalQuery] = useState('')
-  const [appliedJournalQuery, setAppliedJournalQuery] = useState('')
+  const [journalQuery, setJournalQuery] = useState(props.initialJournalQuery ?? '')
+  const [appliedJournalQuery, setAppliedJournalQuery] = useState(props.initialJournalQuery ?? '')
   const [selectedJournal, setSelectedJournal] = useState<DecisionJournalEntry | null>(null)
+
+  useEffect(() => {
+    setJournalQuery(props.initialJournalQuery ?? '')
+    setAppliedJournalQuery(props.initialJournalQuery ?? '')
+  }, [props.initialJournalQuery])
 
   const refresh = useCallback(async () => {
     setItems(await archiveApi.listReviewQueue({ status: 'pending' }))
     const nextJournal = await archiveApi.listDecisionJournal(appliedJournalQuery ? { query: appliedJournalQuery } : undefined) ?? []
     setJournal(nextJournal)
-    setSelectedJournal((current) => nextJournal.find((entry) => entry.id === current?.id) ?? current ?? nextJournal[0] ?? null)
-  }, [archiveApi, appliedJournalQuery])
+    setSelectedJournal((current) => {
+      const preferredJournalId = props.initialSelectedJournalId ?? current?.id ?? null
+      return nextJournal.find((entry) => entry.id === preferredJournalId) ?? nextJournal[0] ?? null
+    })
+  }, [archiveApi, appliedJournalQuery, props.initialSelectedJournalId])
 
   useEffect(() => {
     void refresh()

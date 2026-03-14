@@ -5,7 +5,13 @@ import type { AppPaths } from './appPaths'
 import { ensureCanonicalPeopleForAnchors } from './canonicalPeopleService'
 import { generatePersonMergeCandidates } from './candidateService'
 import { classifyExactDuplicate, countExistingHashes } from './dedupService'
-import { seedE2EMultimodalReviewFixture, seedE2ERunnerProfileFixture, seedE2ESafeBatchFixture } from './e2eMultimodalFixtureService'
+import {
+  seedE2EDossierConflictFixture,
+  seedE2EGroupPortraitFixture,
+  seedE2EMultimodalReviewFixture,
+  seedE2ERunnerProfileFixture,
+  seedE2ESafeBatchFixture
+} from './e2eMultimodalFixtureService'
 import { enqueueEnrichmentJobs } from './enrichmentDispatchService'
 import { openDatabase, runMigrations } from './db'
 import { parseFrozenFile } from './parserRegistry'
@@ -124,6 +130,14 @@ export async function createImportBatch(input: {
 
   if (process.env.FORGETME_E2E_RUNNER_PROFILE_FIXTURE === '1' && files.length > 0 && anchors.length > 0) {
     seedE2ERunnerProfileFixture(db, { fileId: files[0].fileId })
+  }
+
+  if (process.env.FORGETME_E2E_DOSSIER_CONFLICT_FIXTURE === '1' && files.length > 0 && anchors.length > 0) {
+    seedE2EDossierConflictFixture(db, { fileId: files[0].fileId })
+  }
+
+  if (process.env.FORGETME_E2E_GROUP_PORTRAIT_FIXTURE === '1' && files.length > 0 && anchors.length > 0) {
+    seedE2EGroupPortraitFixture(db, { fileId: files[0].fileId })
   }
 
   if (process.env.FORGETME_E2E_SAFE_BATCH_FIXTURE === '1' && files.length > 0 && anchors.length > 0) {

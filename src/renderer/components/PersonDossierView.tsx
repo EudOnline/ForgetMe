@@ -1,4 +1,11 @@
-import type { DossierDisplayType, PersonDossier, PersonDossierEvidenceRef } from '../../shared/archiveContracts'
+import type {
+  ContextPackExportMode,
+  MemoryWorkspaceScope,
+  DossierDisplayType,
+  PersonDossier,
+  PersonDossierEvidenceRef,
+  PersonDossierReviewShortcut
+} from '../../shared/archiveContracts'
 
 function formatDisplayType(displayType: DossierDisplayType) {
   return displayType.replace(/_/g, ' ')
@@ -26,7 +33,17 @@ function renderEvidenceRef(ref: PersonDossierEvidenceRef, onOpenEvidenceFile?: (
 
 export function PersonDossierView(props: {
   dossier: PersonDossier | null
+  contextPackMode?: ContextPackExportMode
+  contextPackDestination?: string
+  contextPackStatus?: string
+  isExportingContextPack?: boolean
+  onChangeContextPackMode?: (mode: ContextPackExportMode) => void
+  onPickContextPackDestination?: () => void
+  onExportContextPack?: () => void
   onOpenEvidenceFile?: (fileId: string) => void
+  onOpenReviewWorkbench?: (shortcut: PersonDossierReviewShortcut) => void
+  onOpenGroupPortrait?: (canonicalPersonId: string) => void
+  onOpenMemoryWorkspace?: (scope: MemoryWorkspaceScope) => void
 }) {
   if (!props.dossier) {
     return <p>Select a person to open the dossier.</p>
@@ -37,6 +54,47 @@ export function PersonDossierView(props: {
   return (
     <section>
       <h1>Person Dossier</h1>
+      <button type="button" onClick={() => props.onOpenGroupPortrait?.(dossier.person.id)}>
+        Open group portrait
+      </button>
+      <button
+        type="button"
+        onClick={() => props.onOpenMemoryWorkspace?.({ kind: 'person', canonicalPersonId: dossier.person.id })}
+      >
+        Open memory workspace
+      </button>
+
+      <section aria-label="Context Pack Export">
+        <h2>Context Pack Export</h2>
+        <label>
+          Context pack mode
+          <select
+            value={props.contextPackMode ?? 'approved_plus_derived'}
+            onChange={(event) => props.onChangeContextPackMode?.(event.target.value as ContextPackExportMode)}
+          >
+            <option value="approved_plus_derived">Approved + derived</option>
+            <option value="approved_only">Approved only</option>
+          </select>
+        </label>
+        <div>{props.contextPackDestination || 'No context pack destination selected.'}</div>
+        <div>
+          <button
+            type="button"
+            onClick={() => props.onPickContextPackDestination?.()}
+            disabled={props.isExportingContextPack}
+          >
+            Choose context pack destination
+          </button>
+          <button
+            type="button"
+            onClick={() => props.onExportContextPack?.()}
+            disabled={props.isExportingContextPack}
+          >
+            Export context pack
+          </button>
+        </div>
+        {props.contextPackStatus ? <p>{props.contextPackStatus}</p> : null}
+      </section>
 
       <section aria-label="Identity Card">
         <h2>Identity Card</h2>
@@ -102,6 +160,45 @@ export function PersonDossierView(props: {
         ) : (
           <p>No approved relationship context yet.</p>
         )}
+      </section>
+
+      <section aria-label="Conflicts & Gaps">
+        <h2>Conflicts & Gaps</h2>
+        {dossier.conflictSummary.length ? (
+          <ul>
+            {dossier.conflictSummary.map((conflict) => (
+              <li key={conflict.fieldKey ?? conflict.title}>
+                {conflict.title} · pending {conflict.pendingCount} · {conflict.distinctValues.join(' / ')}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p>No open conflicts right now.</p>
+        )}
+        {dossier.coverageGaps.length ? (
+          <ul>
+            {dossier.coverageGaps.map((gap) => (
+              <li key={gap.gapKey}>
+                {gap.title}: {gap.detail}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p>No explicit coverage gaps right now.</p>
+        )}
+        {dossier.reviewShortcuts.length ? (
+          <div>
+            {dossier.reviewShortcuts.map((shortcut) => (
+              <button
+                key={`${shortcut.canonicalPersonId}:${shortcut.fieldKey ?? 'pending'}:${shortcut.queueItemId ?? 'none'}`}
+                type="button"
+                onClick={() => props.onOpenReviewWorkbench?.(shortcut)}
+              >
+                {shortcut.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       <section aria-label="Evidence Backtrace">

@@ -64,6 +64,24 @@ function resolvePersonKeyFromQueueItem(items: ReviewWorkbenchListItem[], queueIt
   return matched ? toPersonKey(matched.canonicalPersonId) : null
 }
 
+function resolveConflictGroupKeyFromQueueItem(
+  items: ReviewWorkbenchListItem[],
+  groups: ReviewConflictGroupSummary[],
+  queueItemId: string | null | undefined
+) {
+  if (!queueItemId) {
+    return null
+  }
+
+  const matched = items.find((item) => item.queueItemId === queueItemId)
+  if (!matched) {
+    return null
+  }
+
+  const groupKey = toConflictGroupKey(matched)
+  return groups.some((group) => group.groupKey === groupKey) ? groupKey : null
+}
+
 function buildDistinctValueCounts(items: ReviewWorkbenchListItem[], preferredOrder: string[]) {
   const counts = new Map<string, number>()
   for (const item of items) {
@@ -164,6 +182,11 @@ export function ReviewWorkbenchPage(props: {
     let resolvedConflictGroupKey = preferredConflictGroupKey !== undefined
       ? preferredConflictGroupKey
       : selectedConflictGroupKeyRef.current
+        ?? resolveConflictGroupKeyFromQueueItem(
+          nextItems,
+          nextConflictGroups,
+          preferredQueueItemId ?? selectedQueueItemIdRef.current ?? props.initialQueueItemId ?? null
+        )
 
     let visibleGroups = filterConflictGroupsByPerson(nextConflictGroups, resolvedPersonKey)
     if (resolvedConflictGroupKey && !visibleGroups.some((group) => group.groupKey === resolvedConflictGroupKey)) {

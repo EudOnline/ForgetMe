@@ -271,13 +271,481 @@ export type PersonDossierRelationshipSummary = {
   evidenceRefs: PersonDossierEvidenceRef[]
 }
 
+export type PersonDossierConflictSummary = {
+  fieldKey: string | null
+  title: string
+  pendingCount: number
+  distinctValues: string[]
+  displayType: 'open_conflict'
+}
+
+export type PersonDossierGapSummary = {
+  gapKey: string
+  title: string
+  detail: string
+  displayType: 'coverage_gap'
+}
+
+export type PersonDossierReviewShortcut = {
+  label: string
+  canonicalPersonId: string
+  fieldKey?: string
+  hasConflict?: boolean
+  queueItemId?: string
+}
+
 export type PersonDossier = {
   person: CanonicalPersonDetail
   identityCard: PersonDossierIdentityCard
   thematicSections: PersonDossierSection[]
   timelineHighlights: PersonDossierTimelineHighlight[]
   relationshipSummary: PersonDossierRelationshipSummary[]
+  conflictSummary: PersonDossierConflictSummary[]
+  coverageGaps: PersonDossierGapSummary[]
+  reviewShortcuts: PersonDossierReviewShortcut[]
   evidenceBacktrace: PersonDossierEvidenceRef[]
+}
+
+export type GroupPortraitMemberSummary = {
+  personId: string
+  displayName: string
+  sharedFileCount: number
+  sharedEventCount: number
+  connectionCount: number
+  manualLabel: string | null
+  isAnchor: boolean
+  displayType: 'approved_fact' | 'derived_summary'
+}
+
+export type GroupPortraitBrowseSummary = {
+  anchorPersonId: string
+  anchorDisplayName: string
+  title: string
+  memberCount: number
+  sharedEventCount: number
+  sharedEvidenceSourceCount: number
+  densityRatio: number
+  membersPreview: string[]
+  displayType: 'derived_summary'
+}
+
+export type GroupPortraitRelationshipDensity = {
+  memberCount: number
+  actualEdgeCount: number
+  possibleEdgeCount: number
+  densityRatio: number
+  displayType: 'derived_summary' | 'coverage_gap'
+}
+
+export type GroupPortraitSharedEvent = {
+  eventId: string
+  title: string
+  timeStart: string
+  timeEnd: string
+  memberCount: number
+  members: string[]
+  evidenceRefs: PersonDossierEvidenceRef[]
+  displayType: 'approved_fact'
+}
+
+export type GroupPortraitTimelineWindow = {
+  windowId: string
+  title: string
+  timeStart: string
+  timeEnd: string
+  eventCount: number
+  memberCount: number
+  members: string[]
+  eventTitles: string[]
+  displayType: 'approved_fact' | 'derived_summary'
+}
+
+export type GroupPortraitNarrativeSummary = {
+  summaryId: string
+  text: string
+  displayType: 'derived_summary' | 'open_conflict' | 'coverage_gap'
+}
+
+export type GroupPortraitSharedEvidenceSource = {
+  fileId: string
+  fileName: string
+  memberCount: number
+  members: string[]
+  displayType: 'approved_fact'
+}
+
+export type GroupPortraitReplayShortcut = {
+  journalId: string
+  label: string
+  query: string
+  displayType: 'approved_fact'
+}
+
+export type GroupPortraitCentralPersonSummary = {
+  personId: string
+  displayName: string
+  connectionCount: number
+  sharedFileCount: number
+  sharedEventCount: number
+  displayType: 'derived_summary'
+}
+
+export type GroupPortraitAmbiguitySummary = {
+  pendingReviewCount: number
+  conflictGroupCount: number
+  affectedMemberCount: number
+  displayType: 'open_conflict' | 'derived_summary'
+  reviewShortcut: PersonDossierReviewShortcut | null
+}
+
+export type GroupPortrait = {
+  anchorPersonId: string
+  title: string
+  members: GroupPortraitMemberSummary[]
+  relationshipDensity: GroupPortraitRelationshipDensity
+  sharedEvents: GroupPortraitSharedEvent[]
+  timelineWindows: GroupPortraitTimelineWindow[]
+  narrativeSummary: GroupPortraitNarrativeSummary[]
+  sharedEvidenceSources: GroupPortraitSharedEvidenceSource[]
+  replayShortcuts: GroupPortraitReplayShortcut[]
+  centralPeople: GroupPortraitCentralPersonSummary[]
+  ambiguitySummary: GroupPortraitAmbiguitySummary
+}
+
+export type MemoryWorkspaceScope =
+  | { kind: 'global' }
+  | { kind: 'person'; canonicalPersonId: string }
+  | { kind: 'group'; anchorPersonId: string }
+
+export type MemoryWorkspaceCitation = {
+  citationId: string
+  kind: 'person' | 'group' | 'file' | 'journal' | 'review'
+  targetId: string
+  label: string
+}
+
+export type MemoryWorkspaceContextCard = {
+  cardId: string
+  title: string
+  body: string
+  displayType: DossierDisplayType
+  citations: MemoryWorkspaceCitation[]
+}
+
+export type MemoryWorkspaceAnswer = {
+  summary: string
+  displayType: DossierDisplayType
+  citations: MemoryWorkspaceCitation[]
+}
+
+export type MemoryWorkspaceGuardrailDecision =
+  | 'grounded_answer'
+  | 'fallback_to_conflict'
+  | 'fallback_insufficient_evidence'
+  | 'fallback_unsupported_request'
+
+export type MemoryWorkspaceGuardrailReasonCode =
+  | 'open_conflict_present'
+  | 'coverage_gap_present'
+  | 'insufficient_citations'
+  | 'multi_source_synthesis'
+  | 'persona_request'
+  | 'review_pressure_present'
+
+export type MemoryWorkspaceGuardrail = {
+  decision: MemoryWorkspaceGuardrailDecision
+  reasonCodes: MemoryWorkspaceGuardrailReasonCode[]
+  citationCount: number
+  sourceKinds: MemoryWorkspaceCitation['kind'][]
+  fallbackApplied: boolean
+}
+
+export type MemoryWorkspaceResponse = {
+  scope: MemoryWorkspaceScope
+  question: string
+  title: string
+  answer: MemoryWorkspaceAnswer
+  contextCards: MemoryWorkspaceContextCard[]
+  guardrail: MemoryWorkspaceGuardrail
+}
+
+export type AskMemoryWorkspaceInput = {
+  scope: MemoryWorkspaceScope
+  question: string
+}
+
+export type MemoryWorkspaceCompareTarget =
+  | {
+      targetId: string
+      label: string
+      executionMode: 'local_baseline'
+    }
+  | {
+      targetId: string
+      label: string
+      executionMode: 'provider_model'
+      provider: 'siliconflow' | 'openrouter'
+      model: string
+    }
+
+export type RunMemoryWorkspaceCompareJudgeInput = {
+  enabled: boolean
+  provider?: 'siliconflow' | 'openrouter'
+  model?: string
+}
+
+export type RunMemoryWorkspaceCompareInput = {
+  scope: MemoryWorkspaceScope
+  question: string
+  judge?: RunMemoryWorkspaceCompareJudgeInput
+  targets?: MemoryWorkspaceCompareTarget[]
+}
+
+export type MemoryWorkspaceSessionSummary = {
+  sessionId: string
+  scope: MemoryWorkspaceScope
+  title: string
+  latestQuestion: string | null
+  turnCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type MemoryWorkspaceTurnRecord = {
+  turnId: string
+  sessionId: string
+  ordinal: number
+  question: string
+  response: MemoryWorkspaceResponse
+  provider: string | null
+  model: string | null
+  contextHash: string
+  promptHash: string
+  createdAt: string
+}
+
+export type MemoryWorkspaceSessionDetail = MemoryWorkspaceSessionSummary & {
+  turns: MemoryWorkspaceTurnRecord[]
+}
+
+export type AskMemoryWorkspacePersistedInput = AskMemoryWorkspaceInput & {
+  sessionId?: string
+}
+
+export type MemoryWorkspaceCompareRunStatus = 'completed' | 'failed'
+
+export type MemoryWorkspaceCompareEvaluationDimensionKey =
+  | 'groundedness'
+  | 'traceability'
+  | 'guardrail_alignment'
+  | 'usefulness'
+
+export type MemoryWorkspaceCompareEvaluationDimension = {
+  key: MemoryWorkspaceCompareEvaluationDimensionKey
+  label: string
+  score: number
+  maxScore: number
+  rationale: string
+}
+
+export type MemoryWorkspaceCompareRunEvaluation = {
+  totalScore: number
+  maxScore: number
+  band: 'strong' | 'acceptable' | 'fallback' | 'failed'
+  dimensions: MemoryWorkspaceCompareEvaluationDimension[]
+}
+
+export type MemoryWorkspaceCompareJudgeDecision = 'aligned' | 'needs_review' | 'not_grounded'
+
+export type MemoryWorkspaceCompareJudgeVerdict = {
+  status: 'completed' | 'failed' | 'skipped'
+  provider: 'siliconflow' | 'openrouter' | null
+  model: string | null
+  decision: MemoryWorkspaceCompareJudgeDecision | null
+  score: number | null
+  rationale: string | null
+  strengths: string[]
+  concerns: string[]
+  errorMessage: string | null
+  createdAt: string | null
+}
+
+export type MemoryWorkspaceCompareRecommendation = {
+  decision: 'recommend_run' | 'no_recommendation'
+  recommendedCompareRunId: string | null
+  recommendedTargetLabel: string | null
+  rationale: string
+}
+
+export type MemoryWorkspaceCompareSessionJudgeSummary = {
+  enabled: boolean
+  status: 'disabled' | 'completed' | 'failed' | 'mixed'
+}
+
+export type MemoryWorkspaceCompareSessionMetadata = {
+  targetLabels: string[]
+  failedRunCount: number
+  judge: MemoryWorkspaceCompareSessionJudgeSummary
+}
+
+export type MemoryWorkspaceCompareRunRecord = {
+  compareRunId: string
+  compareSessionId: string
+  ordinal: number
+  target: MemoryWorkspaceCompareTarget
+  provider: string | null
+  model: string | null
+  status: MemoryWorkspaceCompareRunStatus
+  errorMessage: string | null
+  response: MemoryWorkspaceResponse | null
+  evaluation: MemoryWorkspaceCompareRunEvaluation
+  judge: MemoryWorkspaceCompareJudgeVerdict
+  contextHash: string
+  promptHash: string
+  createdAt: string
+}
+
+export type MemoryWorkspaceCompareSessionSummary = {
+  compareSessionId: string
+  scope: MemoryWorkspaceScope
+  title: string
+  question: string
+  runCount: number
+  metadata: MemoryWorkspaceCompareSessionMetadata
+  recommendation: MemoryWorkspaceCompareRecommendation | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type MemoryWorkspaceCompareSessionDetail = MemoryWorkspaceCompareSessionSummary & {
+  runs: MemoryWorkspaceCompareRunRecord[]
+}
+
+export const CONTEXT_PACK_EXPORT_MODES = [
+  'approved_only',
+  'approved_plus_derived'
+] as const
+
+export type ContextPackExportMode = (typeof CONTEXT_PACK_EXPORT_MODES)[number]
+
+export type ContextPackScope =
+  | { kind: 'person'; canonicalPersonId: string }
+  | { kind: 'group'; anchorPersonId: string }
+
+export type ContextPackSourceRef = {
+  kind: 'person' | 'group' | 'file' | 'journal' | 'review' | 'evidence' | 'candidate'
+  id: string
+  label: string
+}
+
+export type ContextPackSectionItem = {
+  id: string
+  label: string
+  value: string
+  displayType: DossierDisplayType
+  sourceRefs: ContextPackSourceRef[]
+}
+
+export type ContextPackSection = {
+  sectionKey: string
+  title: string
+  displayType: DossierDisplayType
+  items: ContextPackSectionItem[]
+}
+
+export type ContextPackTimelineEntry = {
+  id: string
+  title: string
+  timeStart: string
+  timeEnd: string
+  summary: string | null
+  displayType: DossierDisplayType
+  sourceRefs: ContextPackSourceRef[]
+}
+
+export type ContextPackRelationshipEntry = {
+  personId: string
+  label: string
+  sharedFileCount: number
+  displayType: DossierDisplayType
+  sourceRefs: ContextPackSourceRef[]
+}
+
+export type ContextPackAmbiguitySummary = {
+  id: string
+  title: string
+  detail: string
+  displayType: 'open_conflict' | 'coverage_gap'
+  sourceRefs: ContextPackSourceRef[]
+}
+
+export type ContextPackNarrativeEntry = {
+  id: string
+  text: string
+  displayType: DossierDisplayType
+  sourceRefs: ContextPackSourceRef[]
+}
+
+export type ContextPackGroupMember = {
+  personId: string
+  displayName: string
+  isAnchor: boolean
+  sharedFileCount: number
+  sharedEventCount: number
+  displayType: 'approved_fact' | 'derived_summary'
+}
+
+export type PersonContextPack = {
+  formatVersion: 'phase8c1'
+  exportedAt: string | null
+  mode: ContextPackExportMode
+  scope: { kind: 'person'; canonicalPersonId: string }
+  title: string
+  identity: {
+    primaryDisplayName: string
+    aliases: string[]
+    manualLabels: string[]
+    firstSeenAt: string | null
+    lastSeenAt: string | null
+    evidenceCount: number
+  }
+  sections: ContextPackSection[]
+  timelineHighlights: ContextPackTimelineEntry[]
+  relationships: ContextPackRelationshipEntry[]
+  ambiguity: ContextPackAmbiguitySummary[]
+  sourceRefs: ContextPackSourceRef[]
+  shareEnvelope: {
+    requestShape: 'local_json_context_pack'
+    policyKey: 'context_pack.local_export_baseline'
+  }
+}
+
+export type GroupContextPack = {
+  formatVersion: 'phase8c1'
+  exportedAt: string | null
+  mode: ContextPackExportMode
+  scope: { kind: 'group'; anchorPersonId: string }
+  title: string
+  members: ContextPackGroupMember[]
+  timelineWindows: ContextPackTimelineEntry[]
+  sharedEvidenceSources: ContextPackSourceRef[]
+  narrative: ContextPackNarrativeEntry[]
+  ambiguity: ContextPackAmbiguitySummary[]
+  sourceRefs: ContextPackSourceRef[]
+  shareEnvelope: {
+    requestShape: 'local_json_context_pack'
+    policyKey: 'context_pack.local_export_baseline'
+  }
+}
+
+export type ContextPackExportResult = {
+  status: 'exported'
+  filePath: string
+  fileName: string
+  sha256: string
+  exportedAt: string
+  mode: ContextPackExportMode
+  scope: ContextPackScope
 }
 
 export type ReviewQueueItem = {
@@ -517,9 +985,23 @@ export interface ArchiveApi {
   getImportBatch: (batchId: string) => Promise<ImportBatchSummary | null>
   searchArchive: (input: { query?: string; fileKinds?: string[]; batchId?: string; duplicateClass?: string; personName?: string }) => Promise<ArchiveSearchResult[]>
   logicalDeleteBatch: (batchId: string) => Promise<{ status: 'deleted'; batchId: string; deletedAt: string }>
+  selectContextPackExportDestination: () => Promise<string | null>
   listCanonicalPeople: () => Promise<CanonicalPersonSummary[]>
   getCanonicalPerson: (canonicalPersonId: string) => Promise<CanonicalPersonDetail | null>
   getPersonDossier: (canonicalPersonId: string) => Promise<PersonDossier | null>
+  getPersonContextPack: (input: { canonicalPersonId: string; mode?: ContextPackExportMode }) => Promise<PersonContextPack | null>
+  askMemoryWorkspace: (input: AskMemoryWorkspaceInput) => Promise<MemoryWorkspaceResponse | null>
+  listMemoryWorkspaceSessions: (input?: { scope?: MemoryWorkspaceScope }) => Promise<MemoryWorkspaceSessionSummary[]>
+  getMemoryWorkspaceSession: (sessionId: string) => Promise<MemoryWorkspaceSessionDetail | null>
+  askMemoryWorkspacePersisted: (input: AskMemoryWorkspacePersistedInput) => Promise<MemoryWorkspaceTurnRecord | null>
+  runMemoryWorkspaceCompare: (input: RunMemoryWorkspaceCompareInput) => Promise<MemoryWorkspaceCompareSessionDetail | null>
+  listMemoryWorkspaceCompareSessions: (input?: { scope?: MemoryWorkspaceScope }) => Promise<MemoryWorkspaceCompareSessionSummary[]>
+  getMemoryWorkspaceCompareSession: (compareSessionId: string) => Promise<MemoryWorkspaceCompareSessionDetail | null>
+  listGroupPortraits: () => Promise<GroupPortraitBrowseSummary[]>
+  getGroupPortrait: (canonicalPersonId: string) => Promise<GroupPortrait | null>
+  getGroupContextPack: (input: { anchorPersonId: string; mode?: ContextPackExportMode }) => Promise<GroupContextPack | null>
+  exportPersonContextPack: (input: { canonicalPersonId: string; destinationRoot: string; mode?: ContextPackExportMode }) => Promise<ContextPackExportResult | null>
+  exportGroupContextPack: (input: { anchorPersonId: string; destinationRoot: string; mode?: ContextPackExportMode }) => Promise<ContextPackExportResult | null>
   getPersonTimeline: (canonicalPersonId: string) => Promise<PersonTimelineEvent[]>
   getPersonGraph: (canonicalPersonId: string) => Promise<PersonGraph>
   listPersonProfileAttributes: (input?: { canonicalPersonId?: string; status?: 'active' | 'superseded' | 'undone' }) => Promise<PersonProfileAttribute[]>

@@ -1,4 +1,4 @@
-export type ModelTaskType = 'document_ocr' | 'image_understanding' | 'chat_screenshot'
+export type ModelTaskType = 'document_ocr' | 'image_understanding' | 'chat_screenshot' | 'memory_dialogue'
 export type ModelProvider = 'siliconflow' | 'openrouter'
 
 export type ModelRoute = {
@@ -36,6 +36,10 @@ function defaultModelForTask(taskType: ModelTaskType, provider: ModelProvider) {
     chat_screenshot: {
       siliconflow: 'Qwen/Qwen2.5-VL-32B-Instruct',
       openrouter: 'qwen/qwen2.5-vl-32b-instruct'
+    },
+    memory_dialogue: {
+      siliconflow: 'Qwen/Qwen2.5-72B-Instruct',
+      openrouter: 'qwen/qwen-2.5-72b-instruct'
     }
   } as const
 

@@ -21,6 +21,100 @@ export const canonicalPersonIdSchema = z.object({
   canonicalPersonId: z.string().min(1)
 })
 
+export const memoryWorkspaceScopeSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('global')
+  }),
+  z.object({
+    kind: z.literal('person'),
+    canonicalPersonId: z.string().min(1)
+  }),
+  z.object({
+    kind: z.literal('group'),
+    anchorPersonId: z.string().min(1)
+  })
+])
+
+export const askMemoryWorkspaceInputSchema = z.object({
+  scope: memoryWorkspaceScopeSchema,
+  question: z.string().min(1)
+})
+
+export const memoryWorkspaceCompareTargetSchema = z.discriminatedUnion('executionMode', [
+  z.object({
+    targetId: z.string().min(1),
+    label: z.string().min(1),
+    executionMode: z.literal('local_baseline')
+  }),
+  z.object({
+    targetId: z.string().min(1),
+    label: z.string().min(1),
+    executionMode: z.literal('provider_model'),
+    provider: z.enum(['siliconflow', 'openrouter']),
+    model: z.string().min(1)
+  })
+])
+
+export const runMemoryWorkspaceCompareInputSchema = z.object({
+  scope: memoryWorkspaceScopeSchema,
+  question: z.string().min(1),
+  judge: z.object({
+    enabled: z.boolean(),
+    provider: z.enum(['siliconflow', 'openrouter']).optional(),
+    model: z.string().min(1).optional()
+  }).optional(),
+  targets: z.array(memoryWorkspaceCompareTargetSchema).min(1).optional()
+})
+
+export const memoryWorkspaceSessionFilterSchema = z.object({
+  scope: memoryWorkspaceScopeSchema.optional()
+}).optional().default({})
+
+export const memoryWorkspaceSessionIdSchema = z.object({
+  sessionId: z.string().min(1)
+})
+
+export const memoryWorkspaceCompareSessionFilterSchema = z.object({
+  scope: memoryWorkspaceScopeSchema.optional()
+}).optional().default({})
+
+export const memoryWorkspaceCompareSessionIdSchema = z.object({
+  compareSessionId: z.string().min(1)
+})
+
+export const askMemoryWorkspacePersistedInputSchema = z.object({
+  scope: memoryWorkspaceScopeSchema,
+  question: z.string().min(1),
+  sessionId: z.string().min(1).optional()
+})
+
+export const contextPackExportModeSchema = z.enum([
+  'approved_only',
+  'approved_plus_derived'
+])
+
+export const contextPackDestinationSchema = z.object({
+  destinationRoot: z.string().min(1)
+})
+
+export const personContextPackInputSchema = z.object({
+  canonicalPersonId: z.string().min(1),
+  mode: contextPackExportModeSchema.optional()
+})
+
+export const groupContextPackInputSchema = z.object({
+  anchorPersonId: z.string().min(1),
+  mode: contextPackExportModeSchema.optional()
+})
+
+export const personContextPackExportInputSchema = personContextPackInputSchema.extend({
+  destinationRoot: z.string().min(1)
+})
+
+export const groupContextPackExportInputSchema = groupContextPackInputSchema.extend({
+  destinationRoot: z.string().min(1)
+})
+
 export const reviewQueueListInputSchema = z.object({
   status: z.string().min(1).optional()
 }).optional().default({})

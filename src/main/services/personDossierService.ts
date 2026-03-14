@@ -1,8 +1,11 @@
 import type {
   CanonicalPersonDetail,
   PersonDossier,
+  PersonDossierConflictSummary,
   PersonDossierEvidenceRef,
+  PersonDossierGapSummary,
   PersonDossierRelationshipSummary,
+  PersonDossierReviewShortcut,
   PersonDossierSection,
   PersonDossierSectionItem,
   PersonDossierTimelineHighlight,
@@ -12,6 +15,7 @@ import type {
 } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
 import { getPersonGraph } from './graphService'
+import { listReviewWorkbenchItems } from './reviewWorkbenchReadService'
 import { getCanonicalPerson, getPersonTimeline } from './timelineService'
 
 const PREFERRED_SECTION_ORDER = [
@@ -193,6 +197,117 @@ function buildEvidenceBacktrace(
   return [...uniqueRefs.values()]
 }
 
+function buildConflictSummary(db: ArchiveDatabase, canonicalPersonId: string): PersonDossierConflictSummary[] {
+  const pendingItems = listReviewWorkbenchItems(db, {
+    status: 'pending',
+    canonicalPersonId
+  })
+  const grouped = new Map<string, {
+    fieldKey: string | null
+    pendingCount: number
+    distinctValues: Set<string>
+    hasConflict: boolean
+  }>()
+
+  for (const item of pendingItems) {
+    const key = item.fieldKey ?? '__unkeyed__'
+    const existing = grouped.get(key) ?? {
+      fieldKey: item.fieldKey,
+      pendingCount: 0,
+      distinctValues: new Set<string>(),
+      hasConflict: false
+    }
+
+    existing.pendingCount += 1
+    if (item.displayValue) {
+      existing.distinctValues.add(item.displayValue)
+    }
+    existing.hasConflict = existing.hasConflict || item.hasConflict
+    grouped.set(key, existing)
+  }
+
+  return [...grouped.values()]
+    .map((group) => ({
+      fieldKey: group.fieldKey,
+      title: group.fieldKey ? `${titleCase(group.fieldKey)} conflict` : 'Open conflict',
+      pendingCount: group.pendingCount,
+      distinctValues: [...group.distinctValues].sort((left, right) => left.localeCompare(right)),
+      displayType: 'open_conflict' as const,
+      hasConflict: group.hasConflict || group.distinctValues.size > 1
+    }))
+    .filter((group) => group.hasConflict)
+    .map(({ hasConflict: _hasConflict, ...group }) => group)
+}
+
+function buildCoverageGaps(
+  thematicSections: PersonDossierSection[],
+  timelineHighlights: PersonDossierTimelineHighlight[],
+  relationshipSummary: PersonDossierRelationshipSummary[]
+): PersonDossierGapSummary[] {
+  const gaps = thematicSections
+    .filter((section) => section.displayType === 'coverage_gap')
+    .map((section) => ({
+      gapKey: `section.${section.sectionKey}`,
+      title: `${section.title} coverage gap`,
+      detail: section.items[0]?.value ?? `No approved ${section.title.toLowerCase()} facts yet.`,
+      displayType: 'coverage_gap' as const
+    }))
+
+  if (timelineHighlights.length === 0) {
+    gaps.push({
+      gapKey: 'timeline.empty',
+      title: 'Timeline coverage gap',
+      detail: 'No approved timeline highlights yet.',
+      displayType: 'coverage_gap'
+    })
+  }
+
+  if (relationshipSummary.length === 0) {
+    gaps.push({
+      gapKey: 'relationships.empty',
+      title: 'Relationship coverage gap',
+      detail: 'No approved relationship context yet.',
+      displayType: 'coverage_gap'
+    })
+  }
+
+  return gaps
+}
+
+function buildReviewShortcuts(
+  db: ArchiveDatabase,
+  canonicalPersonId: string,
+  conflictSummary: PersonDossierConflictSummary[]
+): PersonDossierReviewShortcut[] {
+  const pendingItems = listReviewWorkbenchItems(db, {
+    status: 'pending',
+    canonicalPersonId
+  })
+
+  const shortcuts: PersonDossierReviewShortcut[] = []
+
+  if (pendingItems.length > 0) {
+    shortcuts.push({
+      label: `Open pending review (${pendingItems.length})`,
+      canonicalPersonId,
+      queueItemId: pendingItems[0]?.queueItemId
+    })
+  }
+
+  for (const conflict of conflictSummary) {
+    const matchingItem = pendingItems.find((item) => item.fieldKey === conflict.fieldKey && item.hasConflict)
+    shortcuts.push({
+      label: `Open ${conflict.fieldKey ?? 'field'} conflicts`,
+      canonicalPersonId,
+      fieldKey: conflict.fieldKey ?? undefined,
+      hasConflict: true,
+      queueItemId: matchingItem?.queueItemId
+    })
+  }
+
+  return shortcuts
+}
+
 export function getPersonDossier(db: ArchiveDatabase, input: { canonicalPersonId: string }): PersonDossier | null {
   const person = getCanonicalPerson(db, input)
   if (!person) {
@@ -204,6 +319,9 @@ export function getPersonDossier(db: ArchiveDatabase, input: { canonicalPersonId
   const thematicSections = buildThematicSections(person)
   const timelineHighlights = buildTimelineHighlights(timeline)
   const relationshipSummary = buildRelationshipSummary(graph)
+  const conflictSummary = buildConflictSummary(db, input.canonicalPersonId)
+  const coverageGaps = buildCoverageGaps(thematicSections, timelineHighlights, relationshipSummary)
+  const reviewShortcuts = buildReviewShortcuts(db, input.canonicalPersonId, conflictSummary)
 
   return {
     person,
@@ -211,6 +329,9 @@ export function getPersonDossier(db: ArchiveDatabase, input: { canonicalPersonId
     thematicSections,
     timelineHighlights,
     relationshipSummary,
+    conflictSummary,
+    coverageGaps,
+    reviewShortcuts,
     evidenceBacktrace: buildEvidenceBacktrace(thematicSections, timelineHighlights, relationshipSummary)
   }
 }

@@ -1,0 +1,347 @@
+import type {
+  MemoryWorkspaceCompareRunRecord,
+  MemoryWorkspaceCompareSessionSummary,
+  MemoryWorkspaceCitation,
+  MemoryWorkspaceResponse,
+  MemoryWorkspaceScope,
+  MemoryWorkspaceSessionSummary,
+  MemoryWorkspaceTurnRecord
+} from '../../shared/archiveContracts'
+
+function formatDisplayType(displayType: string) {
+  return displayType.replace(/_/g, ' ')
+}
+
+function renderCitation(
+  citation: MemoryWorkspaceCitation,
+  handlers: {
+    onOpenPerson?: (canonicalPersonId: string) => void
+    onOpenGroup?: (anchorPersonId: string) => void
+    onOpenEvidenceFile?: (fileId: string) => void
+    onOpenReviewHistory?: (citation: MemoryWorkspaceCitation) => void
+  }
+) {
+  if (citation.kind === 'person' && handlers.onOpenPerson) {
+    return (
+      <button key={citation.citationId} type="button" onClick={() => handlers.onOpenPerson?.(citation.targetId)}>
+        {citation.label}
+      </button>
+    )
+  }
+
+  if (citation.kind === 'group' && handlers.onOpenGroup) {
+    return (
+      <button key={citation.citationId} type="button" onClick={() => handlers.onOpenGroup?.(citation.targetId)}>
+        {citation.label}
+      </button>
+    )
+  }
+
+  if (citation.kind === 'file' && handlers.onOpenEvidenceFile) {
+    return (
+      <button key={citation.citationId} type="button" onClick={() => handlers.onOpenEvidenceFile?.(citation.targetId)}>
+        {citation.label}
+      </button>
+    )
+  }
+
+  if ((citation.kind === 'journal' || citation.kind === 'review') && handlers.onOpenReviewHistory) {
+    return (
+      <button key={citation.citationId} type="button" onClick={() => handlers.onOpenReviewHistory?.(citation)}>
+        {citation.label}
+      </button>
+    )
+  }
+
+  return (
+    <span key={citation.citationId}>
+      {citation.label}
+    </span>
+  )
+}
+
+function scopePrompt(scope: MemoryWorkspaceScope) {
+  if (scope.kind === 'person') {
+    return 'Ask about this person’s approved facts, timeline, relationships, or open conflicts.'
+  }
+
+  if (scope.kind === 'group') {
+    return 'Ask about this group’s shared events, timeline windows, or unresolved ambiguity.'
+  }
+
+  return 'Ask about the whole archive, people, groups, or review pressure.'
+}
+
+function sessionLabel(summary: MemoryWorkspaceSessionSummary) {
+  return `${summary.title} · ${summary.latestQuestion ?? 'New session'}`
+}
+
+function compareSessionLabel(summary: MemoryWorkspaceCompareSessionSummary) {
+  return `${summary.title} · ${summary.question}`
+}
+
+function compareSessionTargetsLabel(summary: MemoryWorkspaceCompareSessionSummary) {
+  return summary.metadata.targetLabels.length
+    ? summary.metadata.targetLabels.join(', ')
+    : 'none'
+}
+
+function renderResponse(
+  response: MemoryWorkspaceResponse,
+  handlers: {
+    onOpenPerson?: (canonicalPersonId: string) => void
+    onOpenGroup?: (anchorPersonId: string) => void
+    onOpenEvidenceFile?: (fileId: string) => void
+    onOpenReviewHistory?: (citation: MemoryWorkspaceCitation) => void
+  }
+) {
+  return (
+    <>
+      <section aria-label="Answer">
+        <h3>Answer</h3>
+        <p>{response.answer.summary}</p>
+        <p>Display type: {formatDisplayType(response.answer.displayType)}</p>
+        {response.answer.citations.length ? (
+          <div>
+            {response.answer.citations.map((citation) => renderCitation(citation, handlers))}
+          </div>
+        ) : null}
+      </section>
+
+      <section aria-label="Guardrails">
+        <h3>Guardrails</h3>
+        <p>{response.guardrail.decision}</p>
+        <p>Fallback applied: {response.guardrail.fallbackApplied ? 'yes' : 'no'}</p>
+        <p>Citation count: {response.guardrail.citationCount}</p>
+        <p>Source kinds: {response.guardrail.sourceKinds.join(', ') || 'none'}</p>
+        {response.guardrail.reasonCodes.length ? (
+          <ul>
+            {response.guardrail.reasonCodes.map((reasonCode) => (
+              <li key={reasonCode}>{reasonCode}</li>
+            ))}
+          </ul>
+        ) : (
+          <p>No guardrail reasons triggered.</p>
+        )}
+      </section>
+
+      <section aria-label="Context Cards">
+        <h3>Context Cards</h3>
+        {response.contextCards.map((card) => (
+          <section key={card.cardId} aria-label={card.title}>
+            <h4>{card.title}</h4>
+            <p>{card.body}</p>
+            <p>Display type: {formatDisplayType(card.displayType)}</p>
+            {card.citations.length ? (
+              <div>
+                {card.citations.map((citation) => renderCitation(citation, handlers))}
+              </div>
+            ) : null}
+          </section>
+        ))}
+      </section>
+    </>
+  )
+}
+
+function renderCompareRun(
+  run: MemoryWorkspaceCompareRunRecord,
+  handlers: {
+    onOpenPerson?: (canonicalPersonId: string) => void
+    onOpenGroup?: (anchorPersonId: string) => void
+    onOpenEvidenceFile?: (fileId: string) => void
+    onOpenReviewHistory?: (citation: MemoryWorkspaceCitation) => void
+  }
+) {
+  return (
+    <section key={run.compareRunId} aria-label={`Compare Run ${run.ordinal}`}>
+      <h3>{run.target.label}</h3>
+      <p>Status: {run.status}</p>
+      <p>Provider: {run.provider ?? 'local'}</p>
+      <p>Model: {run.model ?? 'baseline'}</p>
+      <p>Score: {run.evaluation.totalScore}/{run.evaluation.maxScore}</p>
+      <p>Band: {run.evaluation.band}</p>
+      <ul aria-label={`Compare Scorecard ${run.ordinal}`}>
+        {run.evaluation.dimensions.map((dimension) => (
+          <li key={dimension.key}>
+            <strong>{dimension.label}</strong>
+            {' '}
+            ·
+            {' '}
+            {dimension.score}/{dimension.maxScore}
+            {' '}
+            ·
+            {' '}
+            {dimension.rationale}
+          </li>
+        ))}
+      </ul>
+      <section aria-label={`Judge Verdict ${run.ordinal}`}>
+        <h4>Judge verdict</h4>
+        <p>Judge status: {run.judge.status}</p>
+        {run.judge.model ? <p>Judge model: {run.judge.model}</p> : null}
+        {run.judge.status === 'completed' ? (
+          <>
+            <p>Judge decision: {run.judge.decision}</p>
+            <p>Judge score: {run.judge.score}/5</p>
+          </>
+        ) : null}
+        {run.judge.rationale ? <p>{run.judge.rationale}</p> : null}
+        {run.judge.strengths.length ? (
+          <ul aria-label={`Judge Strengths ${run.ordinal}`}>
+            {run.judge.strengths.map((strength) => (
+              <li key={strength}>{strength}</li>
+            ))}
+          </ul>
+        ) : null}
+        {run.judge.concerns.length ? (
+          <ul aria-label={`Judge Concerns ${run.ordinal}`}>
+            {run.judge.concerns.map((concern) => (
+              <li key={concern}>{concern}</li>
+            ))}
+          </ul>
+        ) : null}
+        {run.judge.errorMessage ? <p>Judge error: {run.judge.errorMessage}</p> : null}
+      </section>
+      {run.errorMessage ? <p>Error: {run.errorMessage}</p> : null}
+      {run.response ? renderResponse(run.response, handlers) : null}
+    </section>
+  )
+}
+
+export function MemoryWorkspaceView(props: {
+  scope: MemoryWorkspaceScope
+  sessionSummaries: MemoryWorkspaceSessionSummary[]
+  selectedSessionId: string | null
+  turns: MemoryWorkspaceTurnRecord[]
+  compareSessionSummaries: MemoryWorkspaceCompareSessionSummary[]
+  selectedCompareSessionId: string | null
+  compareRuns: MemoryWorkspaceCompareRunRecord[]
+  hasLoadedSessions?: boolean
+  hasLoadedCompareSessions?: boolean
+  isLoading?: boolean
+  isLoadingSessions?: boolean
+  isComparing?: boolean
+  isLoadingCompareSessions?: boolean
+  emptyStateMessage?: string | null
+  compareEmptyStateMessage?: string | null
+  onSelectSession?: (sessionId: string) => void
+  onSelectCompareSession?: (compareSessionId: string) => void
+  onStartNewSession?: () => void
+  onOpenPerson?: (canonicalPersonId: string) => void
+  onOpenGroup?: (anchorPersonId: string) => void
+  onOpenEvidenceFile?: (fileId: string) => void
+  onOpenReviewHistory?: (citation: MemoryWorkspaceCitation) => void
+}) {
+  const activeResponse = props.turns[props.turns.length - 1]?.response ?? null
+  const promptMessage =
+    props.emptyStateMessage ??
+    (props.hasLoadedSessions && props.sessionSummaries.length === 0
+      ? 'No saved sessions for this scope yet.'
+      : scopePrompt(props.scope))
+  const shouldShowPrompt =
+    !props.turns.length &&
+    !props.isLoading &&
+    (!props.hasLoadedSessions || props.sessionSummaries.length > 0 || Boolean(props.emptyStateMessage))
+
+  return (
+    <section>
+      <h1>Memory Workspace</h1>
+      {props.hasLoadedSessions ? (
+        <section aria-label="Saved Sessions">
+          <h2>Saved Sessions</h2>
+          {props.sessionSummaries.length ? (
+            <>
+              <button type="button" onClick={props.onStartNewSession} disabled={!props.onStartNewSession}>
+                Start new session
+              </button>
+              <ul>
+                {props.sessionSummaries.map((summary) => (
+                  <li key={summary.sessionId}>
+                    <button
+                      type="button"
+                      aria-pressed={summary.sessionId === props.selectedSessionId}
+                      onClick={() => props.onSelectSession?.(summary.sessionId)}
+                      disabled={!props.onSelectSession}
+                    >
+                      {sessionLabel(summary)}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p>No saved sessions for this scope yet.</p>
+          )}
+        </section>
+      ) : null}
+
+      {shouldShowPrompt ? <p>{promptMessage}</p> : null}
+      {props.isLoading ? <p>Asking memory workspace…</p> : null}
+      {activeResponse ? (
+        <section aria-label="Workspace Response">
+          <h2>{activeResponse.title}</h2>
+          {props.turns.map((turn) => (
+            <section key={turn.turnId} aria-label={`Turn ${turn.ordinal}`}>
+              <h3>{turn.question}</h3>
+              <p>{turn.createdAt}</p>
+              {renderResponse(turn.response, props)}
+            </section>
+          ))}
+        </section>
+      ) : null}
+
+      {props.hasLoadedCompareSessions ? (
+        <section aria-label="Saved Compare Sessions">
+          <h2>Saved Compare Sessions</h2>
+          {props.compareSessionSummaries.length ? (
+            <ul>
+              {props.compareSessionSummaries.map((summary) => (
+                <li key={summary.compareSessionId}>
+                  <button
+                    type="button"
+                    aria-pressed={summary.compareSessionId === props.selectedCompareSessionId}
+                    onClick={() => props.onSelectCompareSession?.(summary.compareSessionId)}
+                    disabled={!props.onSelectCompareSession}
+                  >
+                    {compareSessionLabel(summary)}
+                  </button>
+                  <p>Targets: {compareSessionTargetsLabel(summary)}</p>
+                  <p>Judge: {summary.metadata.judge.status}</p>
+                  {summary.metadata.failedRunCount > 0 ? <p>Failed runs: {summary.metadata.failedRunCount}</p> : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>No saved compare sessions for this scope yet.</p>
+          )}
+        </section>
+      ) : null}
+
+      {props.isComparing ? <p>Running compare…</p> : null}
+      {props.compareEmptyStateMessage ? <p>{props.compareEmptyStateMessage}</p> : null}
+      {props.compareRuns.length ? (
+        <section aria-label="Compare Results">
+          <h2>Compare Results</h2>
+          {props.compareSessionSummaries.find((summary) => summary.compareSessionId === props.selectedCompareSessionId)?.recommendation ? (
+            <section aria-label="Recommended Compare Result">
+              <h3>Recommended result</h3>
+              <p>
+                {
+                  props.compareSessionSummaries.find((summary) => summary.compareSessionId === props.selectedCompareSessionId)?.recommendation?.recommendedTargetLabel
+                  ?? 'No recommendation'
+                }
+              </p>
+              <p>
+                {
+                  props.compareSessionSummaries.find((summary) => summary.compareSessionId === props.selectedCompareSessionId)?.recommendation?.rationale
+                }
+              </p>
+            </section>
+          ) : null}
+          {props.compareRuns.map((run) => renderCompareRun(run, props))}
+        </section>
+      ) : null}
+    </section>
+  )
+}

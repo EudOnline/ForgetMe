@@ -49,6 +49,9 @@ describe('PersonDetailPage approved profile', () => {
           }],
           timelineHighlights: [],
           relationshipSummary: [],
+          conflictSummary: [],
+          coverageGaps: [],
+          reviewShortcuts: [],
           evidenceBacktrace: []
         })
       }

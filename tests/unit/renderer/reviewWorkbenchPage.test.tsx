@@ -364,6 +364,108 @@ describe('ReviewWorkbenchPage', () => {
     expect(getReviewWorkbenchItem).toHaveBeenLastCalledWith('rq-a1')
   })
 
+  it('auto-selects the matching conflict group from the initial queue item', async () => {
+    const getReviewWorkbenchItem = vi.fn().mockImplementation(async (queueItemId: string) => {
+      if (queueItemId === 'rq-a1') {
+        return buildWorkbenchDetail({
+          queueItemId: 'rq-a1',
+          candidateId: 'fc-a1',
+          canonicalPersonId: 'cp-a',
+          canonicalPersonName: 'Alice Chen',
+          fieldKey: 'school_name',
+          displayValue: '北京大学',
+          fileName: 'alice-transcript-a.pdf'
+        })
+      }
+
+      return buildWorkbenchDetail({
+        queueItemId: 'rq-a2',
+        candidateId: 'fc-a2',
+        canonicalPersonId: 'cp-a',
+        canonicalPersonName: 'Alice Chen',
+        fieldKey: 'school_name',
+        displayValue: '清华大学',
+        fileName: 'alice-transcript-b.pdf'
+      })
+    })
+
+    installArchiveApi({
+      listReviewInboxPeople: vi.fn().mockResolvedValue([
+        {
+          canonicalPersonId: 'cp-a',
+          canonicalPersonName: 'Alice Chen',
+          pendingCount: 2,
+          conflictCount: 2,
+          fieldKeys: ['school_name'],
+          itemTypes: ['structured_field_candidate'],
+          nextQueueItemId: 'rq-a1',
+          latestPendingCreatedAt: '2026-03-11T00:05:00.000Z',
+          hasContinuousSequence: true
+        }
+      ]),
+      listReviewConflictGroups: vi.fn().mockResolvedValue([
+        {
+          groupKey: 'cp-a::structured_field_candidate::school_name',
+          canonicalPersonId: 'cp-a',
+          canonicalPersonName: 'Alice Chen',
+          itemType: 'structured_field_candidate',
+          fieldKey: 'school_name',
+          pendingCount: 2,
+          distinctValues: ['北京大学', '清华大学'],
+          hasConflict: true,
+          nextQueueItemId: 'rq-a1',
+          latestPendingCreatedAt: '2026-03-11T00:05:00.000Z'
+        }
+      ]),
+      listReviewWorkbenchItems: vi.fn().mockResolvedValue([
+        {
+          queueItemId: 'rq-a1',
+          itemType: 'structured_field_candidate',
+          candidateId: 'fc-a1',
+          status: 'pending',
+          priority: 0,
+          confidence: 0.98,
+          summary: { fieldKey: 'school_name' },
+          canonicalPersonId: 'cp-a',
+          canonicalPersonName: 'Alice Chen',
+          fieldKey: 'school_name',
+          displayValue: '北京大学',
+          hasConflict: true,
+          createdAt: '2026-03-11T00:00:00.000Z',
+          reviewedAt: null
+        },
+        {
+          queueItemId: 'rq-a2',
+          itemType: 'structured_field_candidate',
+          candidateId: 'fc-a2',
+          status: 'pending',
+          priority: 0,
+          confidence: 0.97,
+          summary: { fieldKey: 'school_name' },
+          canonicalPersonId: 'cp-a',
+          canonicalPersonName: 'Alice Chen',
+          fieldKey: 'school_name',
+          displayValue: '清华大学',
+          hasConflict: true,
+          createdAt: '2026-03-11T00:05:00.000Z',
+          reviewedAt: null
+        }
+      ]),
+      getReviewWorkbenchItem,
+      approveReviewItem: vi.fn(),
+      approveSafeReviewGroup: vi.fn(),
+      rejectReviewItem: vi.fn(),
+      undoDecision: vi.fn()
+    })
+
+    render(<ReviewWorkbenchPage initialQueueItemId="rq-a2" />)
+
+    expect(await screen.findByText('Conflict Compare')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'school_name' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '清华大学' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText('清华大学 · 1')).toBeInTheDocument()
+  })
+
   it('shows safe batch approval for a no-conflict profile attribute group and confirms before execution', async () => {
     const approveSafeReviewGroup = vi.fn().mockResolvedValue({
       status: 'approved',

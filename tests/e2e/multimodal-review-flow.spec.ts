@@ -10,8 +10,7 @@ test('reviews a high-risk OCR field and shows it on the person profile', async (
 
   fs.writeFileSync(chatFixture, JSON.stringify({
     messages: [
-      { sender: 'Alice Chen', text: 'hello' },
-      { sender: 'Bob', text: 'hi' }
+      { sender: 'Alice Chen', text: 'hello' }
     ]
   }))
 
@@ -29,9 +28,10 @@ test('reviews a high-risk OCR field and shows it on the person profile', async (
   await page.getByText('Choose Files').click()
   await page.getByText('Review Queue').click()
   await expect(page.getByText('structured_field_candidate')).toBeVisible()
-  await page.getByText('Approve').click()
+  await page.getByRole('button', { name: 'Approve' }).first().click()
   await page.getByText('People').click()
   await page.getByRole('button', { name: /^Alice Chen$/ }).click()
-  await expect(page.getByText('北京大学')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Person Dossier' })).toBeVisible()
+  await expect(page.locator('li').filter({ hasText: '北京大学' }).first()).toBeVisible()
   await electronApp.close()
 })

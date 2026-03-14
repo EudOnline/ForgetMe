@@ -2,8 +2,10 @@ import fs from 'node:fs'
 import { join } from 'node:path'
 import { app, BrowserWindow } from 'electron'
 import { registerArchiveIpc } from './ipc/archiveIpc'
+import { registerContextPackIpc } from './ipc/contextPackIpc'
 import { registerPreservationIpc } from './ipc/preservationIpc'
 import { registerEnrichmentIpc } from './ipc/enrichmentIpc'
+import { registerMemoryWorkspaceIpc } from './ipc/memoryWorkspaceIpc'
 import { registerPeopleIpc } from './ipc/peopleIpc'
 import { registerReviewIpc } from './ipc/reviewIpc'
 import { registerSearchIpc } from './ipc/searchIpc'
@@ -59,8 +61,10 @@ let enrichmentRunner: ReturnType<typeof createEnrichmentRunner> | null = null
 app.whenReady().then(() => {
   const appPaths = ensureAppPaths(resolveAppDataRoot())
   registerArchiveIpc(appPaths)
+  registerContextPackIpc(appPaths)
   registerPreservationIpc(appPaths)
   registerEnrichmentIpc(appPaths)
+  registerMemoryWorkspaceIpc(appPaths)
   registerPeopleIpc(appPaths)
   registerReviewIpc(appPaths)
   registerSearchIpc(appPaths)

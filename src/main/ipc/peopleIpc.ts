@@ -5,6 +5,7 @@ import type { AppPaths } from '../services/appPaths'
 import { openDatabase, runMigrations } from '../services/db'
 import { getPersonGraph, setRelationshipLabel } from '../services/graphService'
 import { approveProfileAttributeCandidate, rejectProfileAttributeCandidate, undoProfileAttributeDecision } from '../services/profileCandidateReviewService'
+import { getGroupPortrait, listGroupPortraits } from '../services/groupPortraitService'
 import { getPersonDossier } from '../services/personDossierService'
 import { listPersonProfileAttributes, listProfileAttributeCandidates } from '../services/profileReadService'
 import { getCanonicalPerson, getPeopleList, getPersonTimeline } from '../services/timelineService'
@@ -17,6 +18,8 @@ export function registerPeopleIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:listCanonicalPeople')
   ipcMain.removeHandler('archive:getCanonicalPerson')
   ipcMain.removeHandler('archive:getPersonDossier')
+  ipcMain.removeHandler('archive:listGroupPortraits')
+  ipcMain.removeHandler('archive:getGroupPortrait')
   ipcMain.removeHandler('archive:getPersonTimeline')
   ipcMain.removeHandler('archive:getPersonGraph')
   ipcMain.removeHandler('archive:setRelationshipLabel')
@@ -50,6 +53,23 @@ export function registerPeopleIpc(appPaths: AppPaths) {
     const dossier = getPersonDossier(db, { canonicalPersonId })
     db.close()
     return dossier
+  })
+
+  ipcMain.handle('archive:listGroupPortraits', async () => {
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    const portraits = listGroupPortraits(db)
+    db.close()
+    return portraits
+  })
+
+  ipcMain.handle('archive:getGroupPortrait', async (_event, payload) => {
+    const { canonicalPersonId } = canonicalPersonIdSchema.parse(payload)
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    const portrait = getGroupPortrait(db, { canonicalPersonId })
+    db.close()
+    return portrait
   })
 
   ipcMain.handle('archive:getPersonTimeline', async (_event, payload) => {

@@ -58,6 +58,41 @@ describe('archiveApi dossier methods', () => {
 
     const archiveApi = getArchiveApi()
 
+    await expect(archiveApi.listGroupPortraits()).resolves.toEqual([])
     await expect(archiveApi.getPersonDossier('cp-1')).resolves.toBeNull()
+    await expect(archiveApi.askMemoryWorkspace({
+      scope: { kind: 'global' },
+      question: '现在最值得关注什么？'
+    })).resolves.toBeNull()
+    await expect(archiveApi.listMemoryWorkspaceSessions()).resolves.toEqual([])
+    await expect(archiveApi.getMemoryWorkspaceSession('session-1')).resolves.toBeNull()
+    await expect(archiveApi.askMemoryWorkspacePersisted({
+      scope: { kind: 'global' },
+      question: '现在最值得关注什么？'
+    })).resolves.toBeNull()
+    await expect(archiveApi.runMemoryWorkspaceCompare({
+      scope: { kind: 'global' },
+      question: '现在最值得关注什么？'
+    })).resolves.toBeNull()
+    await expect(archiveApi.listMemoryWorkspaceCompareSessions()).resolves.toEqual([])
+    await expect(archiveApi.getMemoryWorkspaceCompareSession('compare-session-1')).resolves.toBeNull()
+    await expect(archiveApi.getGroupPortrait('cp-1')).resolves.toBeNull()
+    await expect(archiveApi.selectContextPackExportDestination()).resolves.toBeNull()
+    await expect(archiveApi.getPersonContextPack({
+      canonicalPersonId: 'cp-1',
+      mode: 'approved_plus_derived'
+    })).resolves.toBeNull()
+    await expect(archiveApi.getGroupContextPack({
+      anchorPersonId: 'cp-1'
+    })).resolves.toBeNull()
+    await expect(archiveApi.exportPersonContextPack({
+      canonicalPersonId: 'cp-1',
+      destinationRoot: '/tmp/context-packs'
+    })).resolves.toBeNull()
+    await expect(archiveApi.exportGroupContextPack({
+      anchorPersonId: 'cp-1',
+      destinationRoot: '/tmp/context-packs',
+      mode: 'approved_only'
+    })).resolves.toBeNull()
   })
 })
