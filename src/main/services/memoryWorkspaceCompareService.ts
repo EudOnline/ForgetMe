@@ -669,39 +669,135 @@ function compareRunsForRecommendation(left: MemoryWorkspaceCompareRunRecord, rig
   return left.ordinal - right.ordinal
 }
 
+function judgeDecisionRank(decision: MemoryWorkspaceCompareJudgeDecision | null) {
+  if (decision === 'aligned') {
+    return 3
+  }
+
+  if (decision === 'needs_review') {
+    return 2
+  }
+
+  if (decision === 'not_grounded') {
+    return 1
+  }
+
+  return 0
+}
+
+function compareRunsForJudgeRecommendation(left: MemoryWorkspaceCompareRunRecord, right: MemoryWorkspaceCompareRunRecord) {
+  const decisionDelta = judgeDecisionRank(right.judge.decision) - judgeDecisionRank(left.judge.decision)
+  if (decisionDelta !== 0) {
+    return decisionDelta
+  }
+
+  const scoreDelta = (right.judge.score ?? 0) - (left.judge.score ?? 0)
+  if (scoreDelta !== 0) {
+    return scoreDelta
+  }
+
+  return compareRunsForRecommendation(left, right)
+}
+
+function judgeMetricsEqual(left: MemoryWorkspaceCompareRunRecord, right: MemoryWorkspaceCompareRunRecord) {
+  return judgeDecisionRank(left.judge.decision) === judgeDecisionRank(right.judge.decision)
+    && (left.judge.score ?? 0) === (right.judge.score ?? 0)
+}
+
+function noRecommendation(rationale: string): MemoryWorkspaceCompareRecommendation {
+  return {
+    source: 'deterministic',
+    decision: 'no_recommendation',
+    recommendedCompareRunId: null,
+    recommendedTargetLabel: null,
+    rationale
+  }
+}
+
+function buildDeterministicRecommendation(bestRun: MemoryWorkspaceCompareRunRecord): MemoryWorkspaceCompareRecommendation {
+  const bestReason = bestRun.evaluation.dimensions
+    .slice()
+    .sort((left, right) => right.score - left.score)[0]
+
+  return {
+    source: 'deterministic',
+    decision: 'recommend_run',
+    recommendedCompareRunId: bestRun.compareRunId,
+    recommendedTargetLabel: bestRun.target.label,
+    rationale: `Highest deterministic rubric score (${bestRun.evaluation.totalScore}/${bestRun.evaluation.maxScore}) led by ${bestReason?.label ?? 'overall quality'}${bestRun.target.executionMode === 'local_baseline' ? ', with tie-break preference for the safer baseline' : ''}.`
+  }
+}
+
+function buildJudgeAssistedRecommendation(
+  winner: MemoryWorkspaceCompareRunRecord,
+  deterministicWinner: MemoryWorkspaceCompareRunRecord
+): MemoryWorkspaceCompareRecommendation {
+  return {
+    source: 'judge_assisted',
+    decision: 'recommend_run',
+    recommendedCompareRunId: winner.compareRunId,
+    recommendedTargetLabel: winner.target.label,
+    rationale: `A judge-assisted override selected ${winner.target.label} after full judge review found it was the only aligned top-scoring run (${winner.judge.score ?? 0}/5), replacing ${deterministicWinner.target.label}.`
+  }
+}
+
+function resolveJudgeAssistedRecommendation(
+  completedRuns: MemoryWorkspaceCompareRunRecord[],
+  deterministicWinner: MemoryWorkspaceCompareRunRecord
+) {
+  if (!completedRuns.some((run) => run.target.executionMode === 'provider_model')) {
+    return null
+  }
+
+  if (completedRuns.some((run) => run.judge.status !== 'completed')) {
+    return null
+  }
+
+  const ordered = [...completedRuns].sort(compareRunsForJudgeRecommendation)
+  const bestRun = ordered[0]
+  const secondRun = ordered[1]
+  if (!bestRun) {
+    return null
+  }
+
+  if (bestRun.target.executionMode !== 'provider_model') {
+    return null
+  }
+
+  if (bestRun.judge.decision !== 'aligned' || bestRun.evaluation.band === 'failed') {
+    return null
+  }
+
+  if (deterministicWinner.compareRunId === bestRun.compareRunId) {
+    return null
+  }
+
+  if (secondRun && judgeMetricsEqual(bestRun, secondRun)) {
+    return null
+  }
+
+  return buildJudgeAssistedRecommendation(bestRun, deterministicWinner)
+}
+
 function buildRecommendation(runs: MemoryWorkspaceCompareRunRecord[]): MemoryWorkspaceCompareRecommendation | null {
   const completedRuns = runs.filter((run) => run.status === 'completed')
   if (!completedRuns.length) {
-    return {
-      decision: 'no_recommendation',
-      recommendedCompareRunId: null,
-      recommendedTargetLabel: null,
-      rationale: 'No completed compare run is available yet.'
-    }
+    return noRecommendation('No completed compare run is available yet.')
   }
 
   const ordered = [...completedRuns].sort(compareRunsForRecommendation)
   const bestRun = ordered[0]
 
   if (!bestRun) {
-    return {
-      decision: 'no_recommendation',
-      recommendedCompareRunId: null,
-      recommendedTargetLabel: null,
-      rationale: 'No completed compare run is available yet.'
-    }
+    return noRecommendation('No completed compare run is available yet.')
   }
 
-  const bestReason = bestRun.evaluation.dimensions
-    .slice()
-    .sort((left, right) => right.score - left.score)[0]
-
-  return {
-    decision: 'recommend_run',
-    recommendedCompareRunId: bestRun.compareRunId,
-    recommendedTargetLabel: bestRun.target.label,
-    rationale: `Highest deterministic rubric score (${bestRun.evaluation.totalScore}/${bestRun.evaluation.maxScore}) led by ${bestReason?.label ?? 'overall quality'}${bestRun.target.executionMode === 'local_baseline' ? ', with tie-break preference for the safer baseline' : ''}.`
+  const judgeAssistedRecommendation = resolveJudgeAssistedRecommendation(completedRuns, bestRun)
+  if (judgeAssistedRecommendation) {
+    return judgeAssistedRecommendation
   }
+
+  return buildDeterministicRecommendation(bestRun)
 }
 
 function judgeSnapshotEnabled(run: MemoryWorkspaceCompareRunRecord) {

@@ -74,8 +74,16 @@ describe('archiveApi dossier methods', () => {
       scope: { kind: 'global' },
       question: '现在最值得关注什么？'
     })).resolves.toBeNull()
+    await expect(archiveApi.runMemoryWorkspaceCompareMatrix({
+      rows: [{
+        scope: { kind: 'global' },
+        question: '现在最值得关注什么？'
+      }]
+    })).resolves.toBeNull()
     await expect(archiveApi.listMemoryWorkspaceCompareSessions()).resolves.toEqual([])
     await expect(archiveApi.getMemoryWorkspaceCompareSession('compare-session-1')).resolves.toBeNull()
+    await expect(archiveApi.listMemoryWorkspaceCompareMatrices()).resolves.toEqual([])
+    await expect(archiveApi.getMemoryWorkspaceCompareMatrix('matrix-session-1')).resolves.toBeNull()
     await expect(archiveApi.getGroupPortrait('cp-1')).resolves.toBeNull()
     await expect(archiveApi.selectContextPackExportDestination()).resolves.toBeNull()
     await expect(archiveApi.getPersonContextPack({

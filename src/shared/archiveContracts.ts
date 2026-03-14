@@ -501,6 +501,19 @@ export type RunMemoryWorkspaceCompareInput = {
   targets?: MemoryWorkspaceCompareTarget[]
 }
 
+export type MemoryWorkspaceCompareMatrixRowInput = {
+  label?: string
+  scope: MemoryWorkspaceScope
+  question: string
+}
+
+export type RunMemoryWorkspaceCompareMatrixInput = {
+  title?: string
+  rows: MemoryWorkspaceCompareMatrixRowInput[]
+  judge?: RunMemoryWorkspaceCompareJudgeInput
+  targets?: MemoryWorkspaceCompareTarget[]
+}
+
 export type MemoryWorkspaceSessionSummary = {
   sessionId: string
   scope: MemoryWorkspaceScope
@@ -571,6 +584,7 @@ export type MemoryWorkspaceCompareJudgeVerdict = {
 }
 
 export type MemoryWorkspaceCompareRecommendation = {
+  source: 'deterministic' | 'judge_assisted'
   decision: 'recommend_run' | 'no_recommendation'
   recommendedCompareRunId: string | null
   recommendedTargetLabel: string | null
@@ -619,6 +633,40 @@ export type MemoryWorkspaceCompareSessionSummary = {
 
 export type MemoryWorkspaceCompareSessionDetail = MemoryWorkspaceCompareSessionSummary & {
   runs: MemoryWorkspaceCompareRunRecord[]
+}
+
+export type MemoryWorkspaceCompareMatrixRowRecord = {
+  matrixRowId: string
+  matrixSessionId: string
+  ordinal: number
+  label: string | null
+  scope: MemoryWorkspaceScope
+  question: string
+  status: 'completed' | 'failed'
+  errorMessage: string | null
+  compareSessionId: string | null
+  recommendedCompareRunId: string | null
+  recommendedTargetLabel: string | null
+  failedRunCount: number
+  createdAt: string
+}
+
+export type MemoryWorkspaceCompareMatrixSummary = {
+  matrixSessionId: string
+  title: string
+  rowCount: number
+  completedRowCount: number
+  failedRowCount: number
+  metadata: {
+    targetLabels: string[]
+    judge: MemoryWorkspaceCompareSessionJudgeSummary
+  }
+  createdAt: string
+  updatedAt: string
+}
+
+export type MemoryWorkspaceCompareMatrixDetail = MemoryWorkspaceCompareMatrixSummary & {
+  rows: MemoryWorkspaceCompareMatrixRowRecord[]
 }
 
 export const CONTEXT_PACK_EXPORT_MODES = [
@@ -997,6 +1045,9 @@ export interface ArchiveApi {
   runMemoryWorkspaceCompare: (input: RunMemoryWorkspaceCompareInput) => Promise<MemoryWorkspaceCompareSessionDetail | null>
   listMemoryWorkspaceCompareSessions: (input?: { scope?: MemoryWorkspaceScope }) => Promise<MemoryWorkspaceCompareSessionSummary[]>
   getMemoryWorkspaceCompareSession: (compareSessionId: string) => Promise<MemoryWorkspaceCompareSessionDetail | null>
+  runMemoryWorkspaceCompareMatrix: (input: RunMemoryWorkspaceCompareMatrixInput) => Promise<MemoryWorkspaceCompareMatrixDetail | null>
+  listMemoryWorkspaceCompareMatrices: () => Promise<MemoryWorkspaceCompareMatrixSummary[]>
+  getMemoryWorkspaceCompareMatrix: (matrixSessionId: string) => Promise<MemoryWorkspaceCompareMatrixDetail | null>
   listGroupPortraits: () => Promise<GroupPortraitBrowseSummary[]>
   getGroupPortrait: (canonicalPersonId: string) => Promise<GroupPortrait | null>
   getGroupContextPack: (input: { anchorPersonId: string; mode?: ContextPackExportMode }) => Promise<GroupContextPack | null>

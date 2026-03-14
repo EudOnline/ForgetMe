@@ -93,18 +93,20 @@ describe('memoryWorkspaceCompareService', () => {
     expect(summaries[0]?.metadata.judge.enabled).toBe(true)
     expect(summaries[0]?.metadata.judge.status).toBe('mixed')
     expect(summaries[0]?.recommendation?.decision).toBe('recommend_run')
+    expect(summaries[0]?.recommendation?.source).toBe('deterministic')
     expect(summaries[0]?.recommendation?.recommendedCompareRunId).toBe(baselineRun?.compareRunId)
 
     const reloaded = getMemoryWorkspaceCompareSession(db, {
       compareSessionId: session!.compareSessionId
     })
     expect(reloaded?.runs).toHaveLength(2)
+    expect(reloaded?.recommendation?.source).toBe('deterministic')
     expect(reloaded?.recommendation?.recommendedCompareRunId).toBe(baselineRun?.compareRunId)
 
     db.close()
   })
 
-  it('persists completed judge verdicts per run while keeping deterministic recommendation primary', async () => {
+  it('uses a judge-assisted recommendation when completed judge verdicts clearly favor one aligned provider run', async () => {
     const db = seedMemoryWorkspaceScenario()
 
     const session = await runMemoryWorkspaceCompare(db, {
@@ -157,7 +159,10 @@ describe('memoryWorkspaceCompareService', () => {
     expect(session?.runs[0]?.judge.model).toBe('judge-test-model')
     expect(session?.runs[1]?.judge.status).toBe('completed')
     expect(session?.runs[1]?.judge.decision).toBe('aligned')
-    expect(session?.recommendation?.recommendedCompareRunId).toBe(session?.runs[0]?.compareRunId)
+    expect(session?.recommendation?.source).toBe('judge_assisted')
+    expect(session?.recommendation?.recommendedCompareRunId).toBe(session?.runs[1]?.compareRunId)
+    expect(session?.recommendation?.recommendedTargetLabel).toBe('SiliconFlow / Compare')
+    expect(session?.recommendation?.rationale).toContain('judge-assisted')
 
     const reloaded = getMemoryWorkspaceCompareSession(db, {
       compareSessionId: session!.compareSessionId
@@ -165,7 +170,61 @@ describe('memoryWorkspaceCompareService', () => {
     expect(reloaded?.runs[0]?.judge.decision).toBe('needs_review')
     expect(reloaded?.runs[1]?.judge.decision).toBe('aligned')
     expect(reloaded?.metadata.judge.status).toBe('mixed')
-    expect(reloaded?.recommendation?.recommendedCompareRunId).toBe(session?.runs[0]?.compareRunId)
+    expect(reloaded?.recommendation?.source).toBe('judge_assisted')
+    expect(reloaded?.recommendation?.recommendedCompareRunId).toBe(session?.runs[1]?.compareRunId)
+
+    db.close()
+  })
+
+  it('keeps the deterministic recommendation when the judge-favored run is not aligned', async () => {
+    const db = seedMemoryWorkspaceScenario()
+
+    const session = await runMemoryWorkspaceCompare(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '她有哪些已保存的资料和已确认信息？',
+      judge: {
+        enabled: true,
+        provider: 'siliconflow',
+        model: 'judge-test-model'
+      },
+      targets: [
+        {
+          targetId: 'baseline-local',
+          label: 'Local baseline',
+          executionMode: 'local_baseline'
+        },
+        {
+          targetId: 'siliconflow-compare',
+          label: 'SiliconFlow / Compare',
+          executionMode: 'provider_model',
+          provider: 'siliconflow',
+          model: 'sf-test-model'
+        }
+      ]
+    }, {
+      callModel: async ({ target, baselineResponse }) => ({
+        provider: target.provider,
+        model: target.model,
+        summary: `[${target.provider}] ${baselineResponse.answer.summary}`,
+        receivedAt: '2026-03-14T04:00:02.000Z'
+      }),
+      callJudgeModel: async ({ run }) => ({
+        provider: 'siliconflow',
+        model: 'judge-test-model',
+        decision: run.target.executionMode === 'local_baseline' ? 'aligned' : 'needs_review',
+        score: run.target.executionMode === 'local_baseline' ? 4 : 5,
+        rationale: run.target.executionMode === 'local_baseline'
+          ? 'Safe and grounded.'
+          : 'The provider answer stays close, but it still needs review.',
+        strengths: ['Grounded'],
+        concerns: run.target.executionMode === 'local_baseline' ? [] : ['Needs review before replacing the safer baseline'],
+        receivedAt: '2026-03-14T04:00:03.000Z'
+      })
+    })
+
+    expect(session).not.toBeNull()
+    expect(session?.recommendation?.source).toBe('deterministic')
+    expect(session?.recommendation?.recommendedCompareRunId).toBe(session?.runs[0]?.compareRunId)
 
     db.close()
   })
@@ -212,6 +271,7 @@ describe('memoryWorkspaceCompareService', () => {
     expect(session?.runs[1]?.errorMessage).toContain('simulated compare failure')
     expect(session?.runs[1]?.response).toBeNull()
     expect(session?.runs[1]?.evaluation.band).toBe('failed')
+    expect(session?.recommendation?.source).toBe('deterministic')
     expect(session?.recommendation?.recommendedCompareRunId).toBe(session?.runs[0]?.compareRunId)
 
     const reloaded = getMemoryWorkspaceCompareSession(db, {
@@ -253,6 +313,7 @@ describe('memoryWorkspaceCompareService', () => {
     expect(session?.runs[0]?.status).toBe('completed')
     expect(session?.runs[0]?.judge.status).toBe('failed')
     expect(session?.runs[0]?.judge.errorMessage).toContain('simulated judge failure')
+    expect(session?.recommendation?.source).toBe('deterministic')
     expect(session?.recommendation?.recommendedCompareRunId).toBe(session?.runs[0]?.compareRunId)
 
     const reloaded = getMemoryWorkspaceCompareSession(db, {
@@ -295,6 +356,7 @@ describe('memoryWorkspaceCompareService', () => {
     expect(session?.runs[0]?.judge.status).toBe('skipped')
     expect(session?.runs[0]?.judge.decision).toBeNull()
     expect(session?.runs[0]?.judge.model).toBeNull()
+    expect(session?.recommendation?.source).toBe('deterministic')
 
     db.close()
   })
@@ -327,6 +389,7 @@ describe('memoryWorkspaceCompareService', () => {
       expect(session).not.toBeNull()
       expect(session?.runs[0]?.judge.status).toBe('skipped')
       expect(session?.runs[0]?.judge.rationale).toContain('disabled')
+      expect(session?.recommendation?.source).toBe('deterministic')
     } finally {
       if (previousEnabled === undefined) {
         delete process.env.FORGETME_MEMORY_COMPARE_JUDGE_ENABLED

@@ -468,9 +468,10 @@ Phase 8 不应该引入新的事实真相表来“存 AI 结论”。
     - tie-break 优先更安全的 `Local baseline`
   - 当前 compare runner 已新增 **optional judge v1**：
     - judge verdict 逐 run 持久化
-    - judge verdict 只作为补充信号，不替代 deterministic recommendation
+    - session recommendation 默认仍走 deterministic rubric
+    - 当所有 completed runs 都拿到 completed judge verdict，且仅有一个 `aligned` 的 provider/model winner 明显领先时，允许 **judge-assisted** 替代推荐
     - judge 失败 / 关闭不会中断 compare session
-    - renderer 会并排展示 deterministic rubric 与 judge verdict
+    - renderer 会并排展示 deterministic rubric 与 judge verdict，并标记 recommendation source（`deterministic` / `judge-assisted`）
     - compare UI 已支持按次开启/关闭 judge，并覆盖 provider / model
     - compare judge 的默认开关 / provider / model 当前只做 **renderer-local preferences**
       - 使用 `localStorage` 保存最近一次选择
@@ -491,7 +492,13 @@ Phase 8 不应该引入新的事实真相表来“存 AI 结论”。
     - `Targets: ...` 快速显示本次 compare 的 target 组成
     - `Judge: ...` 快速显示 judge 的 session-level 汇总状态（`disabled/completed/failed/mixed`；当各 run verdict 不一致时显示 `mixed`）
     - `Failed runs: N` 在存在失败 target 时直接提示，无需先点开历史 session
-  - 当前 compare runner 仍未包含批量矩阵调度、judge 驱动的自动推荐替换
+  - 当前 compare runner 已新增 **compare matrix v1**：
+    - 可把多条 `scope + question` 组合成一个保存后的 matrix session
+    - 每条 matrix row 顺序复用既有 compare runner，并保留各自 child compare session
+    - 单条 row 失败不会中断后续 row
+    - renderer 提供结构化文本输入：`scope | question` 或 `label | scope | question`
+    - matrix history 可快速查看 row 完成/失败计数，并从 row 直接打开 child compare 结果
+  - 当前 compare runner 仍未包含 judge 驱动的自动推荐替换
 
 成功标准：
 

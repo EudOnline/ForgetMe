@@ -41,6 +41,7 @@ test('memory workspace compare runner renders fixture-backed compare results', a
 
   await expect(page.getByRole('heading', { name: 'Compare Results' })).toBeVisible()
   await expect(page.getByText('Recommended result')).toBeVisible()
+  await expect(page.getByText('Recommendation source: deterministic')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Local baseline' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'SiliconFlow / Qwen2.5-72B-Instruct' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'OpenRouter / qwen-2.5-72b-instruct' })).toHaveCount(0)

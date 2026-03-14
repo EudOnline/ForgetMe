@@ -228,6 +228,7 @@ describe('MemoryWorkspacePage', () => {
             }
           },
           recommendation: {
+            source: 'deterministic',
             decision: 'recommend_run',
             recommendedCompareRunId: 'compare-run-1',
             recommendedTargetLabel: 'Local baseline',
@@ -255,6 +256,7 @@ describe('MemoryWorkspacePage', () => {
       createdAt: '2026-03-14T05:00:00.000Z',
       updatedAt: '2026-03-14T05:00:02.000Z',
       recommendation: {
+        source: 'deterministic',
         decision: 'recommend_run',
         recommendedCompareRunId: 'compare-run-1',
         recommendedTargetLabel: 'Local baseline',
@@ -424,6 +426,7 @@ describe('MemoryWorkspacePage', () => {
     })
     const recommendationPanel = screen.getByLabelText('Recommended Compare Result')
     expect(within(recommendationPanel).getByText('Recommended result')).toBeInTheDocument()
+    expect(within(recommendationPanel).getByText('Recommendation source: deterministic')).toBeInTheDocument()
     expect(within(recommendationPanel).getByText('Highest deterministic rubric score after tie-break to the safer baseline.')).toBeInTheDocument()
     expect(within(recommendationPanel).getByText('Local baseline')).toBeInTheDocument()
     expect(screen.getByText('Targets: Local baseline, SiliconFlow / Compare')).toBeInTheDocument()
@@ -443,6 +446,137 @@ describe('MemoryWorkspacePage', () => {
     expect(within(judgePanelTwo).getByText('The provider summary stays grounded but should be reviewed against the baseline wording.')).toBeInTheDocument()
     expect(within(judgePanelTwo).getByText('Review summary style against baseline phrasing')).toBeInTheDocument()
     expect(screen.getByText('[siliconflow] Keep focus on the remaining conflict group.')).toBeInTheDocument()
+  })
+
+  it('renders judge-assisted recommendation source copy when judge override wins', async () => {
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceSession: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted: vi.fn().mockResolvedValue(null),
+      listMemoryWorkspaceCompareSessions: vi.fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          {
+            compareSessionId: 'compare-session-judge-assisted',
+            scope: { kind: 'global' },
+            title: 'Memory Workspace Compare · Global',
+            question: '哪个答案更适合发给我？',
+            runCount: 1,
+            metadata: {
+              targetLabels: ['SiliconFlow / Compare'],
+              failedRunCount: 0,
+              judge: {
+                enabled: true,
+                status: 'completed'
+              }
+            },
+            recommendation: {
+              source: 'judge_assisted',
+              decision: 'recommend_run',
+              recommendedCompareRunId: 'compare-run-judge-assisted',
+              recommendedTargetLabel: 'SiliconFlow / Compare',
+              rationale: 'A judge-assisted override selected the only aligned winner after full judge review.'
+            },
+            createdAt: '2026-03-14T05:30:00.000Z',
+            updatedAt: '2026-03-14T05:30:02.000Z'
+          }
+        ]),
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue({
+        compareSessionId: 'compare-session-judge-assisted',
+        scope: { kind: 'global' },
+        title: 'Memory Workspace Compare · Global',
+        question: '哪个答案更适合发给我？',
+        runCount: 1,
+        metadata: {
+          targetLabels: ['SiliconFlow / Compare'],
+          failedRunCount: 0,
+          judge: {
+            enabled: true,
+            status: 'completed'
+          }
+        },
+        recommendation: {
+          source: 'judge_assisted',
+          decision: 'recommend_run',
+          recommendedCompareRunId: 'compare-run-judge-assisted',
+          recommendedTargetLabel: 'SiliconFlow / Compare',
+          rationale: 'A judge-assisted override selected the only aligned winner after full judge review.'
+        },
+        createdAt: '2026-03-14T05:30:00.000Z',
+        updatedAt: '2026-03-14T05:30:02.000Z',
+        runs: [
+          {
+            compareRunId: 'compare-run-judge-assisted',
+            compareSessionId: 'compare-session-judge-assisted',
+            ordinal: 1,
+            target: {
+              targetId: 'siliconflow-default',
+              label: 'SiliconFlow / Compare',
+              executionMode: 'provider_model',
+              provider: 'siliconflow',
+              model: 'sf-test-model'
+            },
+            provider: 'siliconflow',
+            model: 'sf-test-model',
+            status: 'completed',
+            errorMessage: null,
+            evaluation: {
+              totalScore: 14,
+              maxScore: 20,
+              band: 'acceptable',
+              dimensions: []
+            },
+            judge: {
+              status: 'completed',
+              provider: 'siliconflow',
+              model: 'judge-test-model',
+              decision: 'aligned',
+              score: 5,
+              rationale: 'Aligned and specific.',
+              strengths: ['Grounded'],
+              concerns: [],
+              errorMessage: null,
+              createdAt: '2026-03-14T05:30:01.000Z'
+            },
+            contextHash: 'compare-context-judge-assisted',
+            promptHash: 'compare-prompt-judge-assisted',
+            createdAt: '2026-03-14T05:30:00.500Z',
+            response: {
+              scope: { kind: 'global' },
+              question: '哪个答案更适合发给我？',
+              title: 'Memory Workspace · Global',
+              answer: {
+                summary: 'Judge-backed provider answer.',
+                displayType: 'derived_summary',
+                citations: []
+              },
+              guardrail: {
+                decision: 'grounded_answer',
+                reasonCodes: [],
+                citationCount: 0,
+                sourceKinds: [],
+                fallbackApplied: false
+              },
+              contextCards: []
+            }
+          }
+        ]
+      })
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'global' }} />)
+
+    fireEvent.click(screen.getByLabelText('Enable judge review'))
+    fireEvent.change(screen.getByLabelText('Ask memory workspace'), {
+      target: { value: '哪个答案更适合发给我？' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Run compare' }))
+
+    const recommendationPanel = await screen.findByLabelText('Recommended Compare Result')
+    expect(within(recommendationPanel).getByText('Recommendation source: judge-assisted')).toBeInTheDocument()
+    expect(within(recommendationPanel).getByText('SiliconFlow / Compare')).toBeInTheDocument()
+    expect(within(recommendationPanel).getByText('A judge-assisted override selected the only aligned winner after full judge review.')).toBeInTheDocument()
   })
 
   it('forwards custom compare targets when target selection or model overrides change', async () => {
@@ -546,6 +680,7 @@ describe('MemoryWorkspacePage', () => {
         createdAt: '2026-03-14T06:00:00.000Z',
         updatedAt: '2026-03-14T06:00:02.000Z',
         recommendation: {
+          source: 'deterministic',
           decision: 'recommend_run',
           recommendedCompareRunId: 'compare-run-3',
           recommendedTargetLabel: 'Local baseline',
@@ -865,6 +1000,7 @@ describe('MemoryWorkspacePage', () => {
           }
         },
         recommendation: {
+          source: 'deterministic',
           decision: 'recommend_run',
           recommendedCompareRunId: 'compare-run-reuse-1',
           recommendedTargetLabel: 'Local baseline',
@@ -889,6 +1025,7 @@ describe('MemoryWorkspacePage', () => {
         }
       },
       recommendation: {
+        source: 'deterministic',
         decision: 'recommend_run',
         recommendedCompareRunId: 'compare-run-reuse-1',
         recommendedTargetLabel: 'Local baseline',
@@ -1085,5 +1222,233 @@ describe('MemoryWorkspacePage', () => {
     await waitFor(() => {
       expect(screen.getByText('No compare result is available for this scope yet.')).toBeInTheDocument()
     })
+  })
+
+  it('runs a compare matrix from structured rows and can open a child compare session', async () => {
+    const runMemoryWorkspaceCompareMatrix = vi.fn().mockResolvedValue({
+      matrixSessionId: 'matrix-session-1',
+      title: 'Daily matrix',
+      rowCount: 2,
+      completedRowCount: 2,
+      failedRowCount: 0,
+      metadata: {
+        targetLabels: ['Local baseline'],
+        judge: {
+          enabled: false,
+          status: 'disabled'
+        }
+      },
+      createdAt: '2026-03-14T07:00:00.000Z',
+      updatedAt: '2026-03-14T07:00:02.000Z',
+      rows: [
+        {
+          matrixRowId: 'matrix-row-1',
+          matrixSessionId: 'matrix-session-1',
+          ordinal: 1,
+          label: 'Global row',
+          scope: { kind: 'global' },
+          question: '现在最值得关注什么？',
+          status: 'completed',
+          errorMessage: null,
+          compareSessionId: 'compare-session-1',
+          recommendedCompareRunId: 'compare-run-1',
+          recommendedTargetLabel: 'Local baseline',
+          failedRunCount: 0,
+          createdAt: '2026-03-14T07:00:01.000Z'
+        },
+        {
+          matrixRowId: 'matrix-row-2',
+          matrixSessionId: 'matrix-session-1',
+          ordinal: 2,
+          label: null,
+          scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+          question: '她有哪些已确认信息？',
+          status: 'completed',
+          errorMessage: null,
+          compareSessionId: 'compare-session-2',
+          recommendedCompareRunId: 'compare-run-2',
+          recommendedTargetLabel: 'Local baseline',
+          failedRunCount: 0,
+          createdAt: '2026-03-14T07:00:02.000Z'
+        }
+      ]
+    })
+    const listMemoryWorkspaceCompareMatrices = vi.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          matrixSessionId: 'matrix-session-1',
+          title: 'Daily matrix',
+          rowCount: 2,
+          completedRowCount: 2,
+          failedRowCount: 0,
+          metadata: {
+            targetLabels: ['Local baseline'],
+            judge: {
+              enabled: false,
+              status: 'disabled'
+            }
+          },
+          createdAt: '2026-03-14T07:00:00.000Z',
+          updatedAt: '2026-03-14T07:00:02.000Z'
+        }
+      ])
+    const getMemoryWorkspaceCompareSession = vi.fn().mockResolvedValue({
+      compareSessionId: 'compare-session-1',
+      scope: { kind: 'global' },
+      title: 'Memory Workspace Compare · Global',
+      question: '现在最值得关注什么？',
+      runCount: 1,
+      metadata: {
+        targetLabels: ['Local baseline'],
+        failedRunCount: 0,
+        judge: {
+          enabled: false,
+          status: 'disabled'
+        }
+      },
+      recommendation: {
+        source: 'deterministic',
+        decision: 'recommend_run',
+        recommendedCompareRunId: 'compare-run-1',
+        recommendedTargetLabel: 'Local baseline',
+        rationale: 'Best deterministic score.'
+      },
+      createdAt: '2026-03-14T07:00:00.000Z',
+      updatedAt: '2026-03-14T07:00:01.000Z',
+      runs: [
+        {
+          compareRunId: 'compare-run-1',
+          compareSessionId: 'compare-session-1',
+          ordinal: 1,
+          target: {
+            targetId: 'baseline-local',
+            label: 'Local baseline',
+            executionMode: 'local_baseline'
+          },
+          provider: null,
+          model: null,
+          status: 'completed',
+          errorMessage: null,
+          evaluation: {
+            totalScore: 20,
+            maxScore: 20,
+            band: 'strong',
+            dimensions: []
+          },
+          judge: {
+            status: 'skipped',
+            provider: null,
+            model: null,
+            decision: null,
+            score: null,
+            rationale: 'Judge disabled.',
+            strengths: [],
+            concerns: [],
+            errorMessage: null,
+            createdAt: '2026-03-14T07:00:01.000Z'
+          },
+          contextHash: 'context-hash-1',
+          promptHash: 'prompt-hash-1',
+          createdAt: '2026-03-14T07:00:01.000Z',
+          response: {
+            scope: { kind: 'global' },
+            question: '现在最值得关注什么？',
+            title: 'Memory Workspace · Global',
+            answer: {
+              summary: 'Grounded matrix result.',
+              displayType: 'derived_summary',
+              citations: []
+            },
+            guardrail: {
+              decision: 'grounded_answer',
+              reasonCodes: [],
+              citationCount: 0,
+              sourceKinds: [],
+              fallbackApplied: false
+            },
+            contextCards: []
+          }
+        }
+      ]
+    })
+
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceSession: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted: vi.fn().mockResolvedValue(null),
+      listMemoryWorkspaceCompareSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareSession,
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompareMatrix,
+      listMemoryWorkspaceCompareMatrices,
+      getMemoryWorkspaceCompareMatrix: vi.fn().mockResolvedValue(null)
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'global' }} />)
+
+    fireEvent.change(screen.getByLabelText('Compare matrix title'), {
+      target: { value: 'Daily matrix' }
+    })
+    fireEvent.change(screen.getByLabelText('Compare matrix rows'), {
+      target: { value: 'Global row | global | 现在最值得关注什么？\nperson:cp-1 | 她有哪些已确认信息？' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Run matrix compare' }))
+
+    await waitFor(() => {
+      expect(runMemoryWorkspaceCompareMatrix).toHaveBeenCalledWith({
+        title: 'Daily matrix',
+        rows: [
+          {
+            label: 'Global row',
+            scope: { kind: 'global' },
+            question: '现在最值得关注什么？'
+          },
+          {
+            scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+            question: '她有哪些已确认信息？'
+          }
+        ],
+        judge: {
+          enabled: false
+        }
+      })
+    })
+
+    expect(await screen.findByText('Saved Compare Matrices')).toBeInTheDocument()
+    expect(screen.getByText('Rows: 2 · Completed: 2 · Failed: 0')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Global row · global · 现在最值得关注什么？/ }))
+
+    await waitFor(() => {
+      expect(getMemoryWorkspaceCompareSession).toHaveBeenCalledWith('compare-session-1')
+    })
+    expect(await screen.findByText('Grounded matrix result.')).toBeInTheDocument()
+  })
+
+  it('shows a parse error for invalid compare matrix lines and does not run', async () => {
+    const runMemoryWorkspaceCompareMatrix = vi.fn().mockResolvedValue(null)
+
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceSession: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted: vi.fn().mockResolvedValue(null),
+      listMemoryWorkspaceCompareSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompareMatrix,
+      listMemoryWorkspaceCompareMatrices: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareMatrix: vi.fn().mockResolvedValue(null)
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'global' }} />)
+
+    fireEvent.change(screen.getByLabelText('Compare matrix rows'), {
+      target: { value: 'bad-line-without-separators' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Run matrix compare' }))
+
+    expect(await screen.findByText('Invalid matrix line 1. Use "scope | question" or "label | scope | question".')).toBeInTheDocument()
+    expect(runMemoryWorkspaceCompareMatrix).not.toHaveBeenCalled()
   })
 })

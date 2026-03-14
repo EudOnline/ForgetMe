@@ -1,4 +1,6 @@
 import type {
+  MemoryWorkspaceCompareMatrixRowRecord,
+  MemoryWorkspaceCompareMatrixSummary,
   MemoryWorkspaceCompareRunRecord,
   MemoryWorkspaceCompareSessionSummary,
   MemoryWorkspaceCitation,
@@ -84,6 +86,30 @@ function compareSessionTargetsLabel(summary: MemoryWorkspaceCompareSessionSummar
   return summary.metadata.targetLabels.length
     ? summary.metadata.targetLabels.join(', ')
     : 'none'
+}
+
+function recommendationSourceLabel(source: 'deterministic' | 'judge_assisted') {
+  return source === 'judge_assisted' ? 'judge-assisted' : 'deterministic'
+}
+
+function matrixScopeLabel(scope: MemoryWorkspaceScope) {
+  if (scope.kind === 'person') {
+    return `person:${scope.canonicalPersonId}`
+  }
+
+  if (scope.kind === 'group') {
+    return `group:${scope.anchorPersonId}`
+  }
+
+  return 'global'
+}
+
+function matrixSessionLabel(summary: MemoryWorkspaceCompareMatrixSummary) {
+  return summary.title
+}
+
+function matrixRowLabel(row: MemoryWorkspaceCompareMatrixRowRecord) {
+  return `${row.label ?? `Row ${row.ordinal}`} · ${matrixScopeLabel(row.scope)} · ${row.question}`
 }
 
 function renderResponse(
@@ -211,20 +237,28 @@ function renderCompareRun(
 
 export function MemoryWorkspaceView(props: {
   scope: MemoryWorkspaceScope
+  matrixSummaries: MemoryWorkspaceCompareMatrixSummary[]
+  selectedMatrixSessionId: string | null
+  matrixRows: MemoryWorkspaceCompareMatrixRowRecord[]
   sessionSummaries: MemoryWorkspaceSessionSummary[]
   selectedSessionId: string | null
   turns: MemoryWorkspaceTurnRecord[]
   compareSessionSummaries: MemoryWorkspaceCompareSessionSummary[]
   selectedCompareSessionId: string | null
   compareRuns: MemoryWorkspaceCompareRunRecord[]
+  hasLoadedMatrices?: boolean
   hasLoadedSessions?: boolean
   hasLoadedCompareSessions?: boolean
+  isLoadingMatrices?: boolean
   isLoading?: boolean
   isLoadingSessions?: boolean
   isComparing?: boolean
+  isRunningMatrix?: boolean
   isLoadingCompareSessions?: boolean
   emptyStateMessage?: string | null
   compareEmptyStateMessage?: string | null
+  onSelectMatrixSession?: (matrixSessionId: string) => void
+  onOpenMatrixRowCompare?: (row: MemoryWorkspaceCompareMatrixRowRecord) => void
   onSelectSession?: (sessionId: string) => void
   onSelectCompareSession?: (compareSessionId: string) => void
   onStartNewSession?: () => void
@@ -247,6 +281,57 @@ export function MemoryWorkspaceView(props: {
   return (
     <section>
       <h1>Memory Workspace</h1>
+      {props.hasLoadedMatrices ? (
+        <section aria-label="Saved Compare Matrices">
+          <h2>Saved Compare Matrices</h2>
+          {props.matrixSummaries.length ? (
+            <>
+              <ul>
+                {props.matrixSummaries.map((summary) => (
+                  <li key={summary.matrixSessionId}>
+                    <button
+                      type="button"
+                      aria-pressed={summary.matrixSessionId === props.selectedMatrixSessionId}
+                      onClick={() => props.onSelectMatrixSession?.(summary.matrixSessionId)}
+                      disabled={!props.onSelectMatrixSession}
+                    >
+                      {matrixSessionLabel(summary)}
+                    </button>
+                    <p>Rows: {summary.rowCount} · Completed: {summary.completedRowCount} · Failed: {summary.failedRowCount}</p>
+                    <p>Targets: {summary.metadata.targetLabels.join(', ') || 'none'}</p>
+                    <p>Judge: {summary.metadata.judge.status}</p>
+                  </li>
+                ))}
+              </ul>
+              {props.matrixRows.length ? (
+                <section aria-label="Matrix Rows">
+                  <h3>Matrix Rows</h3>
+                  <ul>
+                    {props.matrixRows.map((row) => (
+                      <li key={row.matrixRowId}>
+                        <button
+                          type="button"
+                          onClick={() => props.onOpenMatrixRowCompare?.(row)}
+                          disabled={!props.onOpenMatrixRowCompare || !row.compareSessionId}
+                        >
+                          {matrixRowLabel(row)}
+                        </button>
+                        <p>Status: {row.status}</p>
+                        {row.recommendedTargetLabel ? <p>Recommended: {row.recommendedTargetLabel}</p> : null}
+                        {row.failedRunCount > 0 ? <p>Failed runs: {row.failedRunCount}</p> : null}
+                        {row.errorMessage ? <p>Error: {row.errorMessage}</p> : null}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
+            </>
+          ) : (
+            <p>No saved compare matrices yet.</p>
+          )}
+        </section>
+      ) : null}
+
       {props.hasLoadedSessions ? (
         <section aria-label="Saved Sessions">
           <h2>Saved Sessions</h2>
@@ -326,6 +411,16 @@ export function MemoryWorkspaceView(props: {
           {props.compareSessionSummaries.find((summary) => summary.compareSessionId === props.selectedCompareSessionId)?.recommendation ? (
             <section aria-label="Recommended Compare Result">
               <h3>Recommended result</h3>
+              <p>
+                Recommendation source:
+                {' '}
+                {
+                  recommendationSourceLabel(
+                    props.compareSessionSummaries.find((summary) => summary.compareSessionId === props.selectedCompareSessionId)?.recommendation?.source
+                    ?? 'deterministic'
+                  )
+                }
+              </p>
               <p>
                 {
                   props.compareSessionSummaries.find((summary) => summary.compareSessionId === props.selectedCompareSessionId)?.recommendation?.recommendedTargetLabel

@@ -12,9 +12,15 @@ import { registerSearchIpc } from './ipc/searchIpc'
 import { ensureAppPaths } from './services/appPaths'
 import { createEnrichmentRunner } from './services/enrichmentRunnerService'
 
+const e2eUserDataDir = process.env.FORGETME_E2E_USER_DATA_DIR?.trim() || null
+
+if (e2eUserDataDir) {
+  app.setPath('userData', e2eUserDataDir)
+}
+
 const resolveAppDataRoot = () => {
-  if (process.env.FORGETME_E2E_USER_DATA_DIR) {
-    return process.env.FORGETME_E2E_USER_DATA_DIR
+  if (e2eUserDataDir) {
+    return e2eUserDataDir
   }
 
   if (app.isPackaged) {

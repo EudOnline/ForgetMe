@@ -2,15 +2,22 @@ import path from 'node:path'
 import { ipcMain } from 'electron'
 import {
   askMemoryWorkspaceInputSchema,
+  memoryWorkspaceCompareMatrixIdSchema,
   memoryWorkspaceCompareSessionFilterSchema,
   memoryWorkspaceCompareSessionIdSchema,
   askMemoryWorkspacePersistedInputSchema,
   runMemoryWorkspaceCompareInputSchema,
+  runMemoryWorkspaceCompareMatrixInputSchema,
   memoryWorkspaceSessionFilterSchema,
   memoryWorkspaceSessionIdSchema
 } from '../../shared/ipcSchemas'
 import type { AppPaths } from '../services/appPaths'
 import { openDatabase, runMigrations } from '../services/db'
+import {
+  getMemoryWorkspaceCompareMatrix,
+  listMemoryWorkspaceCompareMatrices,
+  runMemoryWorkspaceCompareMatrix
+} from '../services/memoryWorkspaceCompareMatrixService'
 import {
   getMemoryWorkspaceCompareSession,
   listMemoryWorkspaceCompareSessions,
@@ -35,6 +42,9 @@ export function registerMemoryWorkspaceIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:runMemoryWorkspaceCompare')
   ipcMain.removeHandler('archive:listMemoryWorkspaceCompareSessions')
   ipcMain.removeHandler('archive:getMemoryWorkspaceCompareSession')
+  ipcMain.removeHandler('archive:runMemoryWorkspaceCompareMatrix')
+  ipcMain.removeHandler('archive:listMemoryWorkspaceCompareMatrices')
+  ipcMain.removeHandler('archive:getMemoryWorkspaceCompareMatrix')
 
   ipcMain.handle('archive:askMemoryWorkspace', async (_event, payload) => {
     const input = askMemoryWorkspaceInputSchema.parse(payload)
@@ -97,5 +107,31 @@ export function registerMemoryWorkspaceIpc(appPaths: AppPaths) {
     const session = getMemoryWorkspaceCompareSession(db, input)
     db.close()
     return session
+  })
+
+  ipcMain.handle('archive:runMemoryWorkspaceCompareMatrix', async (_event, payload) => {
+    const input = runMemoryWorkspaceCompareMatrixInputSchema.parse(payload)
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    const matrix = await runMemoryWorkspaceCompareMatrix(db, input)
+    db.close()
+    return matrix
+  })
+
+  ipcMain.handle('archive:listMemoryWorkspaceCompareMatrices', async () => {
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    const matrices = listMemoryWorkspaceCompareMatrices(db)
+    db.close()
+    return matrices
+  })
+
+  ipcMain.handle('archive:getMemoryWorkspaceCompareMatrix', async (_event, payload) => {
+    const input = memoryWorkspaceCompareMatrixIdSchema.parse(payload)
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    const matrix = getMemoryWorkspaceCompareMatrix(db, input)
+    db.close()
+    return matrix
   })
 }

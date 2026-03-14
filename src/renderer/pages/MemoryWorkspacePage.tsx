@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
+  MemoryWorkspaceCompareMatrixDetail,
+  MemoryWorkspaceCompareMatrixRowInput,
+  MemoryWorkspaceCompareMatrixRowRecord,
+  MemoryWorkspaceCompareMatrixSummary,
   MemoryWorkspaceCompareTarget,
   MemoryWorkspaceCompareRunRecord,
   MemoryWorkspaceCompareSessionSummary,
@@ -241,6 +245,73 @@ function scopeKey(scope: MemoryWorkspaceScope) {
   return 'global'
 }
 
+function parseMatrixScopeToken(token: string): MemoryWorkspaceScope | null {
+  const normalizedToken = token.trim()
+  if (normalizedToken === 'global') {
+    return { kind: 'global' }
+  }
+
+  if (normalizedToken.startsWith('person:')) {
+    const canonicalPersonId = normalizedToken.slice('person:'.length).trim()
+    return canonicalPersonId ? { kind: 'person', canonicalPersonId } : null
+  }
+
+  if (normalizedToken.startsWith('group:')) {
+    const anchorPersonId = normalizedToken.slice('group:'.length).trim()
+    return anchorPersonId ? { kind: 'group', anchorPersonId } : null
+  }
+
+  return null
+}
+
+function parseCompareMatrixRows(input: string) {
+  const lines = input
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+
+  if (lines.length === 0) {
+    return {
+      rows: [] as MemoryWorkspaceCompareMatrixRowInput[],
+      error: 'Add at least one matrix row before running compare.'
+    }
+  }
+
+  const rows: MemoryWorkspaceCompareMatrixRowInput[] = []
+
+  for (const [index, line] of lines.entries()) {
+    const parts = line.split('|').map((part) => part.trim()).filter((part) => part.length > 0)
+    if (parts.length !== 2 && parts.length !== 3) {
+      return {
+        rows: [] as MemoryWorkspaceCompareMatrixRowInput[],
+        error: `Invalid matrix line ${index + 1}. Use "scope | question" or "label | scope | question".`
+      }
+    }
+
+    const [labelOrScope, scopeOrQuestion, maybeQuestion] = parts
+    const scopeToken = parts.length === 2 ? labelOrScope : scopeOrQuestion
+    const question = parts.length === 2 ? scopeOrQuestion : maybeQuestion!
+    const scope = parseMatrixScopeToken(scopeToken)
+    if (!scope) {
+      return {
+        rows: [] as MemoryWorkspaceCompareMatrixRowInput[],
+        error: `Invalid matrix line ${index + 1}. Use "global", "person:<id>", or "group:<id>" as the scope token.`
+      }
+    }
+
+    rows.push({
+      ...(parts.length === 3 ? { label: labelOrScope } : {}),
+      scope,
+      question
+    })
+  }
+
+  return {
+    rows,
+    error: null as string | null
+  }
+}
+
 export function MemoryWorkspacePage(props: {
   scope: MemoryWorkspaceScope
   onOpenPerson?: (canonicalPersonId: string) => void
@@ -249,6 +320,24 @@ export function MemoryWorkspacePage(props: {
   onOpenReviewHistory?: (citation: MemoryWorkspaceCitation) => void
 }) {
   const archiveApi = useMemo(() => getArchiveApi(), [])
+  const runCompareMatrix = useMemo(
+    () => (typeof archiveApi.runMemoryWorkspaceCompareMatrix === 'function'
+      ? archiveApi.runMemoryWorkspaceCompareMatrix.bind(archiveApi)
+      : async () => null as MemoryWorkspaceCompareMatrixDetail | null),
+    [archiveApi]
+  )
+  const listCompareMatrices = useMemo(
+    () => (typeof archiveApi.listMemoryWorkspaceCompareMatrices === 'function'
+      ? archiveApi.listMemoryWorkspaceCompareMatrices.bind(archiveApi)
+      : async () => [] as MemoryWorkspaceCompareMatrixSummary[]),
+    [archiveApi]
+  )
+  const getCompareMatrix = useMemo(
+    () => (typeof archiveApi.getMemoryWorkspaceCompareMatrix === 'function'
+      ? archiveApi.getMemoryWorkspaceCompareMatrix.bind(archiveApi)
+      : async () => null as MemoryWorkspaceCompareMatrixDetail | null),
+    [archiveApi]
+  )
   const scopeIdentity = scopeKey(props.scope)
   const scopeRequestRef = useRef(0)
   const [question, setQuestion] = useState(() => initialQuestionForScope(props.scope))
@@ -258,14 +347,23 @@ export function MemoryWorkspacePage(props: {
   const [compareSessionSummaries, setCompareSessionSummaries] = useState<MemoryWorkspaceCompareSessionSummary[]>([])
   const [selectedCompareSessionId, setSelectedCompareSessionId] = useState<string | null>(null)
   const [compareRuns, setCompareRuns] = useState<MemoryWorkspaceCompareRunRecord[]>([])
+  const [matrixTitle, setMatrixTitle] = useState('')
+  const [matrixRowsInput, setMatrixRowsInput] = useState('')
+  const [matrixSummaries, setMatrixSummaries] = useState<MemoryWorkspaceCompareMatrixSummary[]>([])
+  const [selectedMatrixSessionId, setSelectedMatrixSessionId] = useState<string | null>(null)
+  const [matrixRows, setMatrixRows] = useState<MemoryWorkspaceCompareMatrixRowRecord[]>([])
+  const [hasLoadedMatrices, setHasLoadedMatrices] = useState(false)
   const [hasLoadedSessions, setHasLoadedSessions] = useState(false)
   const [hasLoadedCompareSessions, setHasLoadedCompareSessions] = useState(false)
+  const [isLoadingMatrices, setIsLoadingMatrices] = useState(false)
   const [isLoadingSessions, setIsLoadingSessions] = useState(false)
   const [isLoadingCompareSessions, setIsLoadingCompareSessions] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isComparing, setIsComparing] = useState(false)
+  const [isRunningMatrix, setIsRunningMatrix] = useState(false)
   const [emptyStateMessage, setEmptyStateMessage] = useState<string | null>(null)
   const [compareEmptyStateMessage, setCompareEmptyStateMessage] = useState<string | null>(null)
+  const [matrixError, setMatrixError] = useState<string | null>(null)
   const [compareTargetControls, setCompareTargetControls] = useState<CompareTargetControls>(() => readStoredCompareTargetDefaults())
   const [compareJudgeEnabled, setCompareJudgeEnabled] = useState(() => readStoredCompareJudgeDefaults().enabled)
   const [compareJudgeProvider, setCompareJudgeProvider] = useState<NonNullable<RunMemoryWorkspaceCompareJudgeInput['provider']>>(
@@ -341,6 +439,26 @@ export function MemoryWorkspacePage(props: {
     }
   }
 
+  const loadCompareMatrixDetail = async (
+    matrixSessionId: string,
+    scopeRequestId: number,
+    preserveRows = false
+  ) => {
+    const matrix = await getCompareMatrix(matrixSessionId)
+    if (scopeRequestId !== scopeRequestRef.current) {
+      return
+    }
+
+    if (matrix) {
+      setMatrixRows(matrix.rows)
+      return
+    }
+
+    if (!preserveRows) {
+      setMatrixRows([])
+    }
+  }
+
   const refreshCompareSessions = async (options?: {
     scopeRequestId?: number
     preferredCompareSessionId?: string | null
@@ -370,28 +488,72 @@ export function MemoryWorkspacePage(props: {
     await loadCompareSessionDetail(nextCompareSessionId, scopeRequestId, preserveRuns)
   }
 
+  const refreshCompareMatrices = async (options?: {
+    scopeRequestId?: number
+    preferredMatrixSessionId?: string | null
+    preserveRows?: boolean
+  }) => {
+    const scopeRequestId = options?.scopeRequestId ?? scopeRequestRef.current
+    const preferredMatrixSessionId = options?.preferredMatrixSessionId ?? null
+    const preserveRows = options?.preserveRows ?? false
+    const summaries = await listCompareMatrices()
+    if (scopeRequestId !== scopeRequestRef.current) {
+      return
+    }
+
+    setMatrixSummaries(summaries)
+    setHasLoadedMatrices(true)
+
+    const nextMatrixSessionId = preferredMatrixSessionId ?? summaries[0]?.matrixSessionId ?? null
+    if (!nextMatrixSessionId) {
+      if (!preserveRows) {
+        setSelectedMatrixSessionId(null)
+        setMatrixRows([])
+      }
+      return
+    }
+
+    setSelectedMatrixSessionId(nextMatrixSessionId)
+    await loadCompareMatrixDetail(nextMatrixSessionId, scopeRequestId, preserveRows)
+  }
+
   useEffect(() => {
     const scopeRequestId = scopeRequestRef.current + 1
     const storedCompareTargetDefaults = readStoredCompareTargetDefaults()
     const storedCompareJudgeDefaults = readStoredCompareJudgeDefaults()
     scopeRequestRef.current = scopeRequestId
     setQuestion(initialQuestionForScope(props.scope))
+    setMatrixTitle('')
+    setMatrixRowsInput('')
     setSessionSummaries([])
     setSelectedSessionId(null)
     setTurns([])
     setCompareSessionSummaries([])
     setSelectedCompareSessionId(null)
     setCompareRuns([])
+    setMatrixSummaries([])
+    setSelectedMatrixSessionId(null)
+    setMatrixRows([])
+    setHasLoadedMatrices(false)
     setHasLoadedSessions(false)
     setHasLoadedCompareSessions(false)
     setEmptyStateMessage(null)
     setCompareEmptyStateMessage(null)
+    setMatrixError(null)
     setCompareTargetControls(storedCompareTargetDefaults)
     setCompareJudgeEnabled(storedCompareJudgeDefaults.enabled)
     setCompareJudgeProvider(storedCompareJudgeDefaults.provider)
     setCompareJudgeModel(storedCompareJudgeDefaults.model)
+    setIsLoadingMatrices(true)
     setIsLoadingSessions(true)
     setIsLoadingCompareSessions(true)
+
+    void refreshCompareMatrices({ scopeRequestId })
+      .finally(() => {
+        if (scopeRequestId === scopeRequestRef.current) {
+          setIsLoadingMatrices(false)
+        }
+      })
 
     void refreshSessions({ scopeRequestId })
       .finally(() => {
@@ -466,6 +628,26 @@ export function MemoryWorkspacePage(props: {
     setCompareJudgeProvider(inferredJudgeDefaults.provider)
     setCompareJudgeModel(inferredJudgeDefaults.model)
     setCompareEmptyStateMessage(null)
+  }
+
+  const handleSelectCompareMatrix = async (matrixSessionId: string) => {
+    const scopeRequestId = scopeRequestRef.current
+    setSelectedMatrixSessionId(matrixSessionId)
+    setIsLoadingMatrices(true)
+
+    await loadCompareMatrixDetail(matrixSessionId, scopeRequestId)
+
+    if (scopeRequestId === scopeRequestRef.current) {
+      setIsLoadingMatrices(false)
+    }
+  }
+
+  const handleOpenMatrixRowCompare = async (row: MemoryWorkspaceCompareMatrixRowRecord) => {
+    if (!row.compareSessionId) {
+      return
+    }
+
+    await handleSelectCompareSession(row.compareSessionId)
   }
 
   const handleAsk = async () => {
@@ -567,6 +749,55 @@ export function MemoryWorkspacePage(props: {
     } finally {
       if (scopeRequestId === scopeRequestRef.current) {
         setIsComparing(false)
+      }
+    }
+  }
+
+  const handleRunCompareMatrix = async () => {
+    const { rows, error } = parseCompareMatrixRows(matrixRowsInput)
+    setMatrixError(error)
+    if (error) {
+      return
+    }
+
+    const scopeRequestId = scopeRequestRef.current
+    setIsRunningMatrix(true)
+
+    try {
+      const matrix = await runCompareMatrix({
+        ...(matrixTitle.trim().length > 0 ? { title: matrixTitle.trim() } : {}),
+        rows,
+        ...(compareUsesCustomTargets ? { targets: selectedCompareTargets } : {}),
+        judge: compareJudgeEnabled
+          ? {
+              enabled: true,
+              provider: compareJudgeProvider,
+              ...(compareJudgeModel.trim().length > 0 ? { model: compareJudgeModel.trim() } : {})
+            }
+          : {
+              enabled: false
+            }
+      })
+
+      if (scopeRequestId !== scopeRequestRef.current) {
+        return
+      }
+
+      if (!matrix) {
+        setMatrixError('No compare matrix result is available yet.')
+        return
+      }
+
+      setSelectedMatrixSessionId(matrix.matrixSessionId)
+      setMatrixRows(matrix.rows)
+      await refreshCompareMatrices({
+        scopeRequestId,
+        preferredMatrixSessionId: matrix.matrixSessionId,
+        preserveRows: true
+      })
+    } finally {
+      if (scopeRequestId === scopeRequestRef.current) {
+        setIsRunningMatrix(false)
       }
     }
   }
@@ -673,6 +904,19 @@ export function MemoryWorkspacePage(props: {
             </>
           ) : null}
         </fieldset>
+        <fieldset>
+          <legend>Compare matrix</legend>
+          <label>
+            Compare matrix title
+            <input value={matrixTitle} onChange={(event) => setMatrixTitle(event.target.value)} />
+          </label>
+          <label>
+            Compare matrix rows
+            <textarea value={matrixRowsInput} onChange={(event) => setMatrixRowsInput(event.target.value)} />
+          </label>
+          <p>Use one line per row: `scope | question` or `label | scope | question`.</p>
+          {matrixError ? <p>{matrixError}</p> : null}
+        </fieldset>
         <button type="submit" disabled={question.trim().length === 0 || isLoading}>
           Ask
         </button>
@@ -690,24 +934,39 @@ export function MemoryWorkspacePage(props: {
         >
           Run compare
         </button>
+        <button
+          type="button"
+          disabled={matrixRowsInput.trim().length === 0 || isRunningMatrix}
+          onClick={() => { void handleRunCompareMatrix() }}
+        >
+          Run matrix compare
+        </button>
       </form>
 
       <MemoryWorkspaceView
         scope={props.scope}
+        matrixSummaries={matrixSummaries}
+        selectedMatrixSessionId={selectedMatrixSessionId}
+        matrixRows={matrixRows}
         sessionSummaries={sessionSummaries}
         selectedSessionId={selectedSessionId}
         turns={turns}
         compareSessionSummaries={compareSessionSummaries}
         selectedCompareSessionId={selectedCompareSessionId}
         compareRuns={compareRuns}
+        hasLoadedMatrices={hasLoadedMatrices}
         hasLoadedSessions={hasLoadedSessions}
         hasLoadedCompareSessions={hasLoadedCompareSessions}
+        isLoadingMatrices={isLoadingMatrices}
         isLoading={isLoading}
         isLoadingSessions={isLoadingSessions}
         isComparing={isComparing}
+        isRunningMatrix={isRunningMatrix}
         isLoadingCompareSessions={isLoadingCompareSessions}
         emptyStateMessage={emptyStateMessage}
         compareEmptyStateMessage={compareEmptyStateMessage}
+        onSelectMatrixSession={handleSelectCompareMatrix}
+        onOpenMatrixRowCompare={handleOpenMatrixRowCompare}
         onSelectSession={handleSelectSession}
         onSelectCompareSession={handleSelectCompareSession}
         onStartNewSession={handleStartNewSession}

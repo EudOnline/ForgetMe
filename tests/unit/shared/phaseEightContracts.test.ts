@@ -3,6 +3,10 @@ import type {
   ArchiveApi,
   AskMemoryWorkspaceInput,
   MemoryWorkspaceAnswer,
+  MemoryWorkspaceCompareMatrixDetail,
+  MemoryWorkspaceCompareMatrixRowInput,
+  MemoryWorkspaceCompareMatrixRowRecord,
+  MemoryWorkspaceCompareMatrixSummary,
   MemoryWorkspaceCompareEvaluationDimension,
   MemoryWorkspaceCompareJudgeVerdict,
   MemoryWorkspaceCompareRecommendation,
@@ -18,14 +22,17 @@ import type {
   MemoryWorkspaceGuardrailReasonCode,
   MemoryWorkspaceResponse,
   MemoryWorkspaceScope,
-  RunMemoryWorkspaceCompareInput
+  RunMemoryWorkspaceCompareInput,
+  RunMemoryWorkspaceCompareMatrixInput
 } from '../../../src/shared/archiveContracts'
 import {
   askMemoryWorkspaceInputSchema,
+  memoryWorkspaceCompareMatrixIdSchema,
   memoryWorkspaceCompareSessionFilterSchema,
   memoryWorkspaceCompareTargetSchema,
   memoryWorkspaceScopeSchema,
-  runMemoryWorkspaceCompareInputSchema
+  runMemoryWorkspaceCompareInputSchema,
+  runMemoryWorkspaceCompareMatrixInputSchema
 } from '../../../src/shared/ipcSchemas'
 
 describe('phase-eight memory workspace contracts', () => {
@@ -188,6 +195,7 @@ describe('phase-eight memory workspace contracts', () => {
         }
       },
       recommendation: {
+        source: 'deterministic',
         decision: 'recommend_run',
         recommendedCompareRunId: 'compare-run-1',
         recommendedTargetLabel: 'SiliconFlow / Qwen2.5-72B-Instruct',
@@ -209,6 +217,7 @@ describe('phase-eight memory workspace contracts', () => {
     expect(detail.metadata.targetLabels).toContain('Local baseline')
     expect(detail.metadata.judge.status).toBe('completed')
     expect(detail.recommendation?.decision).toBe('recommend_run')
+    expect(detail.recommendation?.source).toBe('deterministic')
     expect(input.judge?.enabled).toBe(true)
 
     expectTypeOf<ArchiveApi['runMemoryWorkspaceCompare']>().toEqualTypeOf<
@@ -224,6 +233,90 @@ describe('phase-eight memory workspace contracts', () => {
     expectTypeOf<MemoryWorkspaceCompareRunRecord['judge']>().toEqualTypeOf<MemoryWorkspaceCompareJudgeVerdict>()
     expectTypeOf<MemoryWorkspaceCompareSessionSummary['metadata']['targetLabels']>().toEqualTypeOf<string[]>()
     expectTypeOf<MemoryWorkspaceCompareSessionSummary['recommendation']>().toEqualTypeOf<MemoryWorkspaceCompareRecommendation | null>()
+  })
+
+  it('exports compare matrix shapes', () => {
+    const rowInput: MemoryWorkspaceCompareMatrixRowInput = {
+      label: 'Person baseline',
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '她有哪些已确认信息？'
+    }
+
+    const input: RunMemoryWorkspaceCompareMatrixInput = {
+      title: 'Daily compare matrix',
+      rows: [
+        rowInput,
+        {
+          scope: { kind: 'global' },
+          question: '现在最值得关注什么？'
+        }
+      ],
+      judge: {
+        enabled: true,
+        provider: 'openrouter',
+        model: 'judge-qwen'
+      },
+      targets: [
+        {
+          targetId: 'baseline-local',
+          label: 'Local baseline',
+          executionMode: 'local_baseline'
+        }
+      ]
+    }
+
+    const row: MemoryWorkspaceCompareMatrixRowRecord = {
+      matrixRowId: 'matrix-row-1',
+      matrixSessionId: 'matrix-session-1',
+      ordinal: 1,
+      label: 'Person baseline',
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '她有哪些已确认信息？',
+      status: 'completed',
+      errorMessage: null,
+      compareSessionId: 'compare-session-1',
+      recommendedCompareRunId: 'compare-run-1',
+      recommendedTargetLabel: 'Local baseline',
+      failedRunCount: 0,
+      createdAt: '2026-03-14T05:00:00.000Z'
+    }
+
+    const summary: MemoryWorkspaceCompareMatrixSummary = {
+      matrixSessionId: 'matrix-session-1',
+      title: 'Daily compare matrix',
+      rowCount: 2,
+      completedRowCount: 1,
+      failedRowCount: 1,
+      metadata: {
+        targetLabels: ['Local baseline'],
+        judge: {
+          enabled: true,
+          status: 'completed'
+        }
+      },
+      createdAt: '2026-03-14T05:00:00.000Z',
+      updatedAt: '2026-03-14T05:00:10.000Z'
+    }
+
+    const detail: MemoryWorkspaceCompareMatrixDetail = {
+      ...summary,
+      rows: [row]
+    }
+
+    expect(detail.rows[0]?.scope.kind).toBe('person')
+    expect(detail.rows[0]?.recommendedTargetLabel).toBe('Local baseline')
+    expect(detail.failedRowCount).toBe(1)
+    expect(input.rows).toHaveLength(2)
+
+    expectTypeOf<ArchiveApi['runMemoryWorkspaceCompareMatrix']>().toEqualTypeOf<
+      (input: RunMemoryWorkspaceCompareMatrixInput) => Promise<MemoryWorkspaceCompareMatrixDetail | null>
+    >()
+    expectTypeOf<ArchiveApi['listMemoryWorkspaceCompareMatrices']>().toEqualTypeOf<
+      () => Promise<MemoryWorkspaceCompareMatrixSummary[]>
+    >()
+    expectTypeOf<ArchiveApi['getMemoryWorkspaceCompareMatrix']>().toEqualTypeOf<
+      (matrixSessionId: string) => Promise<MemoryWorkspaceCompareMatrixDetail | null>
+    >()
   })
 
   it('exports memory workspace ask input schema', () => {
@@ -316,6 +409,46 @@ describe('phase-eight memory workspace contracts', () => {
       scope: { kind: 'global' }
     })).toEqual({
       scope: { kind: 'global' }
+    })
+
+    expect(runMemoryWorkspaceCompareMatrixInputSchema.parse({
+      title: 'Daily compare matrix',
+      rows: [
+        {
+          label: 'Global row',
+          scope: { kind: 'global' },
+          question: '现在最值得关注什么？'
+        },
+        {
+          scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+          question: '她有哪些已确认信息？'
+        }
+      ],
+      judge: {
+        enabled: false
+      }
+    })).toEqual({
+      title: 'Daily compare matrix',
+      rows: [
+        {
+          label: 'Global row',
+          scope: { kind: 'global' },
+          question: '现在最值得关注什么？'
+        },
+        {
+          scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+          question: '她有哪些已确认信息？'
+        }
+      ],
+      judge: {
+        enabled: false
+      }
+    })
+
+    expect(memoryWorkspaceCompareMatrixIdSchema.parse({
+      matrixSessionId: 'matrix-session-1'
+    })).toEqual({
+      matrixSessionId: 'matrix-session-1'
     })
   })
 })

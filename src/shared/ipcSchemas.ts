@@ -66,6 +66,23 @@ export const runMemoryWorkspaceCompareInputSchema = z.object({
   targets: z.array(memoryWorkspaceCompareTargetSchema).min(1).optional()
 })
 
+export const memoryWorkspaceCompareMatrixRowInputSchema = z.object({
+  label: z.string().min(1).optional(),
+  scope: memoryWorkspaceScopeSchema,
+  question: z.string().min(1)
+})
+
+export const runMemoryWorkspaceCompareMatrixInputSchema = z.object({
+  title: z.string().min(1).optional(),
+  rows: z.array(memoryWorkspaceCompareMatrixRowInputSchema).min(1),
+  judge: z.object({
+    enabled: z.boolean(),
+    provider: z.enum(['siliconflow', 'openrouter']).optional(),
+    model: z.string().min(1).optional()
+  }).optional(),
+  targets: z.array(memoryWorkspaceCompareTargetSchema).min(1).optional()
+})
+
 export const memoryWorkspaceSessionFilterSchema = z.object({
   scope: memoryWorkspaceScopeSchema.optional()
 }).optional().default({})
@@ -80,6 +97,10 @@ export const memoryWorkspaceCompareSessionFilterSchema = z.object({
 
 export const memoryWorkspaceCompareSessionIdSchema = z.object({
   compareSessionId: z.string().min(1)
+})
+
+export const memoryWorkspaceCompareMatrixIdSchema = z.object({
+  matrixSessionId: z.string().min(1)
 })
 
 export const askMemoryWorkspacePersistedInputSchema = z.object({
