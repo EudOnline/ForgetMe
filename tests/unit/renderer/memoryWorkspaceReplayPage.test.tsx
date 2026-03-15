@@ -446,6 +446,7 @@ describe('MemoryWorkspacePage replay', () => {
             scope: { kind: 'person', canonicalPersonId: 'cp-1' },
             question: '如果她本人会怎么说？',
             expressionMode: 'grounded',
+            workflowKind: 'default',
             title: 'Memory Workspace · Alice Chen',
             answer: {
               summary: 'This memory workspace cannot answer as if it were the archived person.',
@@ -465,20 +466,31 @@ describe('MemoryWorkspacePage replay', () => {
               title: 'Persona request blocked',
               message: 'Use grounded archive questions instead of imitation.',
               reasons: ['persona_request', 'delegation_not_allowed', 'style_evidence_unavailable'],
-              suggestedAsks: [
+              suggestedActions: [
                 {
+                  kind: 'ask',
                   label: 'Past expressions',
                   question: '她过去是怎么表达这类事的？给我看相关原话。',
                   expressionMode: 'grounded',
                   rationale: 'Review direct archive-backed excerpts instead of imitating voice.'
                 },
                 {
+                  kind: 'open_persona_draft_sandbox',
+                  workflowKind: 'persona_draft_sandbox',
+                  label: 'Reviewed draft sandbox',
+                  question: '如果她来写这段话，会怎么写？先给我一个可审阅草稿。',
+                  expressionMode: 'grounded',
+                  rationale: 'Generate a clearly labeled simulation draft backed by archive quotes.'
+                },
+                {
+                  kind: 'ask',
                   label: 'Grounded summary',
                   question: '先基于档案总结她当前最明确的状态。',
                   expressionMode: 'grounded',
                   rationale: 'Summarize the strongest approved archive signal first.'
                 },
                 {
+                  kind: 'ask',
                   label: 'Advice next step',
                   question: '基于档案，现在最安全的下一步是什么？',
                   expressionMode: 'advice',
@@ -486,7 +498,8 @@ describe('MemoryWorkspacePage replay', () => {
                 }
               ]
             },
-            communicationEvidence: null
+            communicationEvidence: null,
+            personaDraft: null
           }
         }
       ]
@@ -506,6 +519,7 @@ describe('MemoryWorkspacePage replay', () => {
     expect(await screen.findByText('Persona request blocked')).toBeInTheDocument()
     expect(screen.getByText('Use grounded archive questions instead of imitation.')).toBeInTheDocument()
     expect(screen.getByText('Past expressions')).toBeInTheDocument()
+    expect(screen.getByText('Reviewed draft sandbox')).toBeInTheDocument()
     expect(screen.getByText('Grounded summary')).toBeInTheDocument()
     expect(screen.getByText('Advice next step')).toBeInTheDocument()
     expect(screen.getByText('delegation_not_allowed')).toBeInTheDocument()
@@ -550,6 +564,7 @@ describe('MemoryWorkspacePage replay', () => {
         scope: { kind: 'person', canonicalPersonId: 'cp-1' } as const,
         question: '如果她本人会怎么说？',
         expressionMode: 'grounded' as const,
+        workflowKind: 'default' as const,
         title: 'Memory Workspace · Alice Chen',
         answer: {
           summary: 'This memory workspace cannot answer as if it were the archived person.',
@@ -569,8 +584,9 @@ describe('MemoryWorkspacePage replay', () => {
           title: 'Persona request blocked',
           message: 'Use grounded archive questions instead of imitation.',
           reasons: ['persona_request', 'delegation_not_allowed', 'style_evidence_unavailable'] as const,
-          suggestedAsks: [
+          suggestedActions: [
             {
+              kind: 'ask' as const,
               label: 'Past expressions',
               question: '她过去是怎么表达这类事的？给我看相关原话。',
               expressionMode: 'grounded' as const,
@@ -578,7 +594,8 @@ describe('MemoryWorkspacePage replay', () => {
             }
           ]
         },
-        communicationEvidence: null
+        communicationEvidence: null,
+        personaDraft: null
       }
     }
 
@@ -596,6 +613,7 @@ describe('MemoryWorkspacePage replay', () => {
         scope: { kind: 'person', canonicalPersonId: 'cp-1' } as const,
         question: '她过去是怎么表达这类事的？给我看相关原话。',
         expressionMode: 'grounded' as const,
+        workflowKind: 'default' as const,
         title: 'Memory Workspace · Alice Chen',
         answer: {
           summary: 'Direct chat excerpts in the approved archive address this ask.',
@@ -624,7 +642,8 @@ describe('MemoryWorkspacePage replay', () => {
               text: '我们还是把这些记录留在归档里，后面查起来更稳妥。'
             }
           ]
-        }
+        },
+        personaDraft: null
       }
     }
 
@@ -677,5 +696,194 @@ describe('MemoryWorkspacePage replay', () => {
 
     expect(await screen.findByText('Communication Evidence')).toBeInTheDocument()
     expect(screen.getByText('我们还是把这些记录留在归档里，后面查起来更稳妥。')).toBeInTheDocument()
+  })
+
+  it('renders replayed persona draft sandbox turns and lets redirect sandbox actions create a new turn', async () => {
+    const listMemoryWorkspaceSessions = vi.fn()
+      .mockResolvedValueOnce([
+        {
+          sessionId: 'session-sandbox',
+          scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+          title: 'Memory Workspace · Alice Chen',
+          latestQuestion: '如果她本人会怎么说？',
+          turnCount: 1,
+          createdAt: '2026-03-15T12:01:00.000Z',
+          updatedAt: '2026-03-15T12:01:00.000Z'
+        }
+      ])
+      .mockResolvedValueOnce([
+        {
+          sessionId: 'session-sandbox',
+          scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+          title: 'Memory Workspace · Alice Chen',
+          latestQuestion: '如果她来写这段话，会怎么写？先给我一个可审阅草稿。',
+          turnCount: 2,
+          createdAt: '2026-03-15T12:01:00.000Z',
+          updatedAt: '2026-03-15T12:02:00.000Z'
+        }
+      ])
+
+    const blockedTurn = {
+      turnId: 'turn-blocked-sandbox',
+      sessionId: 'session-sandbox',
+      ordinal: 1,
+      question: '如果她本人会怎么说？',
+      provider: null,
+      model: null,
+      contextHash: 'context-blocked-sandbox',
+      promptHash: 'prompt-blocked-sandbox',
+      createdAt: '2026-03-15T12:01:00.000Z',
+      response: {
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' } as const,
+        question: '如果她本人会怎么说？',
+        expressionMode: 'grounded' as const,
+        workflowKind: 'default' as const,
+        title: 'Memory Workspace · Alice Chen',
+        answer: {
+          summary: 'This memory workspace cannot answer as if it were the archived person.',
+          displayType: 'coverage_gap' as const,
+          citations: []
+        },
+        contextCards: [],
+        guardrail: {
+          decision: 'fallback_unsupported_request' as const,
+          reasonCodes: ['persona_request' as const],
+          citationCount: 0,
+          sourceKinds: [],
+          fallbackApplied: true
+        },
+        boundaryRedirect: {
+          kind: 'persona_request' as const,
+          title: 'Persona request blocked',
+          message: 'Use grounded archive questions instead of imitation.',
+          reasons: ['persona_request', 'delegation_not_allowed', 'style_evidence_unavailable'] as const,
+          suggestedActions: [
+            {
+              kind: 'open_persona_draft_sandbox' as const,
+              workflowKind: 'persona_draft_sandbox' as const,
+              label: 'Reviewed draft sandbox',
+              question: '如果她来写这段话，会怎么写？先给我一个可审阅草稿。',
+              expressionMode: 'grounded' as const,
+              rationale: 'Generate a clearly labeled simulation draft backed by archive quotes.'
+            }
+          ]
+        },
+        communicationEvidence: null,
+        personaDraft: null
+      }
+    }
+
+    const sandboxTurn = {
+      turnId: 'turn-sandbox',
+      sessionId: 'session-sandbox',
+      ordinal: 2,
+      question: '如果她来写这段话，会怎么写？先给我一个可审阅草稿。',
+      provider: null,
+      model: null,
+      contextHash: 'context-sandbox',
+      promptHash: 'prompt-sandbox',
+      createdAt: '2026-03-15T12:02:00.000Z',
+      response: {
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' } as const,
+        question: '如果她来写这段话，会怎么写？先给我一个可审阅草稿。',
+        expressionMode: 'grounded' as const,
+        workflowKind: 'persona_draft_sandbox' as const,
+        title: 'Memory Workspace · Alice Chen',
+        answer: {
+          summary: 'Reviewed simulation draft generated from archive-backed excerpts for this ask.',
+          displayType: 'derived_summary' as const,
+          citations: []
+        },
+        contextCards: [],
+        guardrail: {
+          decision: 'sandbox_review_required' as const,
+          reasonCodes: ['persona_draft_sandbox' as const, 'quote_trace_required' as const],
+          citationCount: 2,
+          sourceKinds: ['file'],
+          fallbackApplied: false
+        },
+        boundaryRedirect: null,
+        communicationEvidence: {
+          title: 'Communication Evidence',
+          summary: 'Direct archive-backed excerpts related to this ask.',
+          excerpts: [
+            {
+              excerptId: 'ce-1',
+              fileId: 'f-1',
+              fileName: 'chat-1.json',
+              ordinal: 1,
+              speakerDisplayName: 'Alice Chen',
+              text: '我们还是把这些记录留在归档里，后面查起来更稳妥。'
+            }
+          ]
+        },
+        personaDraft: {
+          title: 'Reviewed draft sandbox',
+          disclaimer: 'Simulation draft based on archived expressions. Not a statement from the person.',
+          draft: '可审阅草稿：先把关键记录整理进归档，把重要细节继续记下来，这样后面查找会更稳妥。',
+          reviewState: 'review_required' as const,
+          supportingExcerpts: ['ce-1'],
+          trace: [
+            {
+              traceId: 'trace-1',
+              excerptIds: ['ce-1'],
+              explanation: 'Draft segment 1 stays grounded in Alice Chen excerpt ce-1.'
+            }
+          ]
+        }
+      }
+    }
+
+    const getMemoryWorkspaceSession = vi.fn()
+      .mockResolvedValueOnce({
+        sessionId: 'session-sandbox',
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+        title: 'Memory Workspace · Alice Chen',
+        latestQuestion: '如果她本人会怎么说？',
+        turnCount: 1,
+        createdAt: '2026-03-15T12:01:00.000Z',
+        updatedAt: '2026-03-15T12:01:00.000Z',
+        turns: [blockedTurn]
+      })
+      .mockResolvedValueOnce({
+        sessionId: 'session-sandbox',
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+        title: 'Memory Workspace · Alice Chen',
+        latestQuestion: '如果她来写这段话，会怎么写？先给我一个可审阅草稿。',
+        turnCount: 2,
+        createdAt: '2026-03-15T12:01:00.000Z',
+        updatedAt: '2026-03-15T12:02:00.000Z',
+        turns: [blockedTurn, sandboxTurn]
+      })
+
+    const askMemoryWorkspacePersisted = vi.fn().mockResolvedValue(sandboxTurn)
+
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions,
+      getMemoryWorkspaceSession,
+      listMemoryWorkspaceCompareSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'person', canonicalPersonId: 'cp-1' }} />)
+
+    expect(await screen.findByText('Reviewed draft sandbox')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Reviewed draft sandbox' }))
+
+    await waitFor(() => {
+      expect(askMemoryWorkspacePersisted).toHaveBeenCalledWith({
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+        question: '如果她来写这段话，会怎么写？先给我一个可审阅草稿。',
+        expressionMode: 'grounded',
+        workflowKind: 'persona_draft_sandbox',
+        sessionId: 'session-sandbox'
+      })
+    })
+
+    expect(await screen.findByText('Workflow: persona draft sandbox')).toBeInTheDocument()
+    expect(screen.getByText('Simulation draft based on archived expressions. Not a statement from the person.')).toBeInTheDocument()
+    expect(screen.getByText('Draft segment 1 stays grounded in Alice Chen excerpt ce-1.')).toBeInTheDocument()
   })
 })

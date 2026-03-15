@@ -11,8 +11,9 @@ import type {
   MemoryWorkspaceCitation,
   MemoryWorkspaceScope,
   MemoryWorkspaceSessionSummary,
-  MemoryWorkspaceSuggestedAsk,
+  MemoryWorkspaceSuggestedAction,
   MemoryWorkspaceTurnRecord,
+  MemoryWorkspaceWorkflowKind,
   RunMemoryWorkspaceCompareJudgeInput
 } from '../../shared/archiveContracts'
 import { getArchiveApi } from '../archiveApi'
@@ -661,6 +662,7 @@ export function MemoryWorkspacePage(props: {
   const submitAsk = async (input: {
     question: string
     expressionMode: MemoryWorkspaceExpressionMode
+    workflowKind?: MemoryWorkspaceWorkflowKind
     resetDraftQuestion?: boolean
   }) => {
     const trimmedQuestion = input.question.trim()
@@ -677,6 +679,7 @@ export function MemoryWorkspacePage(props: {
         scope: props.scope,
         question: trimmedQuestion,
         expressionMode: input.expressionMode,
+        ...(input.workflowKind ? { workflowKind: input.workflowKind } : {}),
         ...(selectedSessionId ? { sessionId: selectedSessionId } : {})
       })
 
@@ -726,10 +729,11 @@ export function MemoryWorkspacePage(props: {
     })
   }
 
-  const handleRunSuggestedAsk = async (suggestion: MemoryWorkspaceSuggestedAsk) => {
+  const handleRunSuggestedAction = async (suggestion: MemoryWorkspaceSuggestedAction) => {
     await submitAsk({
       question: suggestion.question,
       expressionMode: suggestion.expressionMode,
+      workflowKind: suggestion.kind === 'open_persona_draft_sandbox' ? suggestion.workflowKind : undefined,
       resetDraftQuestion: false
     })
   }
@@ -1017,7 +1021,7 @@ export function MemoryWorkspacePage(props: {
         onOpenGroup={props.onOpenGroup}
         onOpenEvidenceFile={props.onOpenEvidenceFile}
         onOpenReviewHistory={props.onOpenReviewHistory}
-        onRunSuggestedAsk={handleRunSuggestedAsk}
+        onRunSuggestedAction={handleRunSuggestedAction}
       />
     </section>
   )

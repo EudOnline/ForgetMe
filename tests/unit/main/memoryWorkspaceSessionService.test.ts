@@ -126,7 +126,8 @@ function seedConversationScenario() {
 
   for (const [evidenceId, fileId, ordinal, speakerDisplayName, speakerAnchorPersonId, text] of [
     ['ce-1', 'f-1', 1, 'Alice Chen', 'p-1', '我们还是把这些记录留在归档里，后面查起来更稳妥。'],
-    ['ce-2', 'f-1', 2, 'Bob Li', 'p-2', '先把聊天整理成归档笔记，这样以后能找到。']
+    ['ce-2', 'f-1', 2, 'Bob Li', 'p-2', '先把聊天整理成归档笔记，这样以后能找到。'],
+    ['ce-3', 'f-3', 1, 'Alice Chen', 'p-1', '重要细节继续记下来，后面回看归档会更清楚。']
   ] as const) {
     db.prepare(
       'insert into communication_evidence (id, file_id, ordinal, speaker_display_name, speaker_anchor_person_id, excerpt_text, created_at) values (?, ?, ?, ?, ?, ?, ?)'
@@ -380,8 +381,13 @@ describe('memoryWorkspaceSessionService', () => {
 
     expect(turn?.response.boundaryRedirect?.kind).toBe('persona_request')
     expect(detail?.turns[0]?.response.boundaryRedirect).toEqual(turn?.response.boundaryRedirect)
-    expect(detail?.turns[0]?.response.boundaryRedirect?.suggestedAsks.some((item) => item.label === 'Past expressions')).toBe(true)
-    expect(detail?.turns[0]?.response.boundaryRedirect?.suggestedAsks.map((item) => item.expressionMode)).toEqual(
+    expect(detail?.turns[0]?.response.workflowKind).toBe('default')
+    expect(detail?.turns[0]?.response.personaDraft).toBeNull()
+    expect(detail?.turns[0]?.response.boundaryRedirect?.suggestedActions.some((item) => item.label === 'Past expressions' && item.kind === 'ask')).toBe(true)
+    expect(
+      detail?.turns[0]?.response.boundaryRedirect?.suggestedActions.some((item) => item.kind === 'open_persona_draft_sandbox')
+    ).toBe(true)
+    expect(detail?.turns[0]?.response.boundaryRedirect?.suggestedActions.map((item) => item.expressionMode)).toEqual(
       expect.arrayContaining(['grounded', 'advice'])
     )
 
@@ -403,6 +409,30 @@ describe('memoryWorkspaceSessionService', () => {
     expect(turn?.response.communicationEvidence?.excerpts[0]?.speakerDisplayName).toBe('Alice Chen')
     expect(detail?.turns[0]?.response.communicationEvidence).toEqual(turn?.response.communicationEvidence)
     expect(detail?.turns[0]?.response.boundaryRedirect).toBeNull()
+    expect(detail?.turns[0]?.response.workflowKind).toBe('default')
+    expect(detail?.turns[0]?.response.personaDraft).toBeNull()
+
+    db.close()
+  })
+
+  it('persists reviewed persona draft sandbox turns for replay', () => {
+    const db = seedConversationScenario()
+
+    const turn = askMemoryWorkspacePersisted(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '如果她来写一段关于记录和归档的回复，会怎么写？',
+      workflowKind: 'persona_draft_sandbox',
+      expressionMode: 'grounded'
+    })
+
+    const detail = getMemoryWorkspaceSession(db, { sessionId: turn!.sessionId })
+
+    expect(turn?.response.workflowKind).toBe('persona_draft_sandbox')
+    expect(turn?.response.boundaryRedirect).toBeNull()
+    expect(turn?.response.communicationEvidence?.excerpts.length).toBeGreaterThan(1)
+    expect(turn?.response.personaDraft?.reviewState).toBe('review_required')
+    expect(detail?.turns[0]?.response).toEqual(turn?.response)
+    expect(detail?.turns[0]?.response.personaDraft?.trace.length).toBeGreaterThan(0)
 
     db.close()
   })

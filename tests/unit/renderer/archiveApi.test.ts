@@ -123,6 +123,7 @@ describe('archiveApi dossier methods', () => {
         scope: { kind: 'person', canonicalPersonId: 'cp-1' },
         question: '她过去是怎么表达记录和归档这类事的？给我看原话。',
         expressionMode: 'grounded',
+        workflowKind: 'persona_draft_sandbox',
         title: 'Memory Workspace · Alice Chen',
         answer: {
           summary: 'Direct chat excerpts in the approved archive address the ask.',
@@ -151,6 +152,20 @@ describe('archiveApi dossier methods', () => {
               text: '我们还是把这些记录留在归档里，后面查起来更稳妥。'
             }
           ]
+        },
+        personaDraft: {
+          title: 'Reviewed draft sandbox',
+          disclaimer: 'Simulation draft based on archived expressions. Not a statement from the person.',
+          draft: '可审阅草稿：先把关键记录整理进归档，把重要细节继续记下来，这样后面查找会更稳妥。',
+          reviewState: 'review_required',
+          supportingExcerpts: ['ce-1'],
+          trace: [
+            {
+              traceId: 'trace-1',
+              excerptIds: ['ce-1'],
+              explanation: 'Draft segment 1 stays grounded in Alice Chen excerpt ce-1.'
+            }
+          ]
         }
       }
     })
@@ -169,6 +184,8 @@ describe('archiveApi dossier methods', () => {
 
     expect(turn?.response.communicationEvidence?.title).toBe('Communication Evidence')
     expect(turn?.response.communicationEvidence?.excerpts[0]?.fileName).toBe('chat-1.json')
+    expect(turn?.response.workflowKind).toBe('persona_draft_sandbox')
+    expect(turn?.response.personaDraft?.reviewState).toBe('review_required')
     expect(turn?.response.boundaryRedirect).toBeNull()
   })
 })

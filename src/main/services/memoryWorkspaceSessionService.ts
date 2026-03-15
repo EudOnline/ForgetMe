@@ -192,7 +192,8 @@ export function askMemoryWorkspacePersisted(
   const response = askMemoryWorkspace(db, {
     scope: input.scope,
     question: input.question,
-    expressionMode: input.expressionMode
+    expressionMode: input.expressionMode,
+    workflowKind: input.workflowKind
   })
 
   if (!response) {
@@ -207,6 +208,7 @@ export function askMemoryWorkspacePersisted(
     scope: input.scope,
     question: input.question,
     expressionMode: input.expressionMode ?? 'grounded',
+    workflowKind: input.workflowKind ?? 'default',
     sessionId: existingSession?.id ?? null
   })
   const contextHash = hashValue(response)

@@ -1,4 +1,5 @@
 import type {
+  MemoryWorkspaceBoundaryRedirect,
   MemoryWorkspaceCompareMatrixRowRecord,
   MemoryWorkspaceCompareMatrixSummary,
   MemoryWorkspaceCompareRunRecord,
@@ -7,12 +8,29 @@ import type {
   MemoryWorkspaceResponse,
   MemoryWorkspaceScope,
   MemoryWorkspaceSessionSummary,
+  MemoryWorkspaceSuggestedAction,
   MemoryWorkspaceSuggestedAsk,
   MemoryWorkspaceTurnRecord
 } from '../../shared/archiveContracts'
 
 function formatDisplayType(displayType: string) {
   return displayType.replace(/_/g, ' ')
+}
+
+function normalizeSuggestedActions(boundaryRedirect: MemoryWorkspaceBoundaryRedirect) {
+  const suggestedActions = boundaryRedirect.suggestedActions
+  if (Array.isArray(suggestedActions)) {
+    return suggestedActions
+  }
+
+  const legacySuggestedAsks = (
+    boundaryRedirect as MemoryWorkspaceBoundaryRedirect & { suggestedAsks?: MemoryWorkspaceSuggestedAsk[] }
+  ).suggestedAsks ?? []
+
+  return legacySuggestedAsks.map((suggestion) => ({
+    kind: 'ask',
+    ...suggestion
+  } satisfies MemoryWorkspaceSuggestedAction))
 }
 
 function renderCitation(
@@ -120,14 +138,17 @@ function renderResponse(
     onOpenGroup?: (anchorPersonId: string) => void
     onOpenEvidenceFile?: (fileId: string) => void
     onOpenReviewHistory?: (citation: MemoryWorkspaceCitation) => void
-    onRunSuggestedAsk?: (suggestion: MemoryWorkspaceSuggestedAsk) => void
+    onRunSuggestedAction?: (suggestion: MemoryWorkspaceSuggestedAction) => void
   }
 ) {
+  const suggestedActions = response.boundaryRedirect ? normalizeSuggestedActions(response.boundaryRedirect) : []
+
   return (
     <>
       <section aria-label="Answer">
         <h3>Answer</h3>
         <p>Mode: {response.expressionMode ?? 'grounded'}</p>
+        <p>Workflow: {formatDisplayType(response.workflowKind ?? 'default')}</p>
         <p>{response.answer.summary}</p>
         <p>Display type: {formatDisplayType(response.answer.displayType)}</p>
         {response.answer.citations.length ? (
@@ -166,12 +187,14 @@ function renderResponse(
               ))}
             </ul>
           ) : null}
-          {response.boundaryRedirect.suggestedAsks.length ? (
+          {suggestedActions.length ? (
             <ul>
-              {response.boundaryRedirect.suggestedAsks.map((suggestion) => (
-                <li key={`${suggestion.label}:${suggestion.expressionMode}:${suggestion.question}`}>
-                  {handlers.onRunSuggestedAsk ? (
-                    <button type="button" onClick={() => handlers.onRunSuggestedAsk?.(suggestion)}>
+              {suggestedActions.map((suggestion) => (
+                <li
+                  key={`${suggestion.kind}:${suggestion.label}:${suggestion.expressionMode}:${suggestion.question}`}
+                >
+                  {handlers.onRunSuggestedAction ? (
+                    <button type="button" onClick={() => handlers.onRunSuggestedAction?.(suggestion)}>
                       {suggestion.label}
                     </button>
                   ) : (
@@ -211,6 +234,28 @@ function renderResponse(
               </li>
             ))}
           </ul>
+        </section>
+      ) : null}
+
+      {response.personaDraft ? (
+        <section aria-label="Persona Draft Sandbox">
+          <h3>{response.personaDraft.title}</h3>
+          <p>{response.personaDraft.disclaimer}</p>
+          <p>{response.personaDraft.draft}</p>
+          <p>{response.personaDraft.reviewState}</p>
+          {response.personaDraft.supportingExcerpts.length ? (
+            <p>Supporting excerpts: {response.personaDraft.supportingExcerpts.join(', ')}</p>
+          ) : null}
+          {response.personaDraft.trace.length ? (
+            <ul>
+              {response.personaDraft.trace.map((trace) => (
+                <li key={trace.traceId}>
+                  <p>{trace.explanation}</p>
+                  <p>Excerpt ids: {trace.excerptIds.join(', ')}</p>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </section>
       ) : null}
 
@@ -329,7 +374,7 @@ export function MemoryWorkspaceView(props: {
   onOpenGroup?: (anchorPersonId: string) => void
   onOpenEvidenceFile?: (fileId: string) => void
   onOpenReviewHistory?: (citation: MemoryWorkspaceCitation) => void
-  onRunSuggestedAsk?: (suggestion: MemoryWorkspaceSuggestedAsk) => void
+  onRunSuggestedAction?: (suggestion: MemoryWorkspaceSuggestedAction) => void
 }) {
   const activeResponse = props.turns[props.turns.length - 1]?.response ?? null
   const promptMessage =

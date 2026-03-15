@@ -329,6 +329,89 @@ describe('MemoryWorkspacePage', () => {
     expect(onOpenEvidenceFile).toHaveBeenCalledWith('f-1')
   })
 
+  it('renders an active persona draft sandbox response', async () => {
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceSession: vi.fn().mockResolvedValue(null),
+      listMemoryWorkspaceCompareSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted: vi.fn().mockResolvedValue({
+        turnId: 'turn-sandbox-1',
+        sessionId: 'session-sandbox-1',
+        ordinal: 1,
+        question: '如果她来写一段关于记录和归档的回复，会怎么写？',
+        provider: null,
+        model: null,
+        contextHash: 'context-hash-sandbox-1',
+        promptHash: 'prompt-hash-sandbox-1',
+        createdAt: '2026-03-15T00:35:00.000Z',
+        response: {
+          scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+          question: '如果她来写一段关于记录和归档的回复，会怎么写？',
+          expressionMode: 'grounded',
+          workflowKind: 'persona_draft_sandbox',
+          title: 'Memory Workspace · Alice Chen',
+          answer: {
+            summary: 'Reviewed simulation draft generated from archive-backed excerpts for this ask.',
+            displayType: 'derived_summary',
+            citations: []
+          },
+          guardrail: {
+            decision: 'sandbox_review_required',
+            reasonCodes: ['persona_draft_sandbox', 'quote_trace_required'],
+            citationCount: 2,
+            sourceKinds: ['file'],
+            fallbackApplied: false
+          },
+          contextCards: [],
+          boundaryRedirect: null,
+          communicationEvidence: {
+            title: 'Communication Evidence',
+            summary: 'Direct archive-backed excerpts related to this ask.',
+            excerpts: [
+              {
+                excerptId: 'ce-1',
+                fileId: 'f-1',
+                fileName: 'chat-1.json',
+                ordinal: 1,
+                speakerDisplayName: 'Alice Chen',
+                text: '我们还是把这些记录留在归档里，后面查起来更稳妥。'
+              }
+            ]
+          },
+          personaDraft: {
+            title: 'Reviewed draft sandbox',
+            disclaimer: 'Simulation draft based on archived expressions. Not a statement from the person.',
+            draft: '可审阅草稿：先把关键记录整理进归档，把重要细节继续记下来，这样后面查找会更稳妥。',
+            reviewState: 'review_required',
+            supportingExcerpts: ['ce-1'],
+            trace: [
+              {
+                traceId: 'trace-1',
+                excerptIds: ['ce-1'],
+                explanation: 'Draft segment 1 stays grounded in Alice Chen excerpt ce-1.'
+              }
+            ]
+          }
+        }
+      })
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'person', canonicalPersonId: 'cp-1' }} />)
+
+    fireEvent.change(screen.getByLabelText('Ask memory workspace'), {
+      target: { value: '如果她来写一段关于记录和归档的回复，会怎么写？' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+
+    expect(await screen.findByText('Workflow: persona draft sandbox')).toBeInTheDocument()
+    expect(screen.getByText('Simulation draft based on archived expressions. Not a statement from the person.')).toBeInTheDocument()
+    expect(screen.getByText('可审阅草稿：先把关键记录整理进归档，把重要细节继续记下来，这样后面查找会更稳妥。')).toBeInTheDocument()
+    expect(screen.getByText('review_required')).toBeInTheDocument()
+    expect(screen.getByText('Draft segment 1 stays grounded in Alice Chen excerpt ce-1.')).toBeInTheDocument()
+  })
+
   it('shows a scope-aware empty state before the first question', async () => {
     stubArchiveWindow({
       listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([]),
