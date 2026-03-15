@@ -412,6 +412,13 @@ function listCommunicationEvidenceForScope(
   })
 }
 
+function isDefaultPersonaDraftSandboxQuestion(
+  scope: MemoryWorkspaceResponse['scope'],
+  question: string
+) {
+  return normalizeQuestion(question) === normalizeQuestion(buildPersonaDraftSandboxQuestion(scope))
+}
+
 function scopeHasCommunicationEvidence(
   db: ArchiveDatabase,
   scope: MemoryWorkspaceResponse['scope']
@@ -574,9 +581,14 @@ function createResponse(input: {
   const isSandboxWorkflow = workflowKind === 'persona_draft_sandbox'
   const isPersonaRequest = !isSandboxWorkflow && hasKeyword(input.question, PERSONA_REQUEST_KEYWORDS)
   const isQuoteRequest = !isSandboxWorkflow && !isPersonaRequest && isCommunicationEvidenceQuestion(input.question)
-  const candidateCommunicationExcerpts = (isSandboxWorkflow || isQuoteRequest)
+  const matchedCommunicationExcerpts = (isSandboxWorkflow || isQuoteRequest)
     ? listCommunicationEvidenceForScope(input.db, input.scope, input.question)
     : []
+  const candidateCommunicationExcerpts = isSandboxWorkflow
+    && matchedCommunicationExcerpts.length < 2
+    && isDefaultPersonaDraftSandboxQuestion(input.scope, input.question)
+      ? listCommunicationEvidenceForScope(input.db, input.scope)
+      : matchedCommunicationExcerpts
   const communicationEvidence = isSandboxWorkflow
     ? (candidateCommunicationExcerpts.length >= 2 ? createCommunicationEvidencePayload(candidateCommunicationExcerpts) : null)
     : (candidateCommunicationExcerpts.length > 0 ? createCommunicationEvidencePayload(candidateCommunicationExcerpts) : null)

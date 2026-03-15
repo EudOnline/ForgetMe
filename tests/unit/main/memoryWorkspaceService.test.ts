@@ -260,6 +260,24 @@ describe('askMemoryWorkspace', () => {
     db.close()
   })
 
+  it('builds a reviewed persona draft sandbox from the default redirect question when person evidence exists', () => {
+    const db = seedMemoryWorkspaceScenario()
+
+    const result = askMemoryWorkspace(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '如果她来写这段话，会怎么写？先给我一个可审阅草稿。',
+      workflowKind: 'persona_draft_sandbox'
+    })
+
+    expect(result?.workflowKind).toBe('persona_draft_sandbox')
+    expect(result?.guardrail.decision).toBe('sandbox_review_required')
+    expect(result?.communicationEvidence?.excerpts.length).toBeGreaterThanOrEqual(2)
+    expect(result?.personaDraft?.disclaimer).toContain('Simulation draft')
+    expect(result?.personaDraft?.trace.length).toBeGreaterThan(0)
+
+    db.close()
+  })
+
   it('falls back safely when a persona draft sandbox request lacks enough relevant excerpts', () => {
     const db = seedMemoryWorkspaceScenario()
 
