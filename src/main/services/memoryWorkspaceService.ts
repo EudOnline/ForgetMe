@@ -11,8 +11,10 @@ import type {
   MemoryWorkspaceGuardrail,
   MemoryWorkspaceGuardrailDecision,
   MemoryWorkspaceGuardrailReasonCode,
+  MemoryWorkspacePersonaDraft,
   MemoryWorkspaceResponse,
-  MemoryWorkspaceSuggestedAsk,
+  MemoryWorkspaceSuggestedAction,
+  MemoryWorkspaceWorkflowKind,
   PersonDossierEvidenceRef
 } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
@@ -24,6 +26,7 @@ import {
 } from './communicationEvidenceService'
 import { getGroupPortrait, listGroupPortraits } from './groupPortraitService'
 import { listDecisionJournal } from './journalService'
+import { createPersonaDraftFromCommunicationEvidence } from './memoryWorkspacePersonaDraftService'
 import { getPersonDossier } from './personDossierService'
 import { listReviewConflictGroups, listReviewWorkbenchItems } from './reviewWorkbenchReadService'
 import { getPeopleList } from './timelineService'
@@ -265,74 +268,106 @@ function buildPastExpressionsRedirectQuestion(scope: MemoryWorkspaceResponse['sc
   return '她过去是怎么表达这类事的？给我看相关原话。'
 }
 
-function buildPersonaRedirectSuggestedAsks(input: {
+function buildPersonaDraftSandboxQuestion(scope: MemoryWorkspaceResponse['scope']) {
+  if (scope.kind === 'global') {
+    return '如果基于这些档案表达先生成一个可审阅草稿，会怎么写？'
+  }
+
+  if (scope.kind === 'group') {
+    return '如果基于这个群体过去的表达先生成一个可审阅草稿，会怎么写？'
+  }
+
+  return '如果她来写这段话，会怎么写？先给我一个可审阅草稿。'
+}
+
+function createAskAction(input: {
+  label: string
+  question: string
+  expressionMode: MemoryWorkspaceExpressionMode
+  rationale: string
+}): MemoryWorkspaceSuggestedAction {
+  return {
+    kind: 'ask',
+    ...input
+  }
+}
+
+function buildPersonaRedirectSuggestedActions(input: {
   scope: MemoryWorkspaceResponse['scope']
   contextCards: MemoryWorkspaceContextCard[]
   hasCommunicationEvidence: boolean
-}): MemoryWorkspaceSuggestedAsk[] {
-  const suggestions: MemoryWorkspaceSuggestedAsk[] = []
+}): MemoryWorkspaceSuggestedAction[] {
+  const suggestions: MemoryWorkspaceSuggestedAction[] = []
   const hasCard = (titles: string[]) => input.contextCards.some((card) => titles.includes(card.title))
 
   if (hasCard(['Summary', 'People Overview'])) {
-    suggestions.push({
+    suggestions.push(createAskAction({
       label: 'Grounded summary',
       question: buildSummaryRedirectQuestion(input.scope),
       expressionMode: 'grounded',
       rationale: 'Summarize the strongest approved archive signal first.'
-    })
+    }))
   }
 
   if (input.hasCommunicationEvidence) {
-    suggestions.push({
+    suggestions.push(createAskAction({
       label: 'Past expressions',
       question: buildPastExpressionsRedirectQuestion(input.scope),
       expressionMode: 'grounded',
       rationale: 'Review direct archive-backed excerpts instead of imitating voice.'
+    }))
+    suggestions.push({
+      kind: 'open_persona_draft_sandbox',
+      workflowKind: 'persona_draft_sandbox',
+      label: 'Reviewed draft sandbox',
+      question: buildPersonaDraftSandboxQuestion(input.scope),
+      expressionMode: 'grounded',
+      rationale: 'Generate a clearly labeled simulation draft backed by archive quotes.'
     })
   }
 
-  suggestions.push({
+  suggestions.push(createAskAction({
     label: 'Advice next step',
     question: buildAdviceRedirectQuestion(input.scope),
     expressionMode: 'advice',
     rationale: 'Convert the current archive state into a safe next-step ask.'
-  })
+  }))
 
   if (hasCard(['Conflicts & Gaps', 'Review Pressure', 'Ambiguity'])) {
-    suggestions.push({
+    suggestions.push(createAskAction({
       label: 'Open conflicts',
       question: buildConflictRedirectQuestion(input.scope),
       expressionMode: 'grounded',
       rationale: 'Review unresolved archive tensions before interpreting intent.'
-    })
+    }))
   }
 
   if (hasCard(['Timeline Windows'])) {
-    suggestions.push({
+    suggestions.push(createAskAction({
       label: 'Recent timeline',
       question: buildTimelineRedirectQuestion(input.scope),
       expressionMode: 'grounded',
       rationale: 'Inspect the latest grounded timeline window instead of imitating voice.'
-    })
+    }))
   }
 
   if (suggestions.length >= 2) {
-    return suggestions.slice(0, 4)
+    return suggestions.slice(0, 5)
   }
 
   return [
-    {
+    createAskAction({
       label: 'Grounded summary',
       question: buildSummaryRedirectQuestion(input.scope),
       expressionMode: 'grounded',
       rationale: 'Summarize the strongest approved archive signal first.'
-    },
-    {
+    }),
+    createAskAction({
       label: 'Advice next step',
       question: buildAdviceRedirectQuestion(input.scope),
       expressionMode: 'advice',
       rationale: 'Convert the current archive state into a safe next-step ask.'
-    }
+    })
   ]
 }
 
@@ -346,7 +381,7 @@ function createPersonaBoundaryRedirect(input: {
     title: 'Persona request blocked',
     message: 'This memory workspace cannot answer as if it were the archived person. Use grounded archive questions instead of imitation.',
     reasons: ['persona_request', 'delegation_not_allowed', 'style_evidence_unavailable'],
-    suggestedAsks: buildPersonaRedirectSuggestedAsks(input)
+    suggestedActions: buildPersonaRedirectSuggestedActions(input)
   }
 }
 
@@ -423,20 +458,69 @@ function createCommunicationCoverageAnswer(question: string): MemoryWorkspaceAns
   }
 }
 
+function createPersonaDraftSandboxAnswer(input: {
+  question: string
+  communicationEvidence: MemoryWorkspaceCommunicationEvidence
+}): MemoryWorkspaceAnswer {
+  return {
+    summary: `Reviewed simulation draft generated from archive-backed excerpts for “${input.question}”. Review the disclaimer and quote trace below.`,
+    displayType: 'derived_summary',
+    citations: dedupeCitations(
+      input.communicationEvidence.excerpts.map((excerpt, index) =>
+        createCitation(
+          'persona-draft-sandbox',
+          index,
+          'file',
+          excerpt.fileId,
+          excerpt.fileName
+        )
+      )
+    )
+  }
+}
+
+function createPersonaDraftCoverageAnswer(question: string): MemoryWorkspaceAnswer {
+  return {
+    summary: `Current approved chat evidence is insufficient to build a reviewed draft sandbox for “${question}”.`,
+    displayType: 'coverage_gap',
+    citations: []
+  }
+}
+
 function buildGuardrail(input: {
   question: string
   answer: MemoryWorkspaceAnswer
   contextCards: MemoryWorkspaceContextCard[]
+  workflowKind: MemoryWorkspaceWorkflowKind
+  personaDraft: MemoryWorkspacePersonaDraft | null
 }): MemoryWorkspaceGuardrail {
   const citations = collectResponseCitations(input.answer, input.contextCards)
   const reasonCodes: MemoryWorkspaceGuardrailReasonCode[] = []
-  const hasPersonaRequest = hasKeyword(input.question, PERSONA_REQUEST_KEYWORDS)
+  const hasPersonaRequest = input.workflowKind === 'default' && hasKeyword(input.question, PERSONA_REQUEST_KEYWORDS)
   const hasConflict = input.answer.displayType === 'open_conflict'
     || input.contextCards.some((card) => card.displayType === 'open_conflict')
   const answerIsConflict = input.answer.displayType === 'open_conflict'
   const hasCoverageGap = input.answer.displayType === 'coverage_gap'
     || input.contextCards.some((card) => card.displayType === 'coverage_gap')
   const hasReviewPressure = input.contextCards.some((card) => card.title === 'Review Pressure' && card.displayType === 'open_conflict')
+
+  if (input.workflowKind === 'persona_draft_sandbox' && input.personaDraft) {
+    reasonCodes.push('persona_draft_sandbox', 'quote_trace_required')
+    if (citations.length === 0) {
+      reasonCodes.push('insufficient_citations')
+    }
+    if (citations.length > 1) {
+      reasonCodes.push('multi_source_synthesis')
+    }
+
+    return {
+      decision: 'sandbox_review_required',
+      reasonCodes: dedupeReasonCodes(reasonCodes),
+      citationCount: citations.length,
+      sourceKinds: uniqueSourceKinds(citations),
+      fallbackApplied: false
+    }
+  }
 
   if (hasPersonaRequest) {
     reasonCodes.push('persona_request')
@@ -480,23 +564,39 @@ function createResponse(input: {
   scope: MemoryWorkspaceResponse['scope']
   question: string
   expressionMode?: MemoryWorkspaceExpressionMode
+  workflowKind?: MemoryWorkspaceWorkflowKind
   title: string
   contextCards: MemoryWorkspaceContextCard[]
 }) {
   const expressionMode = input.expressionMode ?? 'grounded'
+  const workflowKind = input.workflowKind ?? 'default'
   const selectedCard = pickAnswerCard(input.question, input.contextCards)
-  const isPersonaRequest = hasKeyword(input.question, PERSONA_REQUEST_KEYWORDS)
-  const isQuoteRequest = !isPersonaRequest && isCommunicationEvidenceQuestion(input.question)
-  const communicationExcerpts = isQuoteRequest
+  const isSandboxWorkflow = workflowKind === 'persona_draft_sandbox'
+  const isPersonaRequest = !isSandboxWorkflow && hasKeyword(input.question, PERSONA_REQUEST_KEYWORDS)
+  const isQuoteRequest = !isSandboxWorkflow && !isPersonaRequest && isCommunicationEvidenceQuestion(input.question)
+  const candidateCommunicationExcerpts = (isSandboxWorkflow || isQuoteRequest)
     ? listCommunicationEvidenceForScope(input.db, input.scope, input.question)
     : []
-  const communicationEvidence = communicationExcerpts.length > 0
-    ? createCommunicationEvidencePayload(communicationExcerpts)
-    : null
+  const communicationEvidence = isSandboxWorkflow
+    ? (candidateCommunicationExcerpts.length >= 2 ? createCommunicationEvidencePayload(candidateCommunicationExcerpts) : null)
+    : (candidateCommunicationExcerpts.length > 0 ? createCommunicationEvidencePayload(candidateCommunicationExcerpts) : null)
   const hasCommunicationEvidence = communicationEvidence !== null || (isPersonaRequest && scopeHasCommunicationEvidence(input.db, input.scope))
   let answer: MemoryWorkspaceAnswer
+  let personaDraft: MemoryWorkspacePersonaDraft | null = null
 
-  if (isPersonaRequest) {
+  if (isSandboxWorkflow) {
+    if (communicationEvidence) {
+      personaDraft = createPersonaDraftFromCommunicationEvidence({
+        excerpts: communicationEvidence.excerpts
+      })
+      answer = createPersonaDraftSandboxAnswer({
+        question: input.question,
+        communicationEvidence
+      })
+    } else {
+      answer = createPersonaDraftCoverageAnswer(input.question)
+    }
+  } else if (isPersonaRequest) {
     answer = createPersonaFallbackAnswer(input.contextCards, input.question)
   } else if (communicationEvidence) {
     answer = createCommunicationEvidenceAnswer({
@@ -520,13 +620,16 @@ function createResponse(input: {
     scope: input.scope,
     question: input.question,
     expressionMode,
+    workflowKind,
     title: input.title,
     answer,
     contextCards: input.contextCards,
     guardrail: buildGuardrail({
       question: input.question,
       answer,
-      contextCards: input.contextCards
+      contextCards: input.contextCards,
+      workflowKind,
+      personaDraft
     }),
     boundaryRedirect: isPersonaRequest
       ? createPersonaBoundaryRedirect({
@@ -535,7 +638,8 @@ function createResponse(input: {
           hasCommunicationEvidence
         })
       : null,
-    communicationEvidence
+    communicationEvidence,
+    personaDraft
   } satisfies MemoryWorkspaceResponse
 }
 
@@ -652,7 +756,8 @@ export function buildPersonContextPack(
   db: ArchiveDatabase,
   canonicalPersonId: string,
   question: string,
-  expressionMode?: MemoryWorkspaceExpressionMode
+  expressionMode?: MemoryWorkspaceExpressionMode,
+  workflowKind?: MemoryWorkspaceWorkflowKind
 ): MemoryWorkspaceResponse | null {
   const dossier = getPersonDossier(db, { canonicalPersonId })
   if (!dossier) {
@@ -673,6 +778,7 @@ export function buildPersonContextPack(
     scope: { kind: 'person', canonicalPersonId },
     question,
     expressionMode,
+    workflowKind,
     title: `Memory Workspace · ${dossier.identityCard.primaryDisplayName}`,
     contextCards
   })
@@ -768,7 +874,8 @@ export function buildGroupContextPack(
   db: ArchiveDatabase,
   anchorPersonId: string,
   question: string,
-  expressionMode?: MemoryWorkspaceExpressionMode
+  expressionMode?: MemoryWorkspaceExpressionMode,
+  workflowKind?: MemoryWorkspaceWorkflowKind
 ): MemoryWorkspaceResponse | null {
   const portrait = getGroupPortrait(db, { canonicalPersonId: anchorPersonId })
   if (!portrait) {
@@ -787,6 +894,7 @@ export function buildGroupContextPack(
     scope: { kind: 'group', anchorPersonId },
     question,
     expressionMode,
+    workflowKind,
     title: `Memory Workspace · ${anchorDisplayName} Group`,
     contextCards
   })
@@ -868,7 +976,8 @@ function buildGlobalDecisionCard(db: ArchiveDatabase) {
 export function buildGlobalContextPack(
   db: ArchiveDatabase,
   question: string,
-  expressionMode?: MemoryWorkspaceExpressionMode
+  expressionMode?: MemoryWorkspaceExpressionMode,
+  workflowKind?: MemoryWorkspaceWorkflowKind
 ): MemoryWorkspaceResponse {
   const contextCards = [
     buildGlobalPeopleCard(db),
@@ -882,6 +991,7 @@ export function buildGlobalContextPack(
     scope: { kind: 'global' },
     question,
     expressionMode,
+    workflowKind,
     title: 'Memory Workspace · Global',
     contextCards
   })
@@ -892,12 +1002,12 @@ export function askMemoryWorkspace(
   input: AskMemoryWorkspaceInput
 ): MemoryWorkspaceResponse | null {
   if (input.scope.kind === 'global') {
-    return buildGlobalContextPack(db, input.question, input.expressionMode)
+    return buildGlobalContextPack(db, input.question, input.expressionMode, input.workflowKind)
   }
 
   if (input.scope.kind === 'person') {
-    return buildPersonContextPack(db, input.scope.canonicalPersonId, input.question, input.expressionMode)
+    return buildPersonContextPack(db, input.scope.canonicalPersonId, input.question, input.expressionMode, input.workflowKind)
   }
 
-  return buildGroupContextPack(db, input.scope.anchorPersonId, input.question, input.expressionMode)
+  return buildGroupContextPack(db, input.scope.anchorPersonId, input.question, input.expressionMode, input.workflowKind)
 }

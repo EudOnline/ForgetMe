@@ -18,6 +18,8 @@ describe('askMemoryWorkspace', () => {
     expect(result?.guardrail.reasonCodes).toContain('open_conflict_present')
     expect(result?.boundaryRedirect).toBeNull()
     expect(result?.communicationEvidence).toBeNull()
+    expect(result?.workflowKind).toBe('default')
+    expect(result?.personaDraft).toBeNull()
     expect(result?.contextCards.map((card) => card.title)).toContain('Conflicts & Gaps')
     expect(result?.contextCards.some((card) => card.citations.some((citation) => citation.kind === 'review'))).toBe(true)
 
@@ -37,6 +39,8 @@ describe('askMemoryWorkspace', () => {
     expect(result?.guardrail.decision).toBe('grounded_answer')
     expect(result?.boundaryRedirect).toBeNull()
     expect(result?.communicationEvidence).toBeNull()
+    expect(result?.workflowKind).toBe('default')
+    expect(result?.personaDraft).toBeNull()
     expect(result?.contextCards.map((card) => card.title)).toContain('Timeline Windows')
     expect(result?.contextCards.map((card) => card.title)).toContain('Summary')
 
@@ -59,6 +63,8 @@ describe('askMemoryWorkspace', () => {
     expect(result?.guardrail.decision).toBe('fallback_to_conflict')
     expect(result?.boundaryRedirect).toBeNull()
     expect(result?.communicationEvidence).toBeNull()
+    expect(result?.workflowKind).toBe('default')
+    expect(result?.personaDraft).toBeNull()
 
     db.close()
   })
@@ -74,6 +80,8 @@ describe('askMemoryWorkspace', () => {
     expect(result?.guardrail.decision).toBe('grounded_answer')
     expect(result?.boundaryRedirect).toBeNull()
     expect(result?.communicationEvidence?.title).toBe('Communication Evidence')
+    expect(result?.workflowKind).toBe('default')
+    expect(result?.personaDraft).toBeNull()
     expect(result?.communicationEvidence?.excerpts.length).toBe(2)
     expect(result?.communicationEvidence?.excerpts.every((excerpt) => excerpt.speakerDisplayName === 'Alice Chen')).toBe(true)
     expect(new Set(result?.communicationEvidence?.excerpts.map((excerpt) => excerpt.fileId))).toEqual(new Set(['f-1', 'f-2']))
@@ -93,6 +101,8 @@ describe('askMemoryWorkspace', () => {
     expect(result?.guardrail.decision).toBe('grounded_answer')
     expect(result?.boundaryRedirect).toBeNull()
     expect(result?.communicationEvidence?.excerpts.length ?? 0).toBeGreaterThan(1)
+    expect(result?.workflowKind).toBe('default')
+    expect(result?.personaDraft).toBeNull()
     expect(new Set(result?.communicationEvidence?.excerpts.map((excerpt) => excerpt.fileId))).toEqual(new Set(['f-1', 'f-2']))
     expect(result?.communicationEvidence?.excerpts.some((excerpt) => excerpt.speakerDisplayName === 'Alice Chen')).toBe(true)
     expect(result?.communicationEvidence?.excerpts.some((excerpt) => excerpt.speakerDisplayName === 'Bob Li')).toBe(true)
@@ -113,6 +123,8 @@ describe('askMemoryWorkspace', () => {
     expect(result?.guardrail.reasonCodes).toContain('coverage_gap_present')
     expect(result?.communicationEvidence).toBeNull()
     expect(result?.boundaryRedirect).toBeNull()
+    expect(result?.workflowKind).toBe('default')
+    expect(result?.personaDraft).toBeNull()
 
     db.close()
   })
@@ -134,6 +146,8 @@ describe('askMemoryWorkspace', () => {
     expect(result?.answer.citations.length ?? 0).toBeGreaterThan(0)
     expect(result?.boundaryRedirect).toBeNull()
     expect(result?.communicationEvidence).toBeNull()
+    expect(result?.workflowKind).toBe('default')
+    expect(result?.personaDraft).toBeNull()
 
     db.close()
   })
@@ -152,6 +166,8 @@ describe('askMemoryWorkspace', () => {
     expect(result?.answer.summary).toContain('archive shows unresolved conflicts')
     expect(result?.boundaryRedirect).toBeNull()
     expect(result?.communicationEvidence).toBeNull()
+    expect(result?.workflowKind).toBe('default')
+    expect(result?.personaDraft).toBeNull()
 
     db.close()
   })
@@ -177,13 +193,20 @@ describe('askMemoryWorkspace', () => {
       title: 'Persona request blocked'
     })
     expect(result?.communicationEvidence).toBeNull()
-    expect(result?.boundaryRedirect?.suggestedAsks.length ?? 0).toBeGreaterThanOrEqual(2)
-    expect(result?.boundaryRedirect?.suggestedAsks.length ?? 0).toBeLessThanOrEqual(4)
-    expect(result?.boundaryRedirect?.suggestedAsks.some((item) => item.label === 'Past expressions')).toBe(true)
-    expect(result?.boundaryRedirect?.suggestedAsks.map((item) => item.expressionMode)).toEqual(
+    expect(result?.workflowKind).toBe('default')
+    expect(result?.personaDraft).toBeNull()
+    expect(result?.boundaryRedirect?.suggestedActions.length ?? 0).toBeGreaterThanOrEqual(2)
+    expect(result?.boundaryRedirect?.suggestedActions.length ?? 0).toBeLessThanOrEqual(5)
+    expect(result?.boundaryRedirect?.suggestedActions.some((item) => item.label === 'Past expressions' && item.kind === 'ask')).toBe(true)
+    expect(
+      result?.boundaryRedirect?.suggestedActions.some(
+        (item) => item.kind === 'open_persona_draft_sandbox' && item.workflowKind === 'persona_draft_sandbox'
+      )
+    ).toBe(true)
+    expect(result?.boundaryRedirect?.suggestedActions.map((item) => item.expressionMode)).toEqual(
       expect.arrayContaining(['grounded', 'advice'])
     )
-    expect(result?.boundaryRedirect?.suggestedAsks.every((item) => ['grounded', 'advice'].includes(item.expressionMode))).toBe(true)
+    expect(result?.boundaryRedirect?.suggestedActions.every((item) => ['grounded', 'advice'].includes(item.expressionMode))).toBe(true)
     expect(result?.boundaryRedirect).toEqual(repeatResult?.boundaryRedirect)
 
     db.close()
@@ -203,8 +226,55 @@ describe('askMemoryWorkspace', () => {
     expect(result?.answer.summary).toContain('cannot answer as if it were')
     expect(result?.boundaryRedirect?.kind).toBe('persona_request')
     expect(result?.communicationEvidence).toBeNull()
-    expect(result?.boundaryRedirect?.suggestedAsks.some((item) => item.label === 'Past expressions')).toBe(true)
-    expect(result?.boundaryRedirect?.suggestedAsks.some((item) => item.expressionMode === 'advice')).toBe(true)
+    expect(result?.workflowKind).toBe('default')
+    expect(result?.personaDraft).toBeNull()
+    expect(result?.boundaryRedirect?.suggestedActions.some((item) => item.label === 'Past expressions' && item.kind === 'ask')).toBe(true)
+    expect(result?.boundaryRedirect?.suggestedActions.some((item) => item.expressionMode === 'advice')).toBe(true)
+
+    db.close()
+  })
+
+  it('builds a reviewed persona draft sandbox from quote-backed communication evidence', () => {
+    const db = seedMemoryWorkspaceScenario()
+
+    const result = askMemoryWorkspace(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '如果她来写一段关于记录和归档的回复，会怎么写？',
+      workflowKind: 'persona_draft_sandbox'
+    })
+
+    expect(result?.workflowKind).toBe('persona_draft_sandbox')
+    expect(result?.guardrail.decision).toBe('sandbox_review_required')
+    expect(result?.guardrail.reasonCodes).toEqual(
+      expect.arrayContaining(['persona_draft_sandbox', 'quote_trace_required'])
+    )
+    expect(result?.answer.summary).toContain('Reviewed simulation draft')
+    expect(result?.boundaryRedirect).toBeNull()
+    expect(result?.communicationEvidence?.excerpts.length).toBe(2)
+    expect(result?.personaDraft?.reviewState).toBe('review_required')
+    expect(result?.personaDraft?.disclaimer).toContain('Simulation draft')
+    expect(result?.personaDraft?.supportingExcerpts).toEqual(['ce-1', 'ce-3'])
+    expect(result?.personaDraft?.trace.length).toBeGreaterThan(0)
+    expect(result?.personaDraft?.draft).toContain('归档')
+
+    db.close()
+  })
+
+  it('falls back safely when a persona draft sandbox request lacks enough relevant excerpts', () => {
+    const db = seedMemoryWorkspaceScenario()
+
+    const result = askMemoryWorkspace(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '如果她来写一段关于跑步训练的回复，会怎么写？',
+      workflowKind: 'persona_draft_sandbox'
+    })
+
+    expect(result?.workflowKind).toBe('persona_draft_sandbox')
+    expect(result?.answer.displayType).toBe('coverage_gap')
+    expect(result?.guardrail.decision).toBe('fallback_insufficient_evidence')
+    expect(result?.boundaryRedirect).toBeNull()
+    expect(result?.communicationEvidence).toBeNull()
+    expect(result?.personaDraft).toBeNull()
 
     db.close()
   })
@@ -222,6 +292,8 @@ describe('askMemoryWorkspace', () => {
     expect(result?.guardrail.fallbackApplied).toBe(true)
     expect(result?.boundaryRedirect).toBeNull()
     expect(result?.communicationEvidence).toBeNull()
+    expect(result?.workflowKind).toBe('default')
+    expect(result?.personaDraft).toBeNull()
 
     db.close()
   })
@@ -240,6 +312,8 @@ describe('askMemoryWorkspace', () => {
     expect(result?.answer.summary).toContain('insufficient')
     expect(result?.boundaryRedirect).toBeNull()
     expect(result?.communicationEvidence).toBeNull()
+    expect(result?.workflowKind).toBe('default')
+    expect(result?.personaDraft).toBeNull()
 
     db.close()
   })

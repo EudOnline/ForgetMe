@@ -49,13 +49,19 @@ describe('memory workspace quality baseline', () => {
       if (qualityCase.reasonCode === 'persona_request') {
         expect(result?.boundaryRedirect, qualityCase.label).not.toBeNull()
         expect(
-          result?.boundaryRedirect?.suggestedAsks.some((item) => item.label === 'Past expressions'),
+          result?.boundaryRedirect?.suggestedActions.some((item) => item.label === 'Past expressions' && item.kind === 'ask'),
+          qualityCase.label
+        ).toBe(true)
+        expect(
+          result?.boundaryRedirect?.suggestedActions.some((item) => item.kind === 'open_persona_draft_sandbox'),
           qualityCase.label
         ).toBe(true)
       } else {
         expect(result?.boundaryRedirect, qualityCase.label).toBeNull()
       }
       expect(result?.communicationEvidence, qualityCase.label).toBeNull()
+      expect(result?.workflowKind, qualityCase.label).toBe('default')
+      expect(result?.personaDraft, qualityCase.label).toBeNull()
     }
 
     db.close()
@@ -109,13 +115,15 @@ describe('memory workspace quality baseline', () => {
       if (qualityCase.reasonCode === 'persona_request') {
         expect(result?.boundaryRedirect, qualityCase.label).not.toBeNull()
         expect(
-          result?.boundaryRedirect?.suggestedAsks.some((item) => item.label === 'Past expressions'),
+          result?.boundaryRedirect?.suggestedActions.some((item) => item.label === 'Past expressions' && item.kind === 'ask'),
           qualityCase.label
         ).toBe(true)
       } else {
         expect(result?.boundaryRedirect, qualityCase.label).toBeNull()
       }
       expect(result?.communicationEvidence, qualityCase.label).toBeNull()
+      expect(result?.workflowKind, qualityCase.label).toBe('default')
+      expect(result?.personaDraft, qualityCase.label).toBeNull()
     }
 
     db.close()
@@ -157,12 +165,47 @@ describe('memory workspace quality baseline', () => {
       expect(result, qualityCase.label).not.toBeNull()
       expect(result?.guardrail.decision, qualityCase.label).toBe(qualityCase.decision)
       expect(Boolean(result?.communicationEvidence), qualityCase.label).toBe(qualityCase.hasEvidence)
+      expect(result?.workflowKind, qualityCase.label).toBe('default')
+      expect(result?.personaDraft, qualityCase.label).toBeNull()
       if (qualityCase.hasEvidence) {
         expect(result?.communicationEvidence?.excerpts.length ?? 0, qualityCase.label).toBeGreaterThan(0)
       } else {
         expect(result?.answer.displayType, qualityCase.label).toBe('coverage_gap')
       }
     }
+
+    db.close()
+  })
+
+  it('locks reviewed persona draft sandbox behavior for supported and unsupported excerpt coverage', () => {
+    const db = seedMemoryWorkspaceScenario()
+
+    const supported = askMemoryWorkspace(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '如果她来写一段关于记录和归档的回复，会怎么写？',
+      workflowKind: 'persona_draft_sandbox'
+    })
+
+    expect(supported).not.toBeNull()
+    expect(supported?.workflowKind).toBe('persona_draft_sandbox')
+    expect(supported?.guardrail.decision).toBe('sandbox_review_required')
+    expect(supported?.guardrail.reasonCodes).toEqual(
+      expect.arrayContaining(['persona_draft_sandbox', 'quote_trace_required'])
+    )
+    expect(supported?.communicationEvidence?.excerpts.length).toBeGreaterThan(1)
+    expect(supported?.personaDraft?.reviewState).toBe('review_required')
+
+    const unsupported = askMemoryWorkspace(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '如果她来写一段关于跑步训练的回复，会怎么写？',
+      workflowKind: 'persona_draft_sandbox'
+    })
+
+    expect(unsupported).not.toBeNull()
+    expect(unsupported?.workflowKind).toBe('persona_draft_sandbox')
+    expect(unsupported?.guardrail.decision).toBe('fallback_insufficient_evidence')
+    expect(unsupported?.communicationEvidence).toBeNull()
+    expect(unsupported?.personaDraft).toBeNull()
 
     db.close()
   })
