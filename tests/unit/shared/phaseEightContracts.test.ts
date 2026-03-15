@@ -3,6 +3,8 @@ import type {
   ArchiveApi,
   AskMemoryWorkspaceInput,
   MemoryWorkspaceAnswer,
+  MemoryWorkspaceBoundaryRedirect,
+  MemoryWorkspaceBoundaryRedirectReason,
   MemoryWorkspaceCompareMatrixDetail,
   MemoryWorkspaceCompareMatrixRowInput,
   MemoryWorkspaceCompareMatrixRowRecord,
@@ -23,6 +25,7 @@ import type {
   MemoryWorkspaceGuardrailReasonCode,
   MemoryWorkspaceResponse,
   MemoryWorkspaceScope,
+  MemoryWorkspaceSuggestedAsk,
   RunMemoryWorkspaceCompareInput,
   RunMemoryWorkspaceCompareMatrixInput
 } from '../../../src/shared/archiveContracts'
@@ -65,6 +68,21 @@ describe('phase-eight memory workspace contracts', () => {
       fallbackApplied: true
     }
 
+    const redirectReason: MemoryWorkspaceBoundaryRedirectReason = 'persona_request'
+    const suggestedAsk: MemoryWorkspaceSuggestedAsk = {
+      label: 'Grounded summary',
+      question: '先基于档案总结她当前最明确的状态。',
+      expressionMode: 'grounded',
+      rationale: 'Summarize the strongest approved archive signal first.'
+    }
+    const boundaryRedirect: MemoryWorkspaceBoundaryRedirect = {
+      kind: 'persona_request',
+      title: 'Persona request blocked',
+      message: 'Use grounded archive questions instead of imitation.',
+      reasons: [redirectReason],
+      suggestedAsks: [suggestedAsk]
+    }
+
     const contextCard: MemoryWorkspaceContextCard = {
       cardId: 'card-1',
       title: 'Conflicts & Gaps',
@@ -80,7 +98,8 @@ describe('phase-eight memory workspace contracts', () => {
       title: 'Memory Workspace · Alice Chen',
       answer,
       contextCards: [contextCard],
-      guardrail
+      guardrail,
+      boundaryRedirect
     }
 
     expect(globalScope.kind).toBe('global')
@@ -90,11 +109,13 @@ describe('phase-eight memory workspace contracts', () => {
     expect(response.contextCards[0]?.title).toBe('Conflicts & Gaps')
     expect(response.guardrail.decision).toBe('fallback_to_conflict')
     expect(response.expressionMode).toBe('grounded')
+    expect(response.boundaryRedirect?.suggestedAsks[0]?.expressionMode).toBe('grounded')
 
     expectTypeOf(response.scope).toEqualTypeOf<MemoryWorkspaceScope>()
     expectTypeOf(response.answer.citations).toEqualTypeOf<MemoryWorkspaceCitation[]>()
     expectTypeOf(response.contextCards).toEqualTypeOf<MemoryWorkspaceContextCard[]>()
     expectTypeOf(response.guardrail).toEqualTypeOf<MemoryWorkspaceGuardrail>()
+    expectTypeOf(response.boundaryRedirect).toEqualTypeOf<MemoryWorkspaceBoundaryRedirect | null>()
     expectTypeOf<MemoryWorkspaceExpressionMode>().toEqualTypeOf<'grounded' | 'advice'>()
     expectTypeOf<ArchiveApi['askMemoryWorkspace']>().toEqualTypeOf<(input: AskMemoryWorkspaceInput) => Promise<MemoryWorkspaceResponse | null>>()
   })
@@ -153,7 +174,8 @@ describe('phase-eight memory workspace contracts', () => {
           citationCount: 2,
           sourceKinds: ['person', 'file'],
           fallbackApplied: false
-        }
+        },
+        boundaryRedirect: null
       },
       evaluation: {
         totalScore: 18,

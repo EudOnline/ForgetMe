@@ -462,6 +462,26 @@ export type MemoryWorkspaceGuardrail = {
 
 export type MemoryWorkspaceExpressionMode = 'grounded' | 'advice'
 
+export type MemoryWorkspaceBoundaryRedirectReason =
+  | 'persona_request'
+  | 'delegation_not_allowed'
+  | 'style_evidence_unavailable'
+
+export type MemoryWorkspaceSuggestedAsk = {
+  label: string
+  question: string
+  expressionMode: MemoryWorkspaceExpressionMode
+  rationale: string
+}
+
+export type MemoryWorkspaceBoundaryRedirect = {
+  kind: 'persona_request'
+  title: string
+  message: string
+  reasons: MemoryWorkspaceBoundaryRedirectReason[]
+  suggestedAsks: MemoryWorkspaceSuggestedAsk[]
+}
+
 export type MemoryWorkspaceResponse = {
   scope: MemoryWorkspaceScope
   question: string
@@ -470,6 +490,7 @@ export type MemoryWorkspaceResponse = {
   answer: MemoryWorkspaceAnswer
   contextCards: MemoryWorkspaceContextCard[]
   guardrail: MemoryWorkspaceGuardrail
+  boundaryRedirect: MemoryWorkspaceBoundaryRedirect | null
 }
 
 export type AskMemoryWorkspaceInput = {

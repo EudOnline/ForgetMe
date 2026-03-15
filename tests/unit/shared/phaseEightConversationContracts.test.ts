@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 import type {
   ArchiveApi,
   AskMemoryWorkspacePersistedInput,
+  MemoryWorkspaceBoundaryRedirect,
   MemoryWorkspaceCompareSessionDetail,
   MemoryWorkspaceCompareSessionSummary,
   MemoryWorkspaceResponse,
@@ -20,6 +21,20 @@ import {
 describe('phase-eight conversation persistence contracts', () => {
   it('exports replayable session and turn shapes', () => {
     const scope: MemoryWorkspaceScope = { kind: 'person', canonicalPersonId: 'cp-1' }
+    const boundaryRedirect: MemoryWorkspaceBoundaryRedirect = {
+      kind: 'persona_request',
+      title: 'Persona request blocked',
+      message: 'Use grounded archive questions instead of imitation.',
+      reasons: ['persona_request'],
+      suggestedAsks: [
+        {
+          label: 'Grounded summary',
+          question: '先基于档案总结她当前最明确的状态。',
+          expressionMode: 'grounded',
+          rationale: 'Summarize the strongest approved archive signal first.'
+        }
+      ]
+    }
 
     const session: MemoryWorkspaceSessionSummary = {
       sessionId: 'session-1',
@@ -53,7 +68,8 @@ describe('phase-eight conversation persistence contracts', () => {
           citationCount: 0,
           sourceKinds: [],
           fallbackApplied: true
-        }
+        },
+        boundaryRedirect
       } satisfies MemoryWorkspaceResponse,
       provider: null,
       model: null,
@@ -71,6 +87,7 @@ describe('phase-eight conversation persistence contracts', () => {
     expect(turn.ordinal).toBe(1)
     expect(detail.turns[0]?.response.title).toBe('Memory Workspace · Alice Chen')
     expect(detail.turns[0]?.response.expressionMode).toBe('advice')
+    expect(detail.turns[0]?.response.boundaryRedirect?.kind).toBe('persona_request')
 
     expectTypeOf<ArchiveApi['listMemoryWorkspaceSessions']>().toEqualTypeOf<
       (input?: { scope?: MemoryWorkspaceScope }) => Promise<MemoryWorkspaceSessionSummary[]>
