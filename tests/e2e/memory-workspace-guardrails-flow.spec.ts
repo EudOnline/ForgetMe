@@ -51,7 +51,7 @@ test('shows memory workspace guardrails for conflict-first and persona fallback 
   await page.getByRole('button', { name: 'Ask' }).click()
   await expect(page.getByRole('heading', { name: 'Memory Workspace · Alice Chen' })).toBeVisible()
   await expect(page.getByText('fallback_unsupported_request')).toBeVisible()
-  await expect(page.getByText(/cannot answer as if it were the archived person/i)).toBeVisible()
+  await expect(page.getByLabel('Answer').getByText(/cannot answer as if it were the archived person/i)).toBeVisible()
 
   await electronApp.close()
 })
