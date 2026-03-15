@@ -2,6 +2,7 @@ import type {
   AskMemoryWorkspaceInput,
   DossierDisplayType,
   MemoryWorkspaceAnswer,
+  MemoryWorkspaceBoundaryRedirect,
   MemoryWorkspaceCitation,
   MemoryWorkspaceContextCard,
   MemoryWorkspaceExpressionMode,
@@ -9,6 +10,7 @@ import type {
   MemoryWorkspaceGuardrailDecision,
   MemoryWorkspaceGuardrailReasonCode,
   MemoryWorkspaceResponse,
+  MemoryWorkspaceSuggestedAsk,
   PersonDossierEvidenceRef
 } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
@@ -199,6 +201,124 @@ function dedupeReasonCodes(reasonCodes: MemoryWorkspaceGuardrailReasonCode[]) {
   return [...new Set(reasonCodes)]
 }
 
+function buildSummaryRedirectQuestion(scope: MemoryWorkspaceResponse['scope']) {
+  if (scope.kind === 'global') {
+    return '先基于档案总结当前全局最明确的状态。'
+  }
+
+  if (scope.kind === 'group') {
+    return '先基于档案总结这个群体当前最明确的状态。'
+  }
+
+  return '先基于档案总结她当前最明确的状态。'
+}
+
+function buildConflictRedirectQuestion(scope: MemoryWorkspaceResponse['scope']) {
+  if (scope.kind === 'global') {
+    return '当前最值得优先关注的未解决冲突或审阅压力是什么？'
+  }
+
+  if (scope.kind === 'group') {
+    return '这个群体当前有哪些未解决冲突或歧义？'
+  }
+
+  return '她现在有哪些未解决冲突或证据缺口？'
+}
+
+function buildTimelineRedirectQuestion(scope: MemoryWorkspaceResponse['scope']) {
+  if (scope.kind === 'global') {
+    return '当前档案里最近最相关的时间线窗口是什么？'
+  }
+
+  if (scope.kind === 'group') {
+    return '这个群体最近最相关的时间线窗口是什么？'
+  }
+
+  return '她最近最相关的时间线窗口是什么？'
+}
+
+function buildAdviceRedirectQuestion(scope: MemoryWorkspaceResponse['scope']) {
+  if (scope.kind === 'group') {
+    return '基于档案，现在这个群体最安全的下一步是什么？'
+  }
+
+  return '基于档案，现在最安全的下一步是什么？'
+}
+
+function buildPersonaRedirectSuggestedAsks(input: {
+  scope: MemoryWorkspaceResponse['scope']
+  contextCards: MemoryWorkspaceContextCard[]
+}): MemoryWorkspaceSuggestedAsk[] {
+  const suggestions: MemoryWorkspaceSuggestedAsk[] = []
+  const hasCard = (titles: string[]) => input.contextCards.some((card) => titles.includes(card.title))
+
+  if (hasCard(['Summary', 'People Overview'])) {
+    suggestions.push({
+      label: 'Grounded summary',
+      question: buildSummaryRedirectQuestion(input.scope),
+      expressionMode: 'grounded',
+      rationale: 'Summarize the strongest approved archive signal first.'
+    })
+  }
+
+  suggestions.push({
+    label: 'Advice next step',
+    question: buildAdviceRedirectQuestion(input.scope),
+    expressionMode: 'advice',
+    rationale: 'Convert the current archive state into a safe next-step ask.'
+  })
+
+  if (hasCard(['Conflicts & Gaps', 'Review Pressure', 'Ambiguity'])) {
+    suggestions.push({
+      label: 'Open conflicts',
+      question: buildConflictRedirectQuestion(input.scope),
+      expressionMode: 'grounded',
+      rationale: 'Review unresolved archive tensions before interpreting intent.'
+    })
+  }
+
+  if (hasCard(['Timeline Windows'])) {
+    suggestions.push({
+      label: 'Recent timeline',
+      question: buildTimelineRedirectQuestion(input.scope),
+      expressionMode: 'grounded',
+      rationale: 'Inspect the latest grounded timeline window instead of imitating voice.'
+    })
+  }
+
+  if (suggestions.length >= 2) {
+    return suggestions.slice(0, 4)
+  }
+
+  return [
+    {
+      label: 'Grounded summary',
+      question: buildSummaryRedirectQuestion(input.scope),
+      expressionMode: 'grounded',
+      rationale: 'Summarize the strongest approved archive signal first.'
+    },
+    {
+      label: 'Advice next step',
+      question: buildAdviceRedirectQuestion(input.scope),
+      expressionMode: 'advice',
+      rationale: 'Convert the current archive state into a safe next-step ask.'
+    }
+  ]
+}
+
+function createPersonaBoundaryRedirect(input: {
+  scope: MemoryWorkspaceResponse['scope']
+  contextCards: MemoryWorkspaceContextCard[]
+}): MemoryWorkspaceBoundaryRedirect {
+  return {
+    kind: 'persona_request',
+    title: 'Persona request blocked',
+    message: 'This memory workspace cannot answer as if it were the archived person. Use grounded archive questions instead of imitation.',
+    reasons: ['persona_request', 'delegation_not_allowed', 'style_evidence_unavailable'],
+    suggestedAsks: buildPersonaRedirectSuggestedAsks(input)
+  }
+}
+
 function buildGuardrail(input: {
   question: string
   answer: MemoryWorkspaceAnswer
@@ -260,7 +380,8 @@ function createResponse(input: {
 }) {
   const expressionMode = input.expressionMode ?? 'grounded'
   const selectedCard = pickAnswerCard(input.question, input.contextCards)
-  const answer = hasKeyword(input.question, PERSONA_REQUEST_KEYWORDS)
+  const isPersonaRequest = hasKeyword(input.question, PERSONA_REQUEST_KEYWORDS)
+  const answer = isPersonaRequest
     ? createPersonaFallbackAnswer(input.contextCards, input.question)
     : expressionMode === 'advice'
       ? createAdviceAnswer({
@@ -282,7 +403,13 @@ function createResponse(input: {
       question: input.question,
       answer,
       contextCards: input.contextCards
-    })
+    }),
+    boundaryRedirect: isPersonaRequest
+      ? createPersonaBoundaryRedirect({
+          scope: input.scope,
+          contextCards: input.contextCards
+        })
+      : null
   } satisfies MemoryWorkspaceResponse
 }
 

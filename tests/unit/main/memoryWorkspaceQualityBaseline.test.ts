@@ -46,6 +46,11 @@ describe('memory workspace quality baseline', () => {
       expect(result, qualityCase.label).not.toBeNull()
       expect(result?.guardrail.decision, qualityCase.label).toBe(qualityCase.decision)
       expect(result?.guardrail.reasonCodes, qualityCase.label).toContain(qualityCase.reasonCode)
+      if (qualityCase.reasonCode === 'persona_request') {
+        expect(result?.boundaryRedirect, qualityCase.label).not.toBeNull()
+      } else {
+        expect(result?.boundaryRedirect, qualityCase.label).toBeNull()
+      }
     }
 
     db.close()
@@ -96,6 +101,11 @@ describe('memory workspace quality baseline', () => {
       expect(result?.expressionMode, qualityCase.label).toBe('advice')
       expect(result?.guardrail.decision, qualityCase.label).toBe(qualityCase.decision)
       expect(result?.guardrail.reasonCodes, qualityCase.label).toContain(qualityCase.reasonCode)
+      if (qualityCase.reasonCode === 'persona_request') {
+        expect(result?.boundaryRedirect, qualityCase.label).not.toBeNull()
+      } else {
+        expect(result?.boundaryRedirect, qualityCase.label).toBeNull()
+      }
     }
 
     db.close()

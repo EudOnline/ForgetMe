@@ -292,6 +292,7 @@ describe('askMemoryWorkspace', () => {
     expect(result?.answer.summary).toContain('school_name')
     expect(result?.guardrail.decision).toBe('fallback_to_conflict')
     expect(result?.guardrail.reasonCodes).toContain('open_conflict_present')
+    expect(result?.boundaryRedirect).toBeNull()
     expect(result?.contextCards.map((card) => card.title)).toContain('Conflicts & Gaps')
     expect(result?.contextCards.some((card) => card.citations.some((citation) => citation.kind === 'review'))).toBe(true)
 
@@ -309,6 +310,7 @@ describe('askMemoryWorkspace', () => {
     expect(result?.title).toBe('Memory Workspace · Alice Chen Group')
     expect(result?.answer.summary).toContain('Trip planning')
     expect(result?.guardrail.decision).toBe('grounded_answer')
+    expect(result?.boundaryRedirect).toBeNull()
     expect(result?.contextCards.map((card) => card.title)).toContain('Timeline Windows')
     expect(result?.contextCards.map((card) => card.title)).toContain('Summary')
 
@@ -329,6 +331,7 @@ describe('askMemoryWorkspace', () => {
     )
     expect(result?.answer.summary).toContain('pending')
     expect(result?.guardrail.decision).toBe('fallback_to_conflict')
+    expect(result?.boundaryRedirect).toBeNull()
 
     db.close()
   })
@@ -348,6 +351,7 @@ describe('askMemoryWorkspace', () => {
     expect(result?.answer.summary).toContain('Based on the archive')
     expect(result?.answer.summary).toContain('safest next step')
     expect(result?.answer.citations.length ?? 0).toBeGreaterThan(0)
+    expect(result?.boundaryRedirect).toBeNull()
 
     db.close()
   })
@@ -364,6 +368,7 @@ describe('askMemoryWorkspace', () => {
     expect(result?.expressionMode).toBe('advice')
     expect(result?.guardrail.decision).toBe('fallback_to_conflict')
     expect(result?.answer.summary).toContain('archive shows unresolved conflicts')
+    expect(result?.boundaryRedirect).toBeNull()
 
     db.close()
   })
@@ -375,11 +380,26 @@ describe('askMemoryWorkspace', () => {
       scope: { kind: 'person', canonicalPersonId: 'cp-1' },
       question: '如果她本人会怎么建议我？请模仿她的口吻回答。'
     })
+    const repeatResult = askMemoryWorkspace(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '如果她本人会怎么建议我？请模仿她的口吻回答。'
+    })
 
     expect(result?.answer.displayType).toBe('coverage_gap')
     expect(result?.answer.summary).toContain('cannot answer as if it were')
     expect(result?.guardrail.decision).toBe('fallback_unsupported_request')
     expect(result?.guardrail.reasonCodes).toContain('persona_request')
+    expect(result?.boundaryRedirect).toMatchObject({
+      kind: 'persona_request',
+      title: 'Persona request blocked'
+    })
+    expect(result?.boundaryRedirect?.suggestedAsks.length ?? 0).toBeGreaterThanOrEqual(2)
+    expect(result?.boundaryRedirect?.suggestedAsks.length ?? 0).toBeLessThanOrEqual(4)
+    expect(result?.boundaryRedirect?.suggestedAsks.map((item) => item.expressionMode)).toEqual(
+      expect.arrayContaining(['grounded', 'advice'])
+    )
+    expect(result?.boundaryRedirect?.suggestedAsks.every((item) => ['grounded', 'advice'].includes(item.expressionMode))).toBe(true)
+    expect(result?.boundaryRedirect).toEqual(repeatResult?.boundaryRedirect)
 
     db.close()
   })
@@ -396,6 +416,8 @@ describe('askMemoryWorkspace', () => {
     expect(result?.expressionMode).toBe('advice')
     expect(result?.guardrail.decision).toBe('fallback_unsupported_request')
     expect(result?.answer.summary).toContain('cannot answer as if it were')
+    expect(result?.boundaryRedirect?.kind).toBe('persona_request')
+    expect(result?.boundaryRedirect?.suggestedAsks.some((item) => item.expressionMode === 'advice')).toBe(true)
 
     db.close()
   })
@@ -411,6 +433,7 @@ describe('askMemoryWorkspace', () => {
     expect(result?.answer.displayType).toBe('coverage_gap')
     expect(result?.guardrail.decision).toBe('fallback_insufficient_evidence')
     expect(result?.guardrail.fallbackApplied).toBe(true)
+    expect(result?.boundaryRedirect).toBeNull()
 
     db.close()
   })
@@ -427,6 +450,7 @@ describe('askMemoryWorkspace', () => {
     expect(result?.expressionMode).toBe('advice')
     expect(result?.guardrail.decision).toBe('fallback_insufficient_evidence')
     expect(result?.answer.summary).toContain('insufficient')
+    expect(result?.boundaryRedirect).toBeNull()
 
     db.close()
   })
