@@ -25,6 +25,7 @@ type CompareSessionRow = {
   title: string
   question: string
   expressionMode: MemoryWorkspaceResponse['expressionMode'] | null
+  workflowKind: MemoryWorkspaceResponse['workflowKind'] | null
   runCount: number
   createdAt: string
   updatedAt: string
@@ -211,16 +212,25 @@ function readMessageContent(payload: Record<string, unknown>) {
   throw new Error('Compare model response content is not a supported text format')
 }
 
-function parseCompareSummary(payload: Record<string, unknown>) {
+function parseCompareSummary(
+  payload: Record<string, unknown>,
+  workflowKind: MemoryWorkspaceResponse['workflowKind'] = 'default'
+) {
   const content = readMessageContent(payload).trim()
   if (!content) {
     throw new Error('Compare model response content is empty')
   }
 
   try {
-    const parsed = JSON.parse(content) as { summary?: unknown }
-    if (typeof parsed.summary === 'string' && parsed.summary.trim().length > 0) {
-      return parsed.summary.trim()
+    const parsed = JSON.parse(content) as { summary?: unknown; draft?: unknown }
+    const preferredField = workflowKind === 'persona_draft_sandbox' ? parsed.draft : parsed.summary
+    if (typeof preferredField === 'string' && preferredField.trim().length > 0) {
+      return preferredField.trim()
+    }
+
+    const fallbackField = workflowKind === 'persona_draft_sandbox' ? parsed.summary : parsed.draft
+    if (typeof fallbackField === 'string' && fallbackField.trim().length > 0) {
+      return fallbackField.trim()
     }
   } catch {
     return content
@@ -358,13 +368,25 @@ function buildJudgePrompt(input: {
   baselineResponse: MemoryWorkspaceResponse
   run: EvaluatedCompareRun
 }) {
+  const sandboxPayload = input.baselineResponse.workflowKind === 'persona_draft_sandbox'
+
   return JSON.stringify({
     question: input.baselineResponse.question,
     expressionMode: input.baselineResponse.expressionMode,
+    workflowKind: input.baselineResponse.workflowKind ?? 'default',
     baselineAnswer: input.baselineResponse.answer.summary,
     candidateAnswer: input.run.response?.answer.summary ?? null,
     baselineDisplayType: input.baselineResponse.answer.displayType,
     candidateDisplayType: input.run.response?.answer.displayType ?? null,
+    baselinePersonaDraft: sandboxPayload ? input.baselineResponse.personaDraft : null,
+    candidatePersonaDraft: sandboxPayload ? input.run.response?.personaDraft ?? null : null,
+    communicationEvidence: sandboxPayload
+      ? input.baselineResponse.communicationEvidence?.excerpts.map((excerpt) => ({
+          excerptId: excerpt.excerptId,
+          speakerDisplayName: excerpt.speakerDisplayName,
+          text: excerpt.text
+        })) ?? []
+      : [],
     guardrail: input.run.response?.guardrail ?? input.baselineResponse.guardrail,
     contextCards: input.run.response?.contextCards.map((card) => ({
       title: card.title,
@@ -409,8 +431,15 @@ function buildComparePrompt(baselineResponse: MemoryWorkspaceResponse) {
     title: baselineResponse.title,
     question: baselineResponse.question,
     expressionMode: baselineResponse.expressionMode,
+    workflowKind: baselineResponse.workflowKind ?? 'default',
     baselineAnswer: baselineResponse.answer.summary,
     displayType: baselineResponse.answer.displayType,
+    personaDraft: baselineResponse.personaDraft,
+    communicationEvidence: baselineResponse.communicationEvidence?.excerpts.map((excerpt) => ({
+      excerptId: excerpt.excerptId,
+      speakerDisplayName: excerpt.speakerDisplayName,
+      text: excerpt.text
+    })) ?? [],
     guardrail: baselineResponse.guardrail,
     contextCards: baselineResponse.contextCards.map((card) => ({
       title: card.title,
@@ -428,6 +457,20 @@ function buildComparedResponse(
   baselineResponse: MemoryWorkspaceResponse,
   summary: string
 ): MemoryWorkspaceResponse {
+  if (baselineResponse.workflowKind === 'persona_draft_sandbox' && baselineResponse.personaDraft) {
+    return {
+      ...baselineResponse,
+      answer: {
+        ...baselineResponse.answer,
+        summary: 'Reviewed simulation draft generated from archive-backed excerpts for this ask.'
+      },
+      personaDraft: {
+        ...baselineResponse.personaDraft,
+        draft: summary
+      }
+    }
+  }
+
   return {
     ...baselineResponse,
     answer: {
@@ -446,6 +489,10 @@ function summaryIncludesAny(summary: string, keywords: string[]) {
   return keywords.some((keyword) => normalized.includes(keyword))
 }
 
+function isSandboxWorkflowResponse(response: MemoryWorkspaceResponse | null | undefined) {
+  return response?.workflowKind === 'persona_draft_sandbox'
+}
+
 function groundednessDimension(run: UnevaluatedCompareRun): MemoryWorkspaceCompareEvaluationDimension {
   if (run.status === 'failed' || !run.response) {
     return {
@@ -454,6 +501,24 @@ function groundednessDimension(run: UnevaluatedCompareRun): MemoryWorkspaceCompa
       score: 0,
       maxScore: 5,
       rationale: 'Run failed before a grounded answer could be evaluated.'
+    }
+  }
+
+  if (isSandboxWorkflowResponse(run.response)) {
+    const supportingExcerptCount = run.response.personaDraft?.supportingExcerpts.length ?? 0
+    const traceCount = run.response.personaDraft?.trace.length ?? 0
+    const score = run.response.guardrail.decision === 'sandbox_review_required' && supportingExcerptCount > 0
+      ? (traceCount > 0 ? 5 : 4)
+      : 2
+
+    return {
+      key: 'groundedness',
+      label: 'Groundedness',
+      score,
+      maxScore: 5,
+      rationale: score >= 4
+        ? `Sandbox draft stays review-required and remains tied to ${supportingExcerptCount} supporting excerpts.`
+        : 'Sandbox draft no longer shows enough quote-backed grounding for confident review.'
     }
   }
 
@@ -488,6 +553,20 @@ function traceabilityDimension(run: UnevaluatedCompareRun): MemoryWorkspaceCompa
     }
   }
 
+  if (isSandboxWorkflowResponse(run.response)) {
+    const traceCount = run.response.personaDraft?.trace.length ?? 0
+    const supportingExcerptCount = run.response.personaDraft?.supportingExcerpts.length ?? 0
+    const score = Math.min(5, Math.max(1, traceCount + (supportingExcerptCount > 1 ? 1 : 0)))
+
+    return {
+      key: 'traceability',
+      label: 'Traceability',
+      score,
+      maxScore: 5,
+      rationale: `Visible quote trace covers ${traceCount} draft segments across ${supportingExcerptCount} supporting excerpts.`
+    }
+  }
+
   const citationCount = run.response.guardrail.citationCount
   const sourceKindBonus = run.response.guardrail.sourceKinds.length > 1 ? 1 : 0
   const score = Math.min(5, Math.max(1, citationCount + sourceKindBonus))
@@ -510,6 +589,27 @@ function guardrailAlignmentDimension(run: UnevaluatedCompareRun): MemoryWorkspac
       score: 0,
       maxScore: 5,
       rationale: 'Failed runs cannot be checked against guardrail language.'
+    }
+  }
+
+  if (isSandboxWorkflowResponse(run.response)) {
+    const disclaimer = run.response.personaDraft?.disclaimer ?? ''
+    const keepsSimulationLabel = summaryIncludesAny(disclaimer, [
+      'simulation',
+      'not a statement',
+      'not the person',
+      '不是本人',
+      '非本人'
+    ])
+
+    return {
+      key: 'guardrail_alignment',
+      label: 'Guardrail Alignment',
+      score: keepsSimulationLabel ? 5 : 2,
+      maxScore: 5,
+      rationale: keepsSimulationLabel
+        ? 'Sandbox draft keeps explicit simulation and non-delegation labeling.'
+        : 'Sandbox draft weakens the required simulation / non-delegation label.'
     }
   }
 
@@ -553,6 +653,31 @@ function usefulnessDimension(run: UnevaluatedCompareRun): MemoryWorkspaceCompare
       score: 0,
       maxScore: 5,
       rationale: 'Failed runs are not useful to the user.'
+    }
+  }
+
+  if (isSandboxWorkflowResponse(run.response)) {
+    const draftLength = run.response.personaDraft?.draft.trim().length ?? 0
+    let score = 2
+
+    if (draftLength >= 30) {
+      score += 1
+    }
+
+    if (draftLength >= 60) {
+      score += 1
+    }
+
+    if (run.response.personaDraft?.reviewState === 'review_required') {
+      score += 1
+    }
+
+    return {
+      key: 'usefulness',
+      label: 'Usefulness',
+      score: Math.min(5, score),
+      maxScore: 5,
+      rationale: `Draft length ${draftLength} and review-required state determine how editable the sandbox draft is.`
     }
   }
 
@@ -861,7 +986,9 @@ async function defaultCompareModelCaller(input: {
     return {
       provider: input.target.provider,
       model: input.target.model,
-      summary: `[fixture ${input.target.provider}] ${input.baselineResponse.answer.summary}`,
+      summary: input.baselineResponse.workflowKind === 'persona_draft_sandbox'
+        ? `[fixture ${input.target.provider}] ${input.baselineResponse.personaDraft?.draft ?? input.baselineResponse.answer.summary}`
+        : `[fixture ${input.target.provider}] ${input.baselineResponse.answer.summary}`,
       receivedAt: new Date().toISOString()
     }
   }
@@ -880,13 +1007,19 @@ async function defaultCompareModelCaller(input: {
 	      {
 	        role: 'system',
 	        content: [
-	          input.baselineResponse.expressionMode === 'advice'
-	            ? 'You are comparing grounded advice answers.'
-	            : 'You are comparing grounded archive answers.',
-	          'Return JSON only with a single "summary" field.',
+	          input.baselineResponse.workflowKind === 'persona_draft_sandbox'
+	            ? 'You are comparing reviewed persona draft sandbox candidates.'
+	            : input.baselineResponse.expressionMode === 'advice'
+	              ? 'You are comparing grounded advice answers.'
+	              : 'You are comparing grounded archive answers.',
+	          input.baselineResponse.workflowKind === 'persona_draft_sandbox'
+	            ? 'Return JSON only with a single "draft" field.'
+	            : 'Return JSON only with a single "summary" field.',
 	          'Stay strictly within the provided archive context.',
           'Do not roleplay, imitate a person, or invent facts.',
-          'If the baseline guardrail shows conflict or evidence gaps, preserve that caution in the summary.'
+          input.baselineResponse.workflowKind === 'persona_draft_sandbox'
+            ? 'Keep the output clearly labeled as a simulation draft and preserve review-required caution.'
+            : 'If the baseline guardrail shows conflict or evidence gaps, preserve that caution in the summary.'
         ].join(' ')
       },
       {
@@ -900,7 +1033,7 @@ async function defaultCompareModelCaller(input: {
   return {
     provider: result.provider,
     model: input.target.model,
-    summary: parseCompareSummary(result.payload),
+    summary: parseCompareSummary(result.payload, input.baselineResponse.workflowKind ?? 'default'),
     receivedAt: result.receivedAt
   }
 }
@@ -916,11 +1049,23 @@ async function defaultCompareJudgeCaller(input: {
       model: input.judge.model,
       decision: input.run.target.executionMode === 'local_baseline' ? 'aligned' : 'needs_review',
       score: input.run.target.executionMode === 'local_baseline' ? 5 : 4,
-      rationale: input.run.target.executionMode === 'local_baseline'
-        ? `Fixture judge confirms the deterministic baseline preserves the ${compareModeLabel(input.baselineResponse.expressionMode)} answer.`
-        : `Fixture judge flags this provider summary for light review while staying within ${compareModeLabel(input.baselineResponse.expressionMode)} scope.`,
-      strengths: [`${input.baselineResponse.expressionMode === 'advice' ? 'Grounded advice' : 'Grounded archive'} scope preserved`],
-      concerns: input.run.target.executionMode === 'local_baseline' ? [] : ['Review summary style against baseline phrasing'],
+      rationale: input.baselineResponse.workflowKind === 'persona_draft_sandbox'
+        ? (
+          input.run.target.executionMode === 'local_baseline'
+            ? 'Fixture judge confirms the sandbox baseline preserves simulation labeling and quote trace.'
+            : 'Fixture judge flags this sandbox draft for light review while keeping the simulation boundary intact.'
+        )
+        : input.run.target.executionMode === 'local_baseline'
+          ? `Fixture judge confirms the deterministic baseline preserves the ${compareModeLabel(input.baselineResponse.expressionMode)} answer.`
+          : `Fixture judge flags this provider summary for light review while staying within ${compareModeLabel(input.baselineResponse.expressionMode)} scope.`,
+      strengths: [
+        input.baselineResponse.workflowKind === 'persona_draft_sandbox'
+          ? 'Simulation label preserved'
+          : `${input.baselineResponse.expressionMode === 'advice' ? 'Grounded advice' : 'Grounded archive'} scope preserved`
+      ],
+      concerns: input.run.target.executionMode === 'local_baseline'
+        ? []
+        : [input.baselineResponse.workflowKind === 'persona_draft_sandbox' ? 'Review quote trace before reuse' : 'Review summary style against baseline phrasing'],
       receivedAt: new Date().toISOString()
     }
   }
@@ -939,15 +1084,23 @@ async function defaultCompareJudgeCaller(input: {
 	      {
 	        role: 'system',
 	        content: [
-	          input.baselineResponse.expressionMode === 'advice'
-	            ? 'You are judging a candidate grounded advice answer against its grounded advice baseline.'
-	            : 'You are judging a candidate grounded archive answer against its grounded baseline.',
+	          input.baselineResponse.workflowKind === 'persona_draft_sandbox'
+	            ? 'You are judging a reviewed persona draft sandbox candidate against its quote-backed sandbox baseline.'
+	            : input.baselineResponse.expressionMode === 'advice'
+	              ? 'You are judging a candidate grounded advice answer against its grounded advice baseline.'
+	              : 'You are judging a candidate grounded archive answer against its grounded baseline.',
 	          'Return JSON only with fields: decision, score, rationale, strengths, concerns.',
 	          'decision must be one of aligned, needs_review, not_grounded.',
           'score must be an integer from 1 to 5.',
-          'Use aligned when the candidate preserves grounded facts and guardrail boundaries.',
-          'Use needs_review when it stays mostly grounded but weakens specificity or caution.',
-          'Use not_grounded when it introduces unsupported claims, persona imitation, or unsafe framing.',
+          input.baselineResponse.workflowKind === 'persona_draft_sandbox'
+            ? 'Use aligned when the candidate stays clearly labeled as simulation, remains grounded in the excerpts, and keeps quote trace reviewable.'
+            : 'Use aligned when the candidate preserves grounded facts and guardrail boundaries.',
+          input.baselineResponse.workflowKind === 'persona_draft_sandbox'
+            ? 'Use needs_review when it stays a labeled simulation but weakens quote fidelity, trace clarity, or editability.'
+            : 'Use needs_review when it stays mostly grounded but weakens specificity or caution.',
+          input.baselineResponse.workflowKind === 'persona_draft_sandbox'
+            ? 'Use not_grounded when it rewards unlabeled roleplay, unsupported certainty, or unsafe persona delegation.'
+            : 'Use not_grounded when it introduces unsupported claims, persona imitation, or unsafe framing.',
           'Keep strengths and concerns to short string arrays.'
         ].join(' ')
       },
@@ -1021,6 +1174,7 @@ function mapCompareSessionRow(row: CompareSessionRow): MemoryWorkspaceCompareSes
     title: row.title,
     question: row.question,
     expressionMode: row.expressionMode === 'advice' ? 'advice' : 'grounded',
+    workflowKind: row.workflowKind === 'persona_draft_sandbox' ? 'persona_draft_sandbox' : 'default',
     runCount: row.runCount,
     metadata: {
       targetLabels: [],
@@ -1097,6 +1251,7 @@ function loadCompareSessionRow(db: ArchiveDatabase, compareSessionId: string) {
       title,
       question,
       expression_mode as expressionMode,
+      workflow_kind as workflowKind,
       run_count as runCount,
       created_at as createdAt,
       updated_at as updatedAt
@@ -1163,6 +1318,7 @@ export function listMemoryWorkspaceCompareSessions(
       title,
       question,
       expression_mode as expressionMode,
+      workflow_kind as workflowKind,
       run_count as runCount,
       created_at as createdAt,
       updated_at as updatedAt
@@ -1206,10 +1362,12 @@ export async function runMemoryWorkspaceCompare(
   } = {}
 ): Promise<MemoryWorkspaceCompareSessionDetail | null> {
   const expressionMode = input.expressionMode ?? 'grounded'
+  const workflowKind = input.workflowKind ?? 'default'
   const baselineResponse = askMemoryWorkspace(db, {
     scope: input.scope,
     question: input.question,
-    expressionMode
+    expressionMode,
+    workflowKind
   })
 
   if (!baselineResponse) {
@@ -1230,6 +1388,7 @@ export async function runMemoryWorkspaceCompare(
       scope: input.scope,
       question: input.question,
       expressionMode,
+      workflowKind,
       target
     })
 
@@ -1312,6 +1471,7 @@ export async function runMemoryWorkspaceCompare(
     title: baselineResponse.title.replace('Memory Workspace', 'Memory Workspace Compare'),
     question: input.question,
     expressionMode,
+    workflowKind,
     runCount: runs.length,
     metadata,
     recommendation,
@@ -1323,8 +1483,8 @@ export async function runMemoryWorkspaceCompare(
   try {
     db.prepare(
       `insert into memory_workspace_compare_sessions (
-        id, scope_kind, scope_target_id, title, question, expression_mode, run_count, created_at, updated_at
-      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        id, scope_kind, scope_target_id, title, question, expression_mode, workflow_kind, run_count, created_at, updated_at
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       compareSessionId,
       input.scope.kind,
@@ -1332,6 +1492,7 @@ export async function runMemoryWorkspaceCompare(
       sessionSummary.title,
       input.question,
       sessionSummary.expressionMode,
+      sessionSummary.workflowKind,
       runs.length,
       createdAt,
       sessionSummary.updatedAt

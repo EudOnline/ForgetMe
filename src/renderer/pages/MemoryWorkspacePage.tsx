@@ -224,6 +224,36 @@ function inferCompareJudgeDefaultsFromRuns(runs: MemoryWorkspaceCompareRunRecord
   }
 }
 
+function inferCompareWorkflowKind(input: {
+  question: string
+  turns: MemoryWorkspaceTurnRecord[]
+  selectedCompareSummary: MemoryWorkspaceCompareSessionSummary | null
+}) {
+  const trimmedQuestion = input.question.trim()
+  if (!trimmedQuestion) {
+    return undefined
+  }
+
+  if (
+    input.selectedCompareSummary
+    && input.selectedCompareSummary.question.trim() === trimmedQuestion
+    && input.selectedCompareSummary.workflowKind === 'persona_draft_sandbox'
+  ) {
+    return 'persona_draft_sandbox' as const
+  }
+
+  const activeTurn = input.turns[input.turns.length - 1]
+  if (
+    activeTurn
+    && activeTurn.question.trim() === trimmedQuestion
+    && activeTurn.response.workflowKind === 'persona_draft_sandbox'
+  ) {
+    return 'persona_draft_sandbox' as const
+  }
+
+  return undefined
+}
+
 function initialQuestionForScope(scope: MemoryWorkspaceScope) {
   if (scope.kind === 'person') {
     return ''
@@ -744,6 +774,12 @@ export function MemoryWorkspacePage(props: {
       return
     }
 
+    const workflowKind = inferCompareWorkflowKind({
+      question: trimmedQuestion,
+      turns,
+      selectedCompareSummary
+    })
+
     const scopeRequestId = scopeRequestRef.current
     setIsComparing(true)
     setCompareEmptyStateMessage(null)
@@ -753,6 +789,7 @@ export function MemoryWorkspacePage(props: {
         scope: props.scope,
         question: trimmedQuestion,
         expressionMode,
+        ...(workflowKind ? { workflowKind } : {}),
         ...(compareUsesCustomTargets ? { targets: selectedCompareTargets } : {}),
         judge: compareJudgeEnabled
           ? {

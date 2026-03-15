@@ -412,6 +412,344 @@ describe('MemoryWorkspacePage', () => {
     expect(screen.getByText('Draft segment 1 stays grounded in Alice Chen excerpt ce-1.')).toBeInTheDocument()
   })
 
+  it('runs compare for an active sandbox response with sandbox workflow metadata and labels', async () => {
+    const sandboxQuestion = '如果她来写一段关于记录和归档的回复，会怎么写？'
+    const listMemoryWorkspaceSessions = vi.fn().mockResolvedValue([
+      {
+        sessionId: 'session-sandbox-existing',
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+        title: 'Memory Workspace · Alice Chen',
+        latestQuestion: sandboxQuestion,
+        turnCount: 1,
+        createdAt: '2026-03-15T01:00:00.000Z',
+        updatedAt: '2026-03-15T01:00:00.000Z'
+      }
+    ])
+    const getMemoryWorkspaceSession = vi.fn().mockResolvedValue({
+      sessionId: 'session-sandbox-existing',
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      title: 'Memory Workspace · Alice Chen',
+      latestQuestion: sandboxQuestion,
+      turnCount: 1,
+      createdAt: '2026-03-15T01:00:00.000Z',
+      updatedAt: '2026-03-15T01:00:00.000Z',
+      turns: [
+        {
+          turnId: 'turn-sandbox-existing',
+          sessionId: 'session-sandbox-existing',
+          ordinal: 1,
+          question: sandboxQuestion,
+          provider: null,
+          model: null,
+          contextHash: 'context-sandbox-existing',
+          promptHash: 'prompt-sandbox-existing',
+          createdAt: '2026-03-15T01:00:00.000Z',
+          response: {
+            scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+            question: sandboxQuestion,
+            expressionMode: 'grounded',
+            workflowKind: 'persona_draft_sandbox',
+            title: 'Memory Workspace · Alice Chen',
+            answer: {
+              summary: 'Reviewed simulation draft generated from archive-backed excerpts for this ask.',
+              displayType: 'derived_summary',
+              citations: []
+            },
+            guardrail: {
+              decision: 'sandbox_review_required',
+              reasonCodes: ['persona_draft_sandbox', 'quote_trace_required'],
+              citationCount: 2,
+              sourceKinds: ['file'],
+              fallbackApplied: false
+            },
+            contextCards: [],
+            boundaryRedirect: null,
+            communicationEvidence: {
+              title: 'Communication Evidence',
+              summary: 'Direct archive-backed excerpts related to this ask.',
+              excerpts: [
+                {
+                  excerptId: 'ce-1',
+                  fileId: 'f-1',
+                  fileName: 'chat-1.json',
+                  ordinal: 1,
+                  speakerDisplayName: 'Alice Chen',
+                  text: '我们还是把这些记录留在归档里，后面查起来更稳妥。'
+                }
+              ]
+            },
+            personaDraft: {
+              title: 'Reviewed draft sandbox',
+              disclaimer: 'Simulation draft based on archived expressions. Not a statement from the person.',
+              draft: '可审阅草稿：先把关键记录整理进归档，把重要细节继续记下来，这样后面查找会更稳妥。',
+              reviewState: 'review_required',
+              supportingExcerpts: ['ce-1'],
+              trace: [
+                {
+                  traceId: 'trace-1',
+                  excerptIds: ['ce-1'],
+                  explanation: 'Draft segment 1 stays grounded in Alice Chen excerpt ce-1.'
+                }
+              ]
+            }
+          }
+        }
+      ]
+    })
+    const listMemoryWorkspaceCompareSessions = vi.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          compareSessionId: 'compare-session-sandbox-1',
+          scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+          title: 'Memory Workspace Compare · Alice Chen',
+          question: sandboxQuestion,
+          expressionMode: 'grounded',
+          workflowKind: 'persona_draft_sandbox',
+          runCount: 2,
+          metadata: {
+            targetLabels: ['Local baseline', 'OpenRouter / Sandbox'],
+            failedRunCount: 0,
+            judge: {
+              enabled: true,
+              status: 'mixed'
+            }
+          },
+          recommendation: {
+            source: 'judge_assisted',
+            decision: 'recommend_run',
+            recommendedCompareRunId: 'compare-run-sandbox-2',
+            recommendedTargetLabel: 'OpenRouter / Sandbox',
+            rationale: 'A judge-assisted override selected the reviewed sandbox draft after full quote-trace review.'
+          },
+          createdAt: '2026-03-15T01:05:00.000Z',
+          updatedAt: '2026-03-15T01:05:02.000Z'
+        }
+      ])
+    const runMemoryWorkspaceCompare = vi.fn().mockResolvedValue({
+      compareSessionId: 'compare-session-sandbox-1',
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      title: 'Memory Workspace Compare · Alice Chen',
+      question: sandboxQuestion,
+      expressionMode: 'grounded',
+      workflowKind: 'persona_draft_sandbox',
+      runCount: 2,
+      metadata: {
+        targetLabels: ['Local baseline', 'OpenRouter / Sandbox'],
+        failedRunCount: 0,
+        judge: {
+          enabled: true,
+          status: 'mixed'
+        }
+      },
+      recommendation: {
+        source: 'judge_assisted',
+        decision: 'recommend_run',
+        recommendedCompareRunId: 'compare-run-sandbox-2',
+        recommendedTargetLabel: 'OpenRouter / Sandbox',
+        rationale: 'A judge-assisted override selected the reviewed sandbox draft after full quote-trace review.'
+      },
+      createdAt: '2026-03-15T01:05:00.000Z',
+      updatedAt: '2026-03-15T01:05:02.000Z',
+      runs: [
+        {
+          compareRunId: 'compare-run-sandbox-1',
+          compareSessionId: 'compare-session-sandbox-1',
+          ordinal: 1,
+          target: {
+            targetId: 'baseline-local',
+            label: 'Local baseline',
+            executionMode: 'local_baseline'
+          },
+          provider: null,
+          model: null,
+          status: 'completed',
+          errorMessage: null,
+          evaluation: {
+            totalScore: 18,
+            maxScore: 20,
+            band: 'strong',
+            dimensions: [
+              { key: 'groundedness', label: 'Groundedness', score: 5, maxScore: 5, rationale: 'Draft stays grounded in quote-backed evidence.' },
+              { key: 'traceability', label: 'Traceability', score: 4, maxScore: 5, rationale: 'Visible quote trace covers the draft structure.' },
+              { key: 'guardrail_alignment', label: 'Guardrail Alignment', score: 5, maxScore: 5, rationale: 'Simulation labeling remains explicit.' },
+              { key: 'usefulness', label: 'Usefulness', score: 4, maxScore: 5, rationale: 'Draft is editable and readable.' }
+            ]
+          },
+          judge: {
+            status: 'completed',
+            provider: 'openrouter',
+            model: 'judge-test-model',
+            decision: 'aligned',
+            score: 5,
+            rationale: 'The sandbox baseline keeps simulation labeling and quote trace intact.',
+            strengths: ['Simulation label preserved'],
+            concerns: [],
+            errorMessage: null,
+            createdAt: '2026-03-15T01:05:01.000Z'
+          },
+          contextHash: 'compare-context-sandbox-1',
+          promptHash: 'compare-prompt-sandbox-1',
+          createdAt: '2026-03-15T01:05:00.500Z',
+          response: {
+            scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+            question: sandboxQuestion,
+            expressionMode: 'grounded',
+            workflowKind: 'persona_draft_sandbox',
+            title: 'Memory Workspace · Alice Chen',
+            answer: {
+              summary: 'Reviewed simulation draft generated from archive-backed excerpts for this ask.',
+              displayType: 'derived_summary',
+              citations: []
+            },
+            guardrail: {
+              decision: 'sandbox_review_required',
+              reasonCodes: ['persona_draft_sandbox', 'quote_trace_required'],
+              citationCount: 2,
+              sourceKinds: ['file'],
+              fallbackApplied: false
+            },
+            contextCards: [],
+            boundaryRedirect: null,
+            communicationEvidence: null,
+            personaDraft: {
+              title: 'Reviewed draft sandbox',
+              disclaimer: 'Simulation draft based on archived expressions. Not a statement from the person.',
+              draft: '可审阅草稿：先把关键记录整理进归档，把重要细节继续记下来，这样后面查找会更稳妥。',
+              reviewState: 'review_required',
+              supportingExcerpts: ['ce-1'],
+              trace: [
+                {
+                  traceId: 'trace-1',
+                  excerptIds: ['ce-1'],
+                  explanation: 'Draft segment 1 stays grounded in Alice Chen excerpt ce-1.'
+                }
+              ]
+            }
+          }
+        },
+        {
+          compareRunId: 'compare-run-sandbox-2',
+          compareSessionId: 'compare-session-sandbox-1',
+          ordinal: 2,
+          target: {
+            targetId: 'openrouter-sandbox',
+            label: 'OpenRouter / Sandbox',
+            executionMode: 'provider_model',
+            provider: 'openrouter',
+            model: 'or-sandbox-model'
+          },
+          provider: 'openrouter',
+          model: 'or-sandbox-model',
+          status: 'completed',
+          errorMessage: null,
+          evaluation: {
+            totalScore: 17,
+            maxScore: 20,
+            band: 'strong',
+            dimensions: [
+              { key: 'groundedness', label: 'Groundedness', score: 4, maxScore: 5, rationale: 'Draft mostly stays within quote-backed evidence.' },
+              { key: 'traceability', label: 'Traceability', score: 4, maxScore: 5, rationale: 'Visible quote trace supports the candidate draft.' },
+              { key: 'guardrail_alignment', label: 'Guardrail Alignment', score: 5, maxScore: 5, rationale: 'Simulation labeling remains explicit.' },
+              { key: 'usefulness', label: 'Usefulness', score: 4, maxScore: 5, rationale: 'Draft remains readable and editable.' }
+            ]
+          },
+          judge: {
+            status: 'completed',
+            provider: 'openrouter',
+            model: 'judge-test-model',
+            decision: 'aligned',
+            score: 5,
+            rationale: 'The candidate sandbox draft stays grounded and useful after quote-trace review.',
+            strengths: ['Readable simulation draft'],
+            concerns: [],
+            errorMessage: null,
+            createdAt: '2026-03-15T01:05:02.000Z'
+          },
+          contextHash: 'compare-context-sandbox-2',
+          promptHash: 'compare-prompt-sandbox-2',
+          createdAt: '2026-03-15T01:05:01.500Z',
+          response: {
+            scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+            question: sandboxQuestion,
+            expressionMode: 'grounded',
+            workflowKind: 'persona_draft_sandbox',
+            title: 'Memory Workspace · Alice Chen',
+            answer: {
+              summary: 'Reviewed simulation draft generated from archive-backed excerpts for this ask.',
+              displayType: 'derived_summary',
+              citations: []
+            },
+            guardrail: {
+              decision: 'sandbox_review_required',
+              reasonCodes: ['persona_draft_sandbox', 'quote_trace_required'],
+              citationCount: 2,
+              sourceKinds: ['file'],
+              fallbackApplied: false
+            },
+            contextCards: [],
+            boundaryRedirect: null,
+            communicationEvidence: null,
+            personaDraft: {
+              title: 'Reviewed draft sandbox',
+              disclaimer: 'Simulation draft based on archived expressions. Not a statement from the person.',
+              draft: '可审阅草稿：先把这些记录整理进归档，再把关键细节补齐，方便后面统一回看。',
+              reviewState: 'review_required',
+              supportingExcerpts: ['ce-1'],
+              trace: [
+                {
+                  traceId: 'trace-1',
+                  excerptIds: ['ce-1'],
+                  explanation: 'Draft segment 1 stays grounded in Alice Chen excerpt ce-1.'
+                }
+              ]
+            }
+          }
+        }
+      ]
+    })
+
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions,
+      getMemoryWorkspaceSession,
+      askMemoryWorkspacePersisted: vi.fn().mockResolvedValue(null),
+      listMemoryWorkspaceCompareSessions,
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'person', canonicalPersonId: 'cp-1' }} />)
+
+    await screen.findByText('Workflow: persona draft sandbox')
+
+    fireEvent.click(screen.getByLabelText('Enable judge review'))
+    fireEvent.change(screen.getByLabelText('Ask memory workspace'), {
+      target: { value: sandboxQuestion }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Run compare' }))
+
+    await waitFor(() => {
+      expect(runMemoryWorkspaceCompare).toHaveBeenCalledWith({
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+        question: sandboxQuestion,
+        expressionMode: 'grounded',
+        workflowKind: 'persona_draft_sandbox',
+        judge: {
+          enabled: true,
+          provider: 'siliconflow'
+        }
+      })
+    })
+
+    const recommendationPanel = await screen.findByLabelText('Recommended Compare Result')
+    expect(within(recommendationPanel).getByText('Recommendation source: judge-assisted')).toBeInTheDocument()
+    expect(within(recommendationPanel).getByText('A judge-assisted override selected the reviewed sandbox draft after full quote-trace review.')).toBeInTheDocument()
+    expect(screen.getAllByText('Workflow: persona draft sandbox').length).toBeGreaterThan(1)
+    const candidateRun = screen.getByLabelText('Compare Run 2')
+    expect(within(candidateRun).getByRole('heading', { name: 'OpenRouter / Sandbox' })).toBeInTheDocument()
+    expect(screen.getByText('可审阅草稿：先把这些记录整理进归档，再把关键细节补齐，方便后面统一回看。')).toBeInTheDocument()
+  })
+
   it('shows a scope-aware empty state before the first question', async () => {
     stubArchiveWindow({
       listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([]),

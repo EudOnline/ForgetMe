@@ -491,6 +491,86 @@ describe('memoryWorkspaceCompareService', () => {
     db.close()
   })
 
+  it('persists sandbox compare workflow metadata and scores provider drafts with sandbox-aware audit copy', async () => {
+    const db = seedMemoryWorkspaceScenario()
+
+    const session = await runMemoryWorkspaceCompare(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '如果她来写一段关于记录和归档的回复，会怎么写？',
+      workflowKind: 'persona_draft_sandbox',
+      judge: {
+        enabled: true,
+        provider: 'openrouter',
+        model: 'judge-test-model'
+      },
+      targets: [
+        {
+          targetId: 'baseline-local',
+          label: 'Local baseline',
+          executionMode: 'local_baseline'
+        },
+        {
+          targetId: 'openrouter-sandbox',
+          label: 'OpenRouter / Sandbox',
+          executionMode: 'provider_model',
+          provider: 'openrouter',
+          model: 'or-sandbox-model'
+        }
+      ]
+    }, {
+      callModel: async ({ target }) => ({
+        provider: target.provider,
+        model: target.model,
+        summary: '可审阅草稿：我们先把关键记录归档，再继续补齐重要细节，方便后续回看。',
+        receivedAt: '2026-03-15T04:10:02.000Z'
+      }),
+      callJudgeModel: async ({ baselineResponse, run }) => {
+        expect(baselineResponse.workflowKind).toBe('persona_draft_sandbox')
+        expect(run.response?.workflowKind).toBe('persona_draft_sandbox')
+        expect(run.response?.personaDraft?.draft).toContain('归档')
+
+        return {
+          provider: 'openrouter',
+          model: 'judge-test-model',
+          decision: run.target.executionMode === 'local_baseline' ? 'aligned' : 'needs_review',
+          score: run.target.executionMode === 'local_baseline' ? 5 : 4,
+          rationale: run.target.executionMode === 'local_baseline'
+            ? 'Sandbox baseline stays clearly labeled as a simulation draft.'
+            : 'Sandbox draft remains useful, but the quote trace should be reviewed before reuse.',
+          strengths: ['Simulation label preserved'],
+          concerns: run.target.executionMode === 'local_baseline' ? [] : ['Review quote trace before reuse'],
+          receivedAt: '2026-03-15T04:10:03.000Z'
+        }
+      }
+    })
+
+    expect(session).not.toBeNull()
+    expect(session?.workflowKind).toBe('persona_draft_sandbox')
+    expect(session?.runs).toHaveLength(2)
+    expect(session?.runs[0]?.response?.workflowKind).toBe('persona_draft_sandbox')
+    expect(session?.runs[0]?.response?.personaDraft?.draft).toContain('归档')
+    expect(session?.runs[1]?.response?.workflowKind).toBe('persona_draft_sandbox')
+    expect(session?.runs[1]?.response?.personaDraft?.draft).toContain('归档')
+    expect(session?.runs[1]?.response?.answer.summary).toContain('Reviewed simulation draft')
+    expect(session?.runs[1]?.evaluation.dimensions.find((dimension) => dimension.key === 'traceability')?.rationale).toContain('quote trace')
+    expect(session?.runs[1]?.evaluation.dimensions.find((dimension) => dimension.key === 'guardrail_alignment')?.rationale).toContain('simulation')
+    expect(session?.runs[1]?.evaluation.dimensions.find((dimension) => dimension.key === 'usefulness')?.rationale).toContain('editable')
+    expect(session?.runs[1]?.judge.decision).toBe('needs_review')
+
+    const summaries = listMemoryWorkspaceCompareSessions(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' }
+    })
+    expect(summaries[0]?.workflowKind).toBe('persona_draft_sandbox')
+
+    const reloaded = getMemoryWorkspaceCompareSession(db, {
+      compareSessionId: session!.compareSessionId
+    })
+    expect(reloaded?.workflowKind).toBe('persona_draft_sandbox')
+    expect(reloaded?.runs[1]?.response?.personaDraft?.draft).toContain('归档')
+
+    db.close()
+  })
+
   it('uses advice-aware compare and judge prompts for advice-mode runs', async () => {
     const db = seedMemoryWorkspaceScenario()
     const callLiteLLM = vi.spyOn(modelGatewayService, 'callLiteLLM')

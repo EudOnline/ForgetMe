@@ -502,6 +502,7 @@ export function MemoryWorkspaceView(props: {
                     {compareSessionLabel(summary)}
                   </button>
                   <p>Mode: {summary.expressionMode}</p>
+                  <p>Workflow: {formatDisplayType(summary.workflowKind ?? 'default')}</p>
                   <p>Targets: {compareSessionTargetsLabel(summary)}</p>
                   <p>Judge: {summary.metadata.judge.status}</p>
                   {summary.metadata.failedRunCount > 0 ? <p>Failed runs: {summary.metadata.failedRunCount}</p> : null}
