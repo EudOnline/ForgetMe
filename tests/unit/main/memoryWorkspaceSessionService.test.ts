@@ -344,7 +344,28 @@ describe('memoryWorkspaceSessionService', () => {
     expect(detail?.turns).toHaveLength(1)
     expect(detail?.turns[0]?.response).toEqual(turn?.response)
     expect(detail?.turns[0]?.response.expressionMode).toBe('advice')
+    expect(detail?.turns[0]?.response.boundaryRedirect).toBeNull()
     expect(detail?.turns[0]?.contextHash).toBe(turn?.contextHash)
+
+    db.close()
+  })
+
+  it('preserves persona boundary redirects in persisted replay turns', () => {
+    const db = seedConversationScenario()
+
+    const turn = askMemoryWorkspacePersisted(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '如果她本人会怎么说？',
+      expressionMode: 'grounded'
+    })
+
+    const detail = getMemoryWorkspaceSession(db, { sessionId: turn!.sessionId })
+
+    expect(turn?.response.boundaryRedirect?.kind).toBe('persona_request')
+    expect(detail?.turns[0]?.response.boundaryRedirect).toEqual(turn?.response.boundaryRedirect)
+    expect(detail?.turns[0]?.response.boundaryRedirect?.suggestedAsks.map((item) => item.expressionMode)).toEqual(
+      expect.arrayContaining(['grounded', 'advice'])
+    )
 
     db.close()
   })

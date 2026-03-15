@@ -152,6 +152,33 @@ function renderResponse(
         )}
       </section>
 
+      {response.boundaryRedirect ? (
+        <section aria-label="Boundary Redirect">
+          <h3>Boundary redirect</h3>
+          <p>{response.boundaryRedirect.title}</p>
+          <p>{response.boundaryRedirect.message}</p>
+          {response.boundaryRedirect.reasons.length ? (
+            <ul>
+              {response.boundaryRedirect.reasons.map((reason) => (
+                <li key={reason}>{reason}</li>
+              ))}
+            </ul>
+          ) : null}
+          {response.boundaryRedirect.suggestedAsks.length ? (
+            <ul>
+              {response.boundaryRedirect.suggestedAsks.map((suggestion) => (
+                <li key={`${suggestion.label}:${suggestion.expressionMode}:${suggestion.question}`}>
+                  <strong>{suggestion.label}</strong>
+                  <p>Mode: {suggestion.expressionMode}</p>
+                  <p>{suggestion.question}</p>
+                  <p>{suggestion.rationale}</p>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      ) : null}
+
       <section aria-label="Context Cards">
         <h3>Context Cards</h3>
         {response.contextCards.map((card) => (

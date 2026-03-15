@@ -66,7 +66,8 @@ describe('MemoryWorkspacePage replay', () => {
                 citationCount: 0,
                 sourceKinds: [],
                 fallbackApplied: false
-              }
+              },
+              boundaryRedirect: null
             }
           },
           {
@@ -92,7 +93,8 @@ describe('MemoryWorkspacePage replay', () => {
                 citationCount: 0,
                 sourceKinds: [],
                 fallbackApplied: true
-              }
+              },
+              boundaryRedirect: null
             }
           }
         ]
@@ -129,7 +131,8 @@ describe('MemoryWorkspacePage replay', () => {
                 citationCount: 0,
                 sourceKinds: [],
                 fallbackApplied: false
-              }
+              },
+              boundaryRedirect: null
             }
           }
         ]
@@ -213,7 +216,8 @@ describe('MemoryWorkspacePage replay', () => {
               citationCount: 0,
               sourceKinds: [],
               fallbackApplied: true
-            }
+            },
+            boundaryRedirect: null
           }
         }
       ]
@@ -248,7 +252,8 @@ describe('MemoryWorkspacePage replay', () => {
               citationCount: 2,
               sourceKinds: ['person', 'file'],
               fallbackApplied: false
-            }
+            },
+            boundaryRedirect: null
           }
         }
       ]
@@ -361,7 +366,8 @@ describe('MemoryWorkspacePage replay', () => {
                   { citationId: 'review-1', kind: 'review', targetId: 'rq-1', label: 'Open school_name conflicts' }
                 ]
               }
-            ]
+            ],
+            boundaryRedirect: null
           }
         }
       ]
@@ -402,5 +408,98 @@ describe('MemoryWorkspacePage replay', () => {
 
     rerender(<MemoryWorkspacePage scope={{ kind: 'group', anchorPersonId: 'cp-9' }} />)
     expect(await screen.findByText('No saved sessions for this scope yet.')).toBeInTheDocument()
+  })
+
+  it('renders saved boundary redirects in replayed turns', async () => {
+    const listMemoryWorkspaceSessions = vi.fn().mockResolvedValue([
+      {
+        sessionId: 'session-redirect',
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+        title: 'Memory Workspace · Alice Chen',
+        latestQuestion: '如果她本人会怎么说？',
+        turnCount: 1,
+        createdAt: '2026-03-15T12:01:00.000Z',
+        updatedAt: '2026-03-15T12:01:00.000Z'
+      }
+    ])
+
+    const getMemoryWorkspaceSession = vi.fn().mockResolvedValue({
+      sessionId: 'session-redirect',
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      title: 'Memory Workspace · Alice Chen',
+      latestQuestion: '如果她本人会怎么说？',
+      turnCount: 1,
+      createdAt: '2026-03-15T12:01:00.000Z',
+      updatedAt: '2026-03-15T12:01:00.000Z',
+      turns: [
+        {
+          turnId: 'turn-redirect',
+          sessionId: 'session-redirect',
+          ordinal: 1,
+          question: '如果她本人会怎么说？',
+          provider: null,
+          model: null,
+          contextHash: 'context-redirect',
+          promptHash: 'prompt-redirect',
+          createdAt: '2026-03-15T12:01:00.000Z',
+          response: {
+            scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+            question: '如果她本人会怎么说？',
+            expressionMode: 'grounded',
+            title: 'Memory Workspace · Alice Chen',
+            answer: {
+              summary: 'This memory workspace cannot answer as if it were the archived person.',
+              displayType: 'coverage_gap',
+              citations: []
+            },
+            contextCards: [],
+            guardrail: {
+              decision: 'fallback_unsupported_request',
+              reasonCodes: ['persona_request'],
+              citationCount: 0,
+              sourceKinds: [],
+              fallbackApplied: true
+            },
+            boundaryRedirect: {
+              kind: 'persona_request',
+              title: 'Persona request blocked',
+              message: 'Use grounded archive questions instead of imitation.',
+              reasons: ['persona_request', 'delegation_not_allowed', 'style_evidence_unavailable'],
+              suggestedAsks: [
+                {
+                  label: 'Grounded summary',
+                  question: '先基于档案总结她当前最明确的状态。',
+                  expressionMode: 'grounded',
+                  rationale: 'Summarize the strongest approved archive signal first.'
+                },
+                {
+                  label: 'Advice next step',
+                  question: '基于档案，现在最安全的下一步是什么？',
+                  expressionMode: 'advice',
+                  rationale: 'Convert the current archive state into a safe next-step ask.'
+                }
+              ]
+            }
+          }
+        }
+      ]
+    })
+
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions,
+      getMemoryWorkspaceSession,
+      listMemoryWorkspaceCompareSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted: vi.fn()
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'person', canonicalPersonId: 'cp-1' }} />)
+
+    expect(await screen.findByText('Persona request blocked')).toBeInTheDocument()
+    expect(screen.getByText('Use grounded archive questions instead of imitation.')).toBeInTheDocument()
+    expect(screen.getByText('Grounded summary')).toBeInTheDocument()
+    expect(screen.getByText('Advice next step')).toBeInTheDocument()
+    expect(screen.getByText('delegation_not_allowed')).toBeInTheDocument()
   })
 })

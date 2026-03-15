@@ -107,4 +107,66 @@ describe('archiveApi dossier methods', () => {
       mode: 'approved_only'
     })).resolves.toBeNull()
   })
+
+  it('preserves richer memory workspace turn responses when a renderer API is present', async () => {
+    const askMemoryWorkspacePersisted = vi.fn().mockResolvedValue({
+      turnId: 'turn-1',
+      sessionId: 'session-1',
+      ordinal: 1,
+      question: '如果她本人会怎么说？',
+      provider: null,
+      model: null,
+      contextHash: 'context-1',
+      promptHash: 'prompt-1',
+      createdAt: '2026-03-15T00:00:00.000Z',
+      response: {
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+        question: '如果她本人会怎么说？',
+        expressionMode: 'grounded',
+        title: 'Memory Workspace · Alice Chen',
+        answer: {
+          summary: 'This memory workspace cannot answer as if it were the archived person.',
+          displayType: 'coverage_gap',
+          citations: []
+        },
+        contextCards: [],
+        guardrail: {
+          decision: 'fallback_unsupported_request',
+          reasonCodes: ['persona_request'],
+          citationCount: 0,
+          sourceKinds: [],
+          fallbackApplied: true
+        },
+        boundaryRedirect: {
+          kind: 'persona_request',
+          title: 'Persona request blocked',
+          message: 'Use grounded archive questions instead of imitation.',
+          reasons: ['persona_request', 'delegation_not_allowed'],
+          suggestedAsks: [
+            {
+              label: 'Grounded summary',
+              question: '先基于档案总结她当前最明确的状态。',
+              expressionMode: 'grounded',
+              rationale: 'Summarize the strongest approved archive signal first.'
+            }
+          ]
+        }
+      }
+    })
+
+    vi.stubGlobal('window', {
+      archiveApi: {
+        askMemoryWorkspacePersisted
+      }
+    })
+
+    const archiveApi = getArchiveApi()
+    const turn = await archiveApi.askMemoryWorkspacePersisted({
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '如果她本人会怎么说？'
+    })
+
+    expect(turn?.response.boundaryRedirect?.kind).toBe('persona_request')
+    expect(turn?.response.boundaryRedirect?.suggestedAsks[0]?.label).toBe('Grounded summary')
+  })
 })
