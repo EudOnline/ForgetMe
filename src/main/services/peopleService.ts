@@ -6,6 +6,11 @@ export type ParsedFileSummary = {
   kind: string
   summary: {
     participants?: string[]
+    communicationExcerpts?: Array<{
+      ordinal: number
+      speakerDisplayName: string | null
+      text: string
+    }>
     [key: string]: unknown
   }
 }

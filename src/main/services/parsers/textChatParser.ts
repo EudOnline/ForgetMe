@@ -9,7 +9,12 @@ export async function parseTextChat(filePath: string) {
     summary: {
       messageCount: lines.length,
       participants: [],
-      previewText: lines.slice(0, 5).join('\n')
+      previewText: lines.slice(0, 5).join('\n'),
+      communicationExcerpts: lines.map((line, index) => ({
+        ordinal: index + 1,
+        speakerDisplayName: null,
+        text: line
+      }))
     }
   }
 }

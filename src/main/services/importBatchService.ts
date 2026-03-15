@@ -109,6 +109,33 @@ export async function createImportBatch(input: {
   }
 
   const anchors = persistPeopleAnchors(db, collectPeopleAnchors({ parsedFiles }))
+  const anchorLookup = new Map(
+    anchors.map((anchor) => [`${anchor.sourceFileId}:${anchor.displayName}`, anchor.personId])
+  )
+
+  for (const parsedFile of parsedFiles) {
+    const communicationExcerpts = parsedFile.summary.communicationExcerpts
+    if (!Array.isArray(communicationExcerpts) || communicationExcerpts.length === 0) {
+      continue
+    }
+
+    for (const excerpt of communicationExcerpts) {
+      db.prepare(
+        `insert into communication_evidence (
+          id, file_id, ordinal, speaker_display_name, speaker_anchor_person_id, excerpt_text, created_at
+        ) values (?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        crypto.randomUUID(),
+        parsedFile.fileId,
+        excerpt.ordinal,
+        excerpt.speakerDisplayName,
+        excerpt.speakerDisplayName ? anchorLookup.get(`${parsedFile.fileId}:${excerpt.speakerDisplayName}`) ?? null : null,
+        excerpt.text,
+        createdAt
+      )
+    }
+  }
+
   ensureCanonicalPeopleForAnchors(db, anchors.map((anchor) => ({
     anchorPersonId: anchor.personId,
     displayName: anchor.displayName,
