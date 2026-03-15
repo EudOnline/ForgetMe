@@ -132,6 +132,25 @@ export function seedMemoryWorkspaceScenario() {
     )
   }
 
+  for (const [evidenceId, fileId, ordinal, speakerDisplayName, speakerAnchorPersonId, text] of [
+    ['ce-1', 'f-1', 1, 'Alice Chen', 'p-1', '我们还是把这些记录留在归档里，后面查起来更稳妥。'],
+    ['ce-2', 'f-1', 2, 'Bob Li', 'p-2', '先把聊天整理成归档笔记，这样以后能找到。'],
+    ['ce-3', 'f-2', 1, 'Alice Chen', 'p-1', '我会继续记下关键细节，归档后就不会丢。'],
+    ['ce-4', 'f-2', 2, 'Carol Xu', 'p-3', '周末一起去看展吧。']
+  ] as const) {
+    db.prepare(
+      'insert into communication_evidence (id, file_id, ordinal, speaker_display_name, speaker_anchor_person_id, excerpt_text, created_at) values (?, ?, ?, ?, ?, ?, ?)'
+    ).run(
+      evidenceId,
+      fileId,
+      ordinal,
+      speakerDisplayName,
+      speakerAnchorPersonId,
+      text,
+      createdAt
+    )
+  }
+
   db.prepare('insert into event_clusters (id, title, time_start, time_end, summary, status, source_candidate_id, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
     'ec-1',
     'Trip planning',

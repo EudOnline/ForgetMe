@@ -124,6 +124,23 @@ function seedConversationScenario() {
     )
   }
 
+  for (const [evidenceId, fileId, ordinal, speakerDisplayName, speakerAnchorPersonId, text] of [
+    ['ce-1', 'f-1', 1, 'Alice Chen', 'p-1', '我们还是把这些记录留在归档里，后面查起来更稳妥。'],
+    ['ce-2', 'f-1', 2, 'Bob Li', 'p-2', '先把聊天整理成归档笔记，这样以后能找到。']
+  ] as const) {
+    db.prepare(
+      'insert into communication_evidence (id, file_id, ordinal, speaker_display_name, speaker_anchor_person_id, excerpt_text, created_at) values (?, ?, ?, ?, ?, ?, ?)'
+    ).run(
+      evidenceId,
+      fileId,
+      ordinal,
+      speakerDisplayName,
+      speakerAnchorPersonId,
+      text,
+      createdAt
+    )
+  }
+
   db.prepare('insert into event_clusters (id, title, time_start, time_end, summary, status, source_candidate_id, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
     'ec-1',
     'Trip planning',
@@ -363,9 +380,29 @@ describe('memoryWorkspaceSessionService', () => {
 
     expect(turn?.response.boundaryRedirect?.kind).toBe('persona_request')
     expect(detail?.turns[0]?.response.boundaryRedirect).toEqual(turn?.response.boundaryRedirect)
+    expect(detail?.turns[0]?.response.boundaryRedirect?.suggestedAsks.some((item) => item.label === 'Past expressions')).toBe(true)
     expect(detail?.turns[0]?.response.boundaryRedirect?.suggestedAsks.map((item) => item.expressionMode)).toEqual(
       expect.arrayContaining(['grounded', 'advice'])
     )
+
+    db.close()
+  })
+
+  it('preserves communication evidence in persisted replay turns', () => {
+    const db = seedConversationScenario()
+
+    const turn = askMemoryWorkspacePersisted(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '她过去是怎么表达记录和归档这类事的？给我看原话。',
+      expressionMode: 'grounded'
+    })
+
+    const detail = getMemoryWorkspaceSession(db, { sessionId: turn!.sessionId })
+
+    expect(turn?.response.communicationEvidence?.title).toBe('Communication Evidence')
+    expect(turn?.response.communicationEvidence?.excerpts[0]?.speakerDisplayName).toBe('Alice Chen')
+    expect(detail?.turns[0]?.response.communicationEvidence).toEqual(turn?.response.communicationEvidence)
+    expect(detail?.turns[0]?.response.boundaryRedirect).toBeNull()
 
     db.close()
   })

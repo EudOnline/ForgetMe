@@ -48,9 +48,14 @@ describe('memory workspace quality baseline', () => {
       expect(result?.guardrail.reasonCodes, qualityCase.label).toContain(qualityCase.reasonCode)
       if (qualityCase.reasonCode === 'persona_request') {
         expect(result?.boundaryRedirect, qualityCase.label).not.toBeNull()
+        expect(
+          result?.boundaryRedirect?.suggestedAsks.some((item) => item.label === 'Past expressions'),
+          qualityCase.label
+        ).toBe(true)
       } else {
         expect(result?.boundaryRedirect, qualityCase.label).toBeNull()
       }
+      expect(result?.communicationEvidence, qualityCase.label).toBeNull()
     }
 
     db.close()
@@ -103,8 +108,59 @@ describe('memory workspace quality baseline', () => {
       expect(result?.guardrail.reasonCodes, qualityCase.label).toContain(qualityCase.reasonCode)
       if (qualityCase.reasonCode === 'persona_request') {
         expect(result?.boundaryRedirect, qualityCase.label).not.toBeNull()
+        expect(
+          result?.boundaryRedirect?.suggestedAsks.some((item) => item.label === 'Past expressions'),
+          qualityCase.label
+        ).toBe(true)
       } else {
         expect(result?.boundaryRedirect, qualityCase.label).toBeNull()
+      }
+      expect(result?.communicationEvidence, qualityCase.label).toBeNull()
+    }
+
+    db.close()
+  })
+
+  it('locks quote-backed evidence behavior for grounded and insufficient-evidence quote asks', () => {
+    const db = seedMemoryWorkspaceScenario()
+
+    const cases = [
+      {
+        label: 'person quote question',
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' } as const,
+        question: '她过去是怎么表达记录和归档这类事的？给我看原话。',
+        decision: 'grounded_answer',
+        hasEvidence: true
+      },
+      {
+        label: 'global quote question',
+        scope: { kind: 'global' } as const,
+        question: '档案里过去大家怎么说记录和归档这类事的？给我看原话。',
+        decision: 'grounded_answer',
+        hasEvidence: true
+      },
+      {
+        label: 'quote coverage gap question',
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' } as const,
+        question: '她过去是怎么说跑步训练这类事的？给我看原话。',
+        decision: 'fallback_insufficient_evidence',
+        hasEvidence: false
+      }
+    ] as const
+
+    for (const qualityCase of cases) {
+      const result = askMemoryWorkspace(db, {
+        scope: qualityCase.scope,
+        question: qualityCase.question
+      })
+
+      expect(result, qualityCase.label).not.toBeNull()
+      expect(result?.guardrail.decision, qualityCase.label).toBe(qualityCase.decision)
+      expect(Boolean(result?.communicationEvidence), qualityCase.label).toBe(qualityCase.hasEvidence)
+      if (qualityCase.hasEvidence) {
+        expect(result?.communicationEvidence?.excerpts.length ?? 0, qualityCase.label).toBeGreaterThan(0)
+      } else {
+        expect(result?.answer.displayType, qualityCase.label).toBe('coverage_gap')
       }
     }
 

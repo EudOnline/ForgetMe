@@ -253,6 +253,82 @@ describe('MemoryWorkspacePage', () => {
     expect(onOpenEvidenceFile).toHaveBeenCalledWith('f-1')
   })
 
+  it('renders communication evidence for active quote-backed responses', async () => {
+    const onOpenEvidenceFile = vi.fn()
+
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceSession: vi.fn().mockResolvedValue(null),
+      listMemoryWorkspaceCompareSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted: vi.fn().mockResolvedValue({
+        turnId: 'turn-quote-1',
+        sessionId: 'session-quote-1',
+        ordinal: 1,
+        question: '她过去是怎么表达记录和归档这类事的？给我看原话。',
+        provider: null,
+        model: null,
+        contextHash: 'context-hash-quote-1',
+        promptHash: 'prompt-hash-quote-1',
+        createdAt: '2026-03-15T00:30:00.000Z',
+        response: {
+          scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+          question: '她过去是怎么表达记录和归档这类事的？给我看原话。',
+          expressionMode: 'grounded',
+          title: 'Memory Workspace · Alice Chen',
+          answer: {
+            summary: 'Direct chat excerpts in the approved archive address this ask.',
+            displayType: 'derived_summary',
+            citations: []
+          },
+          guardrail: {
+            decision: 'grounded_answer',
+            reasonCodes: ['multi_source_synthesis'],
+            citationCount: 2,
+            sourceKinds: ['file'],
+            fallbackApplied: false
+          },
+          contextCards: [],
+          boundaryRedirect: null,
+          communicationEvidence: {
+            title: 'Communication Evidence',
+            summary: 'Direct archive-backed excerpts related to this ask.',
+            excerpts: [
+              {
+                excerptId: 'ce-1',
+                fileId: 'f-1',
+                fileName: 'chat-1.json',
+                ordinal: 1,
+                speakerDisplayName: 'Alice Chen',
+                text: '我们还是把这些记录留在归档里，后面查起来更稳妥。'
+              }
+            ]
+          }
+        }
+      })
+    })
+
+    render(
+      <MemoryWorkspacePage
+        scope={{ kind: 'person', canonicalPersonId: 'cp-1' }}
+        onOpenEvidenceFile={onOpenEvidenceFile}
+      />
+    )
+
+    fireEvent.change(screen.getByLabelText('Ask memory workspace'), {
+      target: { value: '她过去是怎么表达记录和归档这类事的？给我看原话。' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+
+    const evidenceSection = await screen.findByRole('region', { name: 'Communication Evidence' })
+    expect(within(evidenceSection).getByText('Alice Chen')).toBeInTheDocument()
+    expect(within(evidenceSection).getByText('我们还是把这些记录留在归档里，后面查起来更稳妥。')).toBeInTheDocument()
+
+    fireEvent.click(within(evidenceSection).getByRole('button', { name: 'chat-1.json' }))
+    expect(onOpenEvidenceFile).toHaveBeenCalledWith('f-1')
+  })
+
   it('shows a scope-aware empty state before the first question', async () => {
     stubArchiveWindow({
       listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([]),

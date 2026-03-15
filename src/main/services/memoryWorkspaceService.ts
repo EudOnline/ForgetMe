@@ -3,6 +3,8 @@ import type {
   DossierDisplayType,
   MemoryWorkspaceAnswer,
   MemoryWorkspaceBoundaryRedirect,
+  MemoryWorkspaceCommunicationEvidence,
+  MemoryWorkspaceCommunicationExcerpt,
   MemoryWorkspaceCitation,
   MemoryWorkspaceContextCard,
   MemoryWorkspaceExpressionMode,
@@ -14,6 +16,12 @@ import type {
   PersonDossierEvidenceRef
 } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
+import {
+  isCommunicationEvidenceQuestion,
+  listGlobalCommunicationEvidence,
+  listGroupCommunicationEvidence,
+  listPersonCommunicationEvidence
+} from './communicationEvidenceService'
 import { getGroupPortrait, listGroupPortraits } from './groupPortraitService'
 import { listDecisionJournal } from './journalService'
 import { getPersonDossier } from './personDossierService'
@@ -245,9 +253,22 @@ function buildAdviceRedirectQuestion(scope: MemoryWorkspaceResponse['scope']) {
   return '基于档案，现在最安全的下一步是什么？'
 }
 
+function buildPastExpressionsRedirectQuestion(scope: MemoryWorkspaceResponse['scope']) {
+  if (scope.kind === 'global') {
+    return '档案里过去是怎么表达这类事的？给我看相关原话。'
+  }
+
+  if (scope.kind === 'group') {
+    return '这个群体过去是怎么表达这类事的？给我看相关原话。'
+  }
+
+  return '她过去是怎么表达这类事的？给我看相关原话。'
+}
+
 function buildPersonaRedirectSuggestedAsks(input: {
   scope: MemoryWorkspaceResponse['scope']
   contextCards: MemoryWorkspaceContextCard[]
+  hasCommunicationEvidence: boolean
 }): MemoryWorkspaceSuggestedAsk[] {
   const suggestions: MemoryWorkspaceSuggestedAsk[] = []
   const hasCard = (titles: string[]) => input.contextCards.some((card) => titles.includes(card.title))
@@ -258,6 +279,15 @@ function buildPersonaRedirectSuggestedAsks(input: {
       question: buildSummaryRedirectQuestion(input.scope),
       expressionMode: 'grounded',
       rationale: 'Summarize the strongest approved archive signal first.'
+    })
+  }
+
+  if (input.hasCommunicationEvidence) {
+    suggestions.push({
+      label: 'Past expressions',
+      question: buildPastExpressionsRedirectQuestion(input.scope),
+      expressionMode: 'grounded',
+      rationale: 'Review direct archive-backed excerpts instead of imitating voice.'
     })
   }
 
@@ -309,6 +339,7 @@ function buildPersonaRedirectSuggestedAsks(input: {
 function createPersonaBoundaryRedirect(input: {
   scope: MemoryWorkspaceResponse['scope']
   contextCards: MemoryWorkspaceContextCard[]
+  hasCommunicationEvidence: boolean
 }): MemoryWorkspaceBoundaryRedirect {
   return {
     kind: 'persona_request',
@@ -316,6 +347,79 @@ function createPersonaBoundaryRedirect(input: {
     message: 'This memory workspace cannot answer as if it were the archived person. Use grounded archive questions instead of imitation.',
     reasons: ['persona_request', 'delegation_not_allowed', 'style_evidence_unavailable'],
     suggestedAsks: buildPersonaRedirectSuggestedAsks(input)
+  }
+}
+
+function listCommunicationEvidenceForScope(
+  db: ArchiveDatabase,
+  scope: MemoryWorkspaceResponse['scope'],
+  question?: string
+) {
+  if (scope.kind === 'global') {
+    return listGlobalCommunicationEvidence(db, {
+      question,
+      limit: 3
+    })
+  }
+
+  if (scope.kind === 'group') {
+    return listGroupCommunicationEvidence(db, {
+      anchorPersonId: scope.anchorPersonId,
+      question,
+      limit: 3
+    })
+  }
+
+  return listPersonCommunicationEvidence(db, {
+    canonicalPersonId: scope.canonicalPersonId,
+    question,
+    limit: 3
+  })
+}
+
+function scopeHasCommunicationEvidence(
+  db: ArchiveDatabase,
+  scope: MemoryWorkspaceResponse['scope']
+) {
+  return listCommunicationEvidenceForScope(db, scope).length > 0
+}
+
+function createCommunicationEvidencePayload(
+  excerpts: MemoryWorkspaceCommunicationExcerpt[]
+): MemoryWorkspaceCommunicationEvidence {
+  return {
+    title: 'Communication Evidence',
+    summary: 'Direct archive-backed excerpts related to this ask.',
+    excerpts
+  }
+}
+
+function createCommunicationEvidenceAnswer(input: {
+  question: string
+  communicationEvidence: MemoryWorkspaceCommunicationEvidence
+}): MemoryWorkspaceAnswer {
+  return {
+    summary: `Direct chat excerpts in the approved archive address “${input.question}”. Review the supporting excerpts below.`,
+    displayType: 'derived_summary',
+    citations: dedupeCitations(
+      input.communicationEvidence.excerpts.map((excerpt, index) =>
+        createCitation(
+          'communication-evidence',
+          index,
+          'file',
+          excerpt.fileId,
+          excerpt.fileName
+        )
+      )
+    )
+  }
+}
+
+function createCommunicationCoverageAnswer(question: string): MemoryWorkspaceAnswer {
+  return {
+    summary: `Current approved chat evidence is insufficient to answer “${question}” with direct archive-backed excerpts.`,
+    displayType: 'coverage_gap',
+    citations: []
   }
 }
 
@@ -372,6 +476,7 @@ function buildGuardrail(input: {
 }
 
 function createResponse(input: {
+  db: ArchiveDatabase
   scope: MemoryWorkspaceResponse['scope']
   question: string
   expressionMode?: MemoryWorkspaceExpressionMode
@@ -381,16 +486,35 @@ function createResponse(input: {
   const expressionMode = input.expressionMode ?? 'grounded'
   const selectedCard = pickAnswerCard(input.question, input.contextCards)
   const isPersonaRequest = hasKeyword(input.question, PERSONA_REQUEST_KEYWORDS)
-  const answer = isPersonaRequest
-    ? createPersonaFallbackAnswer(input.contextCards, input.question)
-    : expressionMode === 'advice'
-      ? createAdviceAnswer({
-          selectedCard,
-          question: input.question
-        })
-    : selectedCard
-      ? createAnswerFromCard(selectedCard)
-      : createCoverageAnswer(input.question)
+  const isQuoteRequest = !isPersonaRequest && isCommunicationEvidenceQuestion(input.question)
+  const communicationExcerpts = isQuoteRequest
+    ? listCommunicationEvidenceForScope(input.db, input.scope, input.question)
+    : []
+  const communicationEvidence = communicationExcerpts.length > 0
+    ? createCommunicationEvidencePayload(communicationExcerpts)
+    : null
+  const hasCommunicationEvidence = communicationEvidence !== null || (isPersonaRequest && scopeHasCommunicationEvidence(input.db, input.scope))
+  let answer: MemoryWorkspaceAnswer
+
+  if (isPersonaRequest) {
+    answer = createPersonaFallbackAnswer(input.contextCards, input.question)
+  } else if (communicationEvidence) {
+    answer = createCommunicationEvidenceAnswer({
+      question: input.question,
+      communicationEvidence
+    })
+  } else if (isQuoteRequest) {
+    answer = createCommunicationCoverageAnswer(input.question)
+  } else if (expressionMode === 'advice') {
+    answer = createAdviceAnswer({
+      selectedCard,
+      question: input.question
+    })
+  } else if (selectedCard) {
+    answer = createAnswerFromCard(selectedCard)
+  } else {
+    answer = createCoverageAnswer(input.question)
+  }
 
   return {
     scope: input.scope,
@@ -407,9 +531,11 @@ function createResponse(input: {
     boundaryRedirect: isPersonaRequest
       ? createPersonaBoundaryRedirect({
           scope: input.scope,
-          contextCards: input.contextCards
+          contextCards: input.contextCards,
+          hasCommunicationEvidence
         })
-      : null
+      : null,
+    communicationEvidence
   } satisfies MemoryWorkspaceResponse
 }
 
@@ -543,6 +669,7 @@ export function buildPersonContextPack(
   void answerCard
 
   return createResponse({
+    db,
     scope: { kind: 'person', canonicalPersonId },
     question,
     expressionMode,
@@ -656,6 +783,7 @@ export function buildGroupContextPack(
   ].filter((card): card is MemoryWorkspaceContextCard => Boolean(card))
 
   return createResponse({
+    db,
     scope: { kind: 'group', anchorPersonId },
     question,
     expressionMode,
@@ -750,6 +878,7 @@ export function buildGlobalContextPack(
   ]
 
   return createResponse({
+    db,
     scope: { kind: 'global' },
     question,
     expressionMode,

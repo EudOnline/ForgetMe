@@ -482,6 +482,21 @@ export type MemoryWorkspaceBoundaryRedirect = {
   suggestedAsks: MemoryWorkspaceSuggestedAsk[]
 }
 
+export type MemoryWorkspaceCommunicationExcerpt = {
+  excerptId: string
+  fileId: string
+  fileName: string
+  ordinal: number
+  speakerDisplayName: string | null
+  text: string
+}
+
+export type MemoryWorkspaceCommunicationEvidence = {
+  title: string
+  summary: string
+  excerpts: MemoryWorkspaceCommunicationExcerpt[]
+}
+
 export type MemoryWorkspaceResponse = {
   scope: MemoryWorkspaceScope
   question: string
@@ -491,6 +506,7 @@ export type MemoryWorkspaceResponse = {
   contextCards: MemoryWorkspaceContextCard[]
   guardrail: MemoryWorkspaceGuardrail
   boundaryRedirect: MemoryWorkspaceBoundaryRedirect | null
+  communicationEvidence: MemoryWorkspaceCommunicationEvidence | null
 }
 
 export type AskMemoryWorkspaceInput = {

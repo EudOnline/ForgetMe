@@ -11,6 +11,7 @@ import type {
   MemoryWorkspaceCitation,
   MemoryWorkspaceScope,
   MemoryWorkspaceSessionSummary,
+  MemoryWorkspaceSuggestedAsk,
   MemoryWorkspaceTurnRecord,
   RunMemoryWorkspaceCompareJudgeInput
 } from '../../shared/archiveContracts'
@@ -657,8 +658,12 @@ export function MemoryWorkspacePage(props: {
     await handleSelectCompareSession(row.compareSessionId)
   }
 
-  const handleAsk = async () => {
-    const trimmedQuestion = question.trim()
+  const submitAsk = async (input: {
+    question: string
+    expressionMode: MemoryWorkspaceExpressionMode
+    resetDraftQuestion?: boolean
+  }) => {
+    const trimmedQuestion = input.question.trim()
     if (!trimmedQuestion) {
       return
     }
@@ -671,7 +676,7 @@ export function MemoryWorkspacePage(props: {
       const nextTurn = await archiveApi.askMemoryWorkspacePersisted({
         scope: props.scope,
         question: trimmedQuestion,
-        expressionMode,
+        expressionMode: input.expressionMode,
         ...(selectedSessionId ? { sessionId: selectedSessionId } : {})
       })
 
@@ -697,7 +702,9 @@ export function MemoryWorkspacePage(props: {
 
         return [nextTurn]
       })
-      setQuestion(initialQuestionForScope(props.scope))
+      if (input.resetDraftQuestion ?? true) {
+        setQuestion(initialQuestionForScope(props.scope))
+      }
 
       await refreshSessions({
         scopeRequestId,
@@ -709,6 +716,22 @@ export function MemoryWorkspacePage(props: {
         setIsLoading(false)
       }
     }
+  }
+
+  const handleAsk = async () => {
+    await submitAsk({
+      question,
+      expressionMode,
+      resetDraftQuestion: true
+    })
+  }
+
+  const handleRunSuggestedAsk = async (suggestion: MemoryWorkspaceSuggestedAsk) => {
+    await submitAsk({
+      question: suggestion.question,
+      expressionMode: suggestion.expressionMode,
+      resetDraftQuestion: false
+    })
   }
 
   const handleRunCompare = async () => {
@@ -994,6 +1017,7 @@ export function MemoryWorkspacePage(props: {
         onOpenGroup={props.onOpenGroup}
         onOpenEvidenceFile={props.onOpenEvidenceFile}
         onOpenReviewHistory={props.onOpenReviewHistory}
+        onRunSuggestedAsk={handleRunSuggestedAsk}
       />
     </section>
   )

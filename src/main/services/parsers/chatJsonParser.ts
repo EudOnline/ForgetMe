@@ -13,7 +13,14 @@ export async function parseChatJson(filePath: string) {
     summary: {
       messageCount: messages.length,
       participants,
-      previewText: messages.slice(0, 3).map((message) => message.text ?? '').join('\n')
+      previewText: messages.slice(0, 3).map((message) => message.text ?? '').join('\n'),
+      communicationExcerpts: messages
+        .filter((message) => typeof message.text === 'string' && message.text.trim().length > 0)
+        .map((message, index) => ({
+          ordinal: index + 1,
+          speakerDisplayName: message.sender ?? message.from ?? null,
+          text: message.text!.trim()
+        }))
     }
   }
 }
