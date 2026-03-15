@@ -18,6 +18,7 @@ describe('database migrations', () => {
       'import_batches',
       'vault_files',
       'file_derivatives',
+      'communication_evidence',
       'people',
       'relations',
       'audit_logs'

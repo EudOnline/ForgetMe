@@ -3,6 +3,7 @@ import type {
   ArchiveApi,
   AskMemoryWorkspacePersistedInput,
   MemoryWorkspaceBoundaryRedirect,
+  MemoryWorkspaceCommunicationEvidence,
   MemoryWorkspaceCompareSessionDetail,
   MemoryWorkspaceCompareSessionSummary,
   MemoryWorkspaceResponse,
@@ -32,6 +33,20 @@ describe('phase-eight conversation persistence contracts', () => {
           question: '先基于档案总结她当前最明确的状态。',
           expressionMode: 'grounded',
           rationale: 'Summarize the strongest approved archive signal first.'
+        }
+      ]
+    }
+    const communicationEvidence: MemoryWorkspaceCommunicationEvidence = {
+      title: 'Communication Evidence',
+      summary: 'Direct archive-backed excerpts related to this ask.',
+      excerpts: [
+        {
+          excerptId: 'ce-1',
+          fileId: 'f-1',
+          fileName: 'chat-1.json',
+          ordinal: 1,
+          speakerDisplayName: 'Alice Chen',
+          text: 'Let us keep personal notes for this archive.'
         }
       ]
     }
@@ -69,7 +84,8 @@ describe('phase-eight conversation persistence contracts', () => {
           sourceKinds: [],
           fallbackApplied: true
         },
-        boundaryRedirect
+        boundaryRedirect,
+        communicationEvidence
       } satisfies MemoryWorkspaceResponse,
       provider: null,
       model: null,
@@ -88,6 +104,7 @@ describe('phase-eight conversation persistence contracts', () => {
     expect(detail.turns[0]?.response.title).toBe('Memory Workspace · Alice Chen')
     expect(detail.turns[0]?.response.expressionMode).toBe('advice')
     expect(detail.turns[0]?.response.boundaryRedirect?.kind).toBe('persona_request')
+    expect(detail.turns[0]?.response.communicationEvidence?.excerpts[0]?.speakerDisplayName).toBe('Alice Chen')
 
     expectTypeOf<ArchiveApi['listMemoryWorkspaceSessions']>().toEqualTypeOf<
       (input?: { scope?: MemoryWorkspaceScope }) => Promise<MemoryWorkspaceSessionSummary[]>

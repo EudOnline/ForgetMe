@@ -409,7 +409,8 @@ function createResponse(input: {
           scope: input.scope,
           contextCards: input.contextCards
         })
-      : null
+      : null,
+    communicationEvidence: null
   } satisfies MemoryWorkspaceResponse
 }
 

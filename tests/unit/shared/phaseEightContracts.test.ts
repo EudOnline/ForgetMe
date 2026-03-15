@@ -5,6 +5,8 @@ import type {
   MemoryWorkspaceAnswer,
   MemoryWorkspaceBoundaryRedirect,
   MemoryWorkspaceBoundaryRedirectReason,
+  MemoryWorkspaceCommunicationEvidence,
+  MemoryWorkspaceCommunicationExcerpt,
   MemoryWorkspaceCompareMatrixDetail,
   MemoryWorkspaceCompareMatrixRowInput,
   MemoryWorkspaceCompareMatrixRowRecord,
@@ -82,6 +84,19 @@ describe('phase-eight memory workspace contracts', () => {
       reasons: [redirectReason],
       suggestedAsks: [suggestedAsk]
     }
+    const communicationExcerpt: MemoryWorkspaceCommunicationExcerpt = {
+      excerptId: 'ce-1',
+      fileId: 'f-1',
+      fileName: 'chat-1.json',
+      ordinal: 1,
+      speakerDisplayName: 'Alice Chen',
+      text: 'Let us keep personal notes for this archive.'
+    }
+    const communicationEvidence: MemoryWorkspaceCommunicationEvidence = {
+      title: 'Communication Evidence',
+      summary: 'Direct archive-backed excerpts related to this ask.',
+      excerpts: [communicationExcerpt]
+    }
 
     const contextCard: MemoryWorkspaceContextCard = {
       cardId: 'card-1',
@@ -99,7 +114,8 @@ describe('phase-eight memory workspace contracts', () => {
       answer,
       contextCards: [contextCard],
       guardrail,
-      boundaryRedirect
+      boundaryRedirect,
+      communicationEvidence
     }
 
     expect(globalScope.kind).toBe('global')
@@ -110,12 +126,14 @@ describe('phase-eight memory workspace contracts', () => {
     expect(response.guardrail.decision).toBe('fallback_to_conflict')
     expect(response.expressionMode).toBe('grounded')
     expect(response.boundaryRedirect?.suggestedAsks[0]?.expressionMode).toBe('grounded')
+    expect(response.communicationEvidence?.excerpts[0]?.speakerDisplayName).toBe('Alice Chen')
 
     expectTypeOf(response.scope).toEqualTypeOf<MemoryWorkspaceScope>()
     expectTypeOf(response.answer.citations).toEqualTypeOf<MemoryWorkspaceCitation[]>()
     expectTypeOf(response.contextCards).toEqualTypeOf<MemoryWorkspaceContextCard[]>()
     expectTypeOf(response.guardrail).toEqualTypeOf<MemoryWorkspaceGuardrail>()
     expectTypeOf(response.boundaryRedirect).toEqualTypeOf<MemoryWorkspaceBoundaryRedirect | null>()
+    expectTypeOf(response.communicationEvidence).toEqualTypeOf<MemoryWorkspaceCommunicationEvidence | null>()
     expectTypeOf<MemoryWorkspaceExpressionMode>().toEqualTypeOf<'grounded' | 'advice'>()
     expectTypeOf<ArchiveApi['askMemoryWorkspace']>().toEqualTypeOf<(input: AskMemoryWorkspaceInput) => Promise<MemoryWorkspaceResponse | null>>()
   })
@@ -175,7 +193,8 @@ describe('phase-eight memory workspace contracts', () => {
           sourceKinds: ['person', 'file'],
           fallbackApplied: false
         },
-        boundaryRedirect: null
+        boundaryRedirect: null,
+        communicationEvidence: null
       },
       evaluation: {
         totalScore: 18,
