@@ -112,8 +112,8 @@ describe('archiveApi dossier methods', () => {
     const askMemoryWorkspacePersisted = vi.fn().mockResolvedValue({
       turnId: 'turn-1',
       sessionId: 'session-1',
-      ordinal: 1,
-      question: '如果她本人会怎么说？',
+      ordinal: 2,
+      question: '她过去是怎么表达记录和归档这类事的？给我看原话。',
       provider: null,
       model: null,
       contextHash: 'context-1',
@@ -121,33 +121,34 @@ describe('archiveApi dossier methods', () => {
       createdAt: '2026-03-15T00:00:00.000Z',
       response: {
         scope: { kind: 'person', canonicalPersonId: 'cp-1' },
-        question: '如果她本人会怎么说？',
+        question: '她过去是怎么表达记录和归档这类事的？给我看原话。',
         expressionMode: 'grounded',
         title: 'Memory Workspace · Alice Chen',
         answer: {
-          summary: 'This memory workspace cannot answer as if it were the archived person.',
-          displayType: 'coverage_gap',
+          summary: 'Direct chat excerpts in the approved archive address the ask.',
+          displayType: 'derived_summary',
           citations: []
         },
         contextCards: [],
         guardrail: {
-          decision: 'fallback_unsupported_request',
-          reasonCodes: ['persona_request'],
-          citationCount: 0,
-          sourceKinds: [],
-          fallbackApplied: true
+          decision: 'grounded_answer',
+          reasonCodes: ['multi_source_synthesis'],
+          citationCount: 2,
+          sourceKinds: ['file'],
+          fallbackApplied: false
         },
-        boundaryRedirect: {
-          kind: 'persona_request',
-          title: 'Persona request blocked',
-          message: 'Use grounded archive questions instead of imitation.',
-          reasons: ['persona_request', 'delegation_not_allowed'],
-          suggestedAsks: [
+        boundaryRedirect: null,
+        communicationEvidence: {
+          title: 'Communication Evidence',
+          summary: 'Direct archive-backed excerpts related to this ask.',
+          excerpts: [
             {
-              label: 'Grounded summary',
-              question: '先基于档案总结她当前最明确的状态。',
-              expressionMode: 'grounded',
-              rationale: 'Summarize the strongest approved archive signal first.'
+              excerptId: 'ce-1',
+              fileId: 'f-1',
+              fileName: 'chat-1.json',
+              ordinal: 1,
+              speakerDisplayName: 'Alice Chen',
+              text: '我们还是把这些记录留在归档里，后面查起来更稳妥。'
             }
           ]
         }
@@ -163,10 +164,11 @@ describe('archiveApi dossier methods', () => {
     const archiveApi = getArchiveApi()
     const turn = await archiveApi.askMemoryWorkspacePersisted({
       scope: { kind: 'person', canonicalPersonId: 'cp-1' },
-      question: '如果她本人会怎么说？'
+      question: '她过去是怎么表达记录和归档这类事的？给我看原话。'
     })
 
-    expect(turn?.response.boundaryRedirect?.kind).toBe('persona_request')
-    expect(turn?.response.boundaryRedirect?.suggestedAsks[0]?.label).toBe('Grounded summary')
+    expect(turn?.response.communicationEvidence?.title).toBe('Communication Evidence')
+    expect(turn?.response.communicationEvidence?.excerpts[0]?.fileName).toBe('chat-1.json')
+    expect(turn?.response.boundaryRedirect).toBeNull()
   })
 })

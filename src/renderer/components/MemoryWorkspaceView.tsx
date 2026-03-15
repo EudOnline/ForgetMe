@@ -7,6 +7,7 @@ import type {
   MemoryWorkspaceResponse,
   MemoryWorkspaceScope,
   MemoryWorkspaceSessionSummary,
+  MemoryWorkspaceSuggestedAsk,
   MemoryWorkspaceTurnRecord
 } from '../../shared/archiveContracts'
 
@@ -119,6 +120,7 @@ function renderResponse(
     onOpenGroup?: (anchorPersonId: string) => void
     onOpenEvidenceFile?: (fileId: string) => void
     onOpenReviewHistory?: (citation: MemoryWorkspaceCitation) => void
+    onRunSuggestedAsk?: (suggestion: MemoryWorkspaceSuggestedAsk) => void
   }
 ) {
   return (
@@ -168,7 +170,13 @@ function renderResponse(
             <ul>
               {response.boundaryRedirect.suggestedAsks.map((suggestion) => (
                 <li key={`${suggestion.label}:${suggestion.expressionMode}:${suggestion.question}`}>
-                  <strong>{suggestion.label}</strong>
+                  {handlers.onRunSuggestedAsk ? (
+                    <button type="button" onClick={() => handlers.onRunSuggestedAsk?.(suggestion)}>
+                      {suggestion.label}
+                    </button>
+                  ) : (
+                    <strong>{suggestion.label}</strong>
+                  )}
                   <p>Mode: {suggestion.expressionMode}</p>
                   <p>{suggestion.question}</p>
                   <p>{suggestion.rationale}</p>
@@ -176,6 +184,33 @@ function renderResponse(
               ))}
             </ul>
           ) : null}
+        </section>
+      ) : null}
+
+      {response.communicationEvidence ? (
+        <section aria-label="Communication Evidence">
+          <h3>{response.communicationEvidence.title}</h3>
+          <p>{response.communicationEvidence.summary}</p>
+          <ul>
+            {response.communicationEvidence.excerpts.map((excerpt) => (
+              <li key={excerpt.excerptId}>
+                <p>{excerpt.speakerDisplayName ?? 'Unknown speaker'}</p>
+                <p>{excerpt.text}</p>
+                <p>
+                  Source:{' '}
+                  {handlers.onOpenEvidenceFile ? (
+                    <button type="button" onClick={() => handlers.onOpenEvidenceFile?.(excerpt.fileId)}>
+                      {excerpt.fileName}
+                    </button>
+                  ) : (
+                    <span>{excerpt.fileName}</span>
+                  )}
+                  {' '}
+                  · Ordinal: {excerpt.ordinal}
+                </p>
+              </li>
+            ))}
+          </ul>
         </section>
       ) : null}
 
@@ -294,6 +329,7 @@ export function MemoryWorkspaceView(props: {
   onOpenGroup?: (anchorPersonId: string) => void
   onOpenEvidenceFile?: (fileId: string) => void
   onOpenReviewHistory?: (citation: MemoryWorkspaceCitation) => void
+  onRunSuggestedAsk?: (suggestion: MemoryWorkspaceSuggestedAsk) => void
 }) {
   const activeResponse = props.turns[props.turns.length - 1]?.response ?? null
   const promptMessage =
