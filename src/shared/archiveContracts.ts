@@ -443,6 +443,7 @@ export type MemoryWorkspaceGuardrailDecision =
   | 'fallback_to_conflict'
   | 'fallback_insufficient_evidence'
   | 'fallback_unsupported_request'
+  | 'sandbox_review_required'
 
 export type MemoryWorkspaceGuardrailReasonCode =
   | 'open_conflict_present'
@@ -450,6 +451,8 @@ export type MemoryWorkspaceGuardrailReasonCode =
   | 'insufficient_citations'
   | 'multi_source_synthesis'
   | 'persona_request'
+  | 'persona_draft_sandbox'
+  | 'quote_trace_required'
   | 'review_pressure_present'
 
 export type MemoryWorkspaceGuardrail = {
@@ -461,6 +464,7 @@ export type MemoryWorkspaceGuardrail = {
 }
 
 export type MemoryWorkspaceExpressionMode = 'grounded' | 'advice'
+export type MemoryWorkspaceWorkflowKind = 'default' | 'persona_draft_sandbox'
 
 export type MemoryWorkspaceBoundaryRedirectReason =
   | 'persona_request'
@@ -474,12 +478,25 @@ export type MemoryWorkspaceSuggestedAsk = {
   rationale: string
 }
 
+export type MemoryWorkspaceSuggestedAction =
+  | ({
+      kind: 'ask'
+    } & MemoryWorkspaceSuggestedAsk)
+  | {
+      kind: 'open_persona_draft_sandbox'
+      workflowKind: 'persona_draft_sandbox'
+      label: string
+      question: string
+      expressionMode: MemoryWorkspaceExpressionMode
+      rationale: string
+    }
+
 export type MemoryWorkspaceBoundaryRedirect = {
   kind: 'persona_request'
   title: string
   message: string
   reasons: MemoryWorkspaceBoundaryRedirectReason[]
-  suggestedAsks: MemoryWorkspaceSuggestedAsk[]
+  suggestedActions: MemoryWorkspaceSuggestedAction[]
 }
 
 export type MemoryWorkspaceCommunicationExcerpt = {
@@ -497,22 +514,40 @@ export type MemoryWorkspaceCommunicationEvidence = {
   excerpts: MemoryWorkspaceCommunicationExcerpt[]
 }
 
+export type MemoryWorkspacePersonaDraftTrace = {
+  traceId: string
+  excerptIds: string[]
+  explanation: string
+}
+
+export type MemoryWorkspacePersonaDraft = {
+  title: string
+  disclaimer: string
+  draft: string
+  reviewState: 'review_required'
+  supportingExcerpts: string[]
+  trace: MemoryWorkspacePersonaDraftTrace[]
+}
+
 export type MemoryWorkspaceResponse = {
   scope: MemoryWorkspaceScope
   question: string
   expressionMode: MemoryWorkspaceExpressionMode
+  workflowKind: MemoryWorkspaceWorkflowKind
   title: string
   answer: MemoryWorkspaceAnswer
   contextCards: MemoryWorkspaceContextCard[]
   guardrail: MemoryWorkspaceGuardrail
   boundaryRedirect: MemoryWorkspaceBoundaryRedirect | null
   communicationEvidence: MemoryWorkspaceCommunicationEvidence | null
+  personaDraft: MemoryWorkspacePersonaDraft | null
 }
 
 export type AskMemoryWorkspaceInput = {
   scope: MemoryWorkspaceScope
   question: string
   expressionMode?: MemoryWorkspaceExpressionMode
+  workflowKind?: MemoryWorkspaceWorkflowKind
 }
 
 export type MemoryWorkspaceCompareTarget =
@@ -539,6 +574,7 @@ export type RunMemoryWorkspaceCompareInput = {
   scope: MemoryWorkspaceScope
   question: string
   expressionMode?: MemoryWorkspaceExpressionMode
+  workflowKind?: MemoryWorkspaceWorkflowKind
   judge?: RunMemoryWorkspaceCompareJudgeInput
   targets?: MemoryWorkspaceCompareTarget[]
 }
@@ -668,6 +704,7 @@ export type MemoryWorkspaceCompareSessionSummary = {
   title: string
   question: string
   expressionMode: MemoryWorkspaceExpressionMode
+  workflowKind: MemoryWorkspaceWorkflowKind
   runCount: number
   metadata: MemoryWorkspaceCompareSessionMetadata
   recommendation: MemoryWorkspaceCompareRecommendation | null

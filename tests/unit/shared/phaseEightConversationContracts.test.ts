@@ -6,6 +6,7 @@ import type {
   MemoryWorkspaceCommunicationEvidence,
   MemoryWorkspaceCompareSessionDetail,
   MemoryWorkspaceCompareSessionSummary,
+  MemoryWorkspacePersonaDraft,
   MemoryWorkspaceResponse,
   MemoryWorkspaceScope,
   MemoryWorkspaceSessionDetail,
@@ -27,12 +28,14 @@ describe('phase-eight conversation persistence contracts', () => {
       title: 'Persona request blocked',
       message: 'Use grounded archive questions instead of imitation.',
       reasons: ['persona_request'],
-      suggestedAsks: [
+      suggestedActions: [
         {
-          label: 'Grounded summary',
-          question: '先基于档案总结她当前最明确的状态。',
+          kind: 'open_persona_draft_sandbox',
+          workflowKind: 'persona_draft_sandbox',
+          label: 'Reviewed draft sandbox',
+          question: '如果她来写这段话，会怎么写？先给我一个可审阅草稿。',
           expressionMode: 'grounded',
-          rationale: 'Summarize the strongest approved archive signal first.'
+          rationale: 'Generate a clearly labeled simulation draft backed by archive quotes.'
         }
       ]
     }
@@ -47,6 +50,20 @@ describe('phase-eight conversation persistence contracts', () => {
           ordinal: 1,
           speakerDisplayName: 'Alice Chen',
           text: 'Let us keep personal notes for this archive.'
+        }
+      ]
+    }
+    const personaDraft: MemoryWorkspacePersonaDraft = {
+      title: 'Reviewed draft sandbox',
+      disclaimer: 'Simulation draft based on archived expressions. Not a statement from the person.',
+      draft: '也许我们先把这些记录整理好，再继续往下推进。',
+      reviewState: 'review_required',
+      supportingExcerpts: ['ce-1'],
+      trace: [
+        {
+          traceId: 'trace-1',
+          excerptIds: ['ce-1'],
+          explanation: 'Opening sentence is grounded in the archive quote about organizing the records first.'
         }
       ]
     }
@@ -70,6 +87,7 @@ describe('phase-eight conversation persistence contracts', () => {
         scope,
         question: '她现在有哪些还没解决的冲突？',
         expressionMode: 'advice',
+        workflowKind: 'persona_draft_sandbox',
         title: 'Memory Workspace · Alice Chen',
         answer: {
           summary: 'Open conflicts remain for school_name.',
@@ -85,7 +103,8 @@ describe('phase-eight conversation persistence contracts', () => {
           fallbackApplied: true
         },
         boundaryRedirect,
-        communicationEvidence
+        communicationEvidence,
+        personaDraft
       } satisfies MemoryWorkspaceResponse,
       provider: null,
       model: null,
@@ -103,8 +122,10 @@ describe('phase-eight conversation persistence contracts', () => {
     expect(turn.ordinal).toBe(1)
     expect(detail.turns[0]?.response.title).toBe('Memory Workspace · Alice Chen')
     expect(detail.turns[0]?.response.expressionMode).toBe('advice')
+    expect(detail.turns[0]?.response.workflowKind).toBe('persona_draft_sandbox')
     expect(detail.turns[0]?.response.boundaryRedirect?.kind).toBe('persona_request')
     expect(detail.turns[0]?.response.communicationEvidence?.excerpts[0]?.speakerDisplayName).toBe('Alice Chen')
+    expect(detail.turns[0]?.response.personaDraft?.reviewState).toBe('review_required')
 
     expectTypeOf<ArchiveApi['listMemoryWorkspaceSessions']>().toEqualTypeOf<
       (input?: { scope?: MemoryWorkspaceScope }) => Promise<MemoryWorkspaceSessionSummary[]>
@@ -122,6 +143,7 @@ describe('phase-eight conversation persistence contracts', () => {
       title: 'Memory Workspace Compare · Alice Chen',
       question: '她有哪些已保存的资料？',
       expressionMode: 'advice',
+      workflowKind: 'persona_draft_sandbox',
       runCount: 3,
       metadata: {
         targetLabels: ['Local baseline'],
@@ -143,6 +165,7 @@ describe('phase-eight conversation persistence contracts', () => {
 
     expect(compareDetail.compareSessionId).toBe('compare-session-1')
     expect(compareDetail.expressionMode).toBe('advice')
+    expect(compareDetail.workflowKind).toBe('persona_draft_sandbox')
 
     expectTypeOf<ArchiveApi['listMemoryWorkspaceCompareSessions']>().toEqualTypeOf<
       (input?: { scope?: MemoryWorkspaceScope }) => Promise<MemoryWorkspaceCompareSessionSummary[]>
@@ -172,12 +195,14 @@ describe('phase-eight conversation persistence contracts', () => {
       scope: { kind: 'group', anchorPersonId: 'cp-1' },
       question: '这个群体最近一起发生过什么？',
       sessionId: 'session-1',
-      expressionMode: 'advice'
+      expressionMode: 'advice',
+      workflowKind: 'persona_draft_sandbox'
     })).toEqual({
       scope: { kind: 'group', anchorPersonId: 'cp-1' },
       question: '这个群体最近一起发生过什么？',
       sessionId: 'session-1',
-      expressionMode: 'advice'
+      expressionMode: 'advice',
+      workflowKind: 'persona_draft_sandbox'
     })
   })
 })

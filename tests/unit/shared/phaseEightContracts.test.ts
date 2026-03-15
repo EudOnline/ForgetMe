@@ -25,9 +25,11 @@ import type {
   MemoryWorkspaceGuardrail,
   MemoryWorkspaceGuardrailDecision,
   MemoryWorkspaceGuardrailReasonCode,
+  MemoryWorkspacePersonaDraft,
   MemoryWorkspaceResponse,
   MemoryWorkspaceScope,
-  MemoryWorkspaceSuggestedAsk,
+  MemoryWorkspaceSuggestedAction,
+  MemoryWorkspaceWorkflowKind,
   RunMemoryWorkspaceCompareInput,
   RunMemoryWorkspaceCompareMatrixInput
 } from '../../../src/shared/archiveContracts'
@@ -60,29 +62,32 @@ describe('phase-eight memory workspace contracts', () => {
       citations: [citation]
     }
 
-    const decision: MemoryWorkspaceGuardrailDecision = 'fallback_to_conflict'
-    const reasonCode: MemoryWorkspaceGuardrailReasonCode = 'open_conflict_present'
+    const decision: MemoryWorkspaceGuardrailDecision = 'sandbox_review_required'
+    const reasonCode: MemoryWorkspaceGuardrailReasonCode = 'persona_draft_sandbox'
+    const workflowKind: MemoryWorkspaceWorkflowKind = 'persona_draft_sandbox'
     const guardrail: MemoryWorkspaceGuardrail = {
       decision,
-      reasonCodes: [reasonCode],
-      citationCount: 1,
-      sourceKinds: ['person'],
-      fallbackApplied: true
+      reasonCodes: [reasonCode, 'quote_trace_required'],
+      citationCount: 2,
+      sourceKinds: ['person', 'file'],
+      fallbackApplied: false
     }
 
     const redirectReason: MemoryWorkspaceBoundaryRedirectReason = 'persona_request'
-    const suggestedAsk: MemoryWorkspaceSuggestedAsk = {
-      label: 'Grounded summary',
-      question: '先基于档案总结她当前最明确的状态。',
+    const suggestedAction: MemoryWorkspaceSuggestedAction = {
+      kind: 'open_persona_draft_sandbox',
+      workflowKind: 'persona_draft_sandbox',
+      label: 'Reviewed draft sandbox',
+      question: '如果她来写这段话，会怎么写？先给我一个可审阅草稿。',
       expressionMode: 'grounded',
-      rationale: 'Summarize the strongest approved archive signal first.'
+      rationale: 'Generate a clearly labeled simulation draft backed by archive quotes.'
     }
     const boundaryRedirect: MemoryWorkspaceBoundaryRedirect = {
       kind: 'persona_request',
       title: 'Persona request blocked',
       message: 'Use grounded archive questions instead of imitation.',
       reasons: [redirectReason],
-      suggestedAsks: [suggestedAsk]
+      suggestedActions: [suggestedAction]
     }
     const communicationExcerpt: MemoryWorkspaceCommunicationExcerpt = {
       excerptId: 'ce-1',
@@ -97,6 +102,20 @@ describe('phase-eight memory workspace contracts', () => {
       summary: 'Direct archive-backed excerpts related to this ask.',
       excerpts: [communicationExcerpt]
     }
+    const personaDraft: MemoryWorkspacePersonaDraft = {
+      title: 'Reviewed draft sandbox',
+      disclaimer: 'Simulation draft based on archived expressions. Not a statement from the person.',
+      draft: '也许我们先把这些记录整理好，再继续往下推进。',
+      reviewState: 'review_required',
+      supportingExcerpts: ['ce-1'],
+      trace: [
+        {
+          traceId: 'trace-1',
+          excerptIds: ['ce-1'],
+          explanation: 'Opening sentence is grounded in the archive quote about organizing the records first.'
+        }
+      ]
+    }
 
     const contextCard: MemoryWorkspaceContextCard = {
       cardId: 'card-1',
@@ -110,12 +129,14 @@ describe('phase-eight memory workspace contracts', () => {
       scope: personScope,
       question: '她现在有哪些还没解决的冲突？',
       expressionMode: 'grounded',
+      workflowKind,
       title: 'Memory Workspace · Alice Chen',
       answer,
       contextCards: [contextCard],
       guardrail,
       boundaryRedirect,
-      communicationEvidence
+      communicationEvidence,
+      personaDraft
     }
 
     expect(globalScope.kind).toBe('global')
@@ -123,10 +144,12 @@ describe('phase-eight memory workspace contracts', () => {
     expect(groupScope).toMatchObject({ kind: 'group', anchorPersonId: 'cp-1' })
     expect(answer.displayType).toBe('open_conflict')
     expect(response.contextCards[0]?.title).toBe('Conflicts & Gaps')
-    expect(response.guardrail.decision).toBe('fallback_to_conflict')
+    expect(response.guardrail.decision).toBe('sandbox_review_required')
     expect(response.expressionMode).toBe('grounded')
-    expect(response.boundaryRedirect?.suggestedAsks[0]?.expressionMode).toBe('grounded')
+    expect(response.workflowKind).toBe('persona_draft_sandbox')
+    expect(response.boundaryRedirect?.suggestedActions[0]?.kind).toBe('open_persona_draft_sandbox')
     expect(response.communicationEvidence?.excerpts[0]?.speakerDisplayName).toBe('Alice Chen')
+    expect(response.personaDraft?.reviewState).toBe('review_required')
 
     expectTypeOf(response.scope).toEqualTypeOf<MemoryWorkspaceScope>()
     expectTypeOf(response.answer.citations).toEqualTypeOf<MemoryWorkspaceCitation[]>()
@@ -134,6 +157,7 @@ describe('phase-eight memory workspace contracts', () => {
     expectTypeOf(response.guardrail).toEqualTypeOf<MemoryWorkspaceGuardrail>()
     expectTypeOf(response.boundaryRedirect).toEqualTypeOf<MemoryWorkspaceBoundaryRedirect | null>()
     expectTypeOf(response.communicationEvidence).toEqualTypeOf<MemoryWorkspaceCommunicationEvidence | null>()
+    expectTypeOf(response.personaDraft).toEqualTypeOf<MemoryWorkspacePersonaDraft | null>()
     expectTypeOf<MemoryWorkspaceExpressionMode>().toEqualTypeOf<'grounded' | 'advice'>()
     expectTypeOf<ArchiveApi['askMemoryWorkspace']>().toEqualTypeOf<(input: AskMemoryWorkspaceInput) => Promise<MemoryWorkspaceResponse | null>>()
   })
@@ -233,6 +257,7 @@ describe('phase-eight memory workspace contracts', () => {
       title: 'Memory Workspace Compare · Alice Chen',
       question: input.question,
       expressionMode: 'advice',
+      workflowKind: 'persona_draft_sandbox',
       runCount: 2,
       metadata: {
         targetLabels: ['Local baseline', 'SiliconFlow / Qwen2.5-72B-Instruct'],
@@ -268,6 +293,7 @@ describe('phase-eight memory workspace contracts', () => {
     expect(detail.recommendation?.source).toBe('deterministic')
     expect(input.judge?.enabled).toBe(true)
     expect(detail.expressionMode).toBe('advice')
+    expect(detail.workflowKind).toBe('persona_draft_sandbox')
     expect(detail.runs[0]?.response?.expressionMode).toBe('advice')
 
     expectTypeOf<ArchiveApi['runMemoryWorkspaceCompare']>().toEqualTypeOf<
@@ -394,11 +420,13 @@ describe('phase-eight memory workspace contracts', () => {
     expect(askMemoryWorkspaceInputSchema.parse({
       scope: { kind: 'global' },
       question: '现在最值得关注什么？',
-      expressionMode: 'advice'
+      expressionMode: 'advice',
+      workflowKind: 'persona_draft_sandbox'
     })).toEqual({
       scope: { kind: 'global' },
       question: '现在最值得关注什么？',
-      expressionMode: 'advice'
+      expressionMode: 'advice',
+      workflowKind: 'persona_draft_sandbox'
     })
 
     expect(memoryWorkspaceCompareTargetSchema.parse({
@@ -455,6 +483,7 @@ describe('phase-eight memory workspace contracts', () => {
       scope: { kind: 'global' },
       question: '现在最值得关注什么？',
       expressionMode: 'grounded',
+      workflowKind: 'persona_draft_sandbox',
       judge: {
         enabled: true,
         provider: 'siliconflow',
@@ -464,6 +493,7 @@ describe('phase-eight memory workspace contracts', () => {
       scope: { kind: 'global' },
       question: '现在最值得关注什么？',
       expressionMode: 'grounded',
+      workflowKind: 'persona_draft_sandbox',
       judge: {
         enabled: true,
         provider: 'siliconflow',

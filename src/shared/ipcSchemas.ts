@@ -35,10 +35,13 @@ export const memoryWorkspaceScopeSchema = z.discriminatedUnion('kind', [
   })
 ])
 
+export const memoryWorkspaceWorkflowKindSchema = z.enum(['default', 'persona_draft_sandbox'])
+
 export const askMemoryWorkspaceInputSchema = z.object({
   scope: memoryWorkspaceScopeSchema,
   question: z.string().min(1),
-  expressionMode: z.enum(['grounded', 'advice']).optional()
+  expressionMode: z.enum(['grounded', 'advice']).optional(),
+  workflowKind: memoryWorkspaceWorkflowKindSchema.optional()
 })
 
 export const memoryWorkspaceCompareTargetSchema = z.discriminatedUnion('executionMode', [
@@ -60,6 +63,7 @@ export const runMemoryWorkspaceCompareInputSchema = z.object({
   scope: memoryWorkspaceScopeSchema,
   question: z.string().min(1),
   expressionMode: z.enum(['grounded', 'advice']).optional(),
+  workflowKind: memoryWorkspaceWorkflowKindSchema.optional(),
   judge: z.object({
     enabled: z.boolean(),
     provider: z.enum(['siliconflow', 'openrouter']).optional(),
@@ -110,6 +114,7 @@ export const askMemoryWorkspacePersistedInputSchema = z.object({
   scope: memoryWorkspaceScopeSchema,
   question: z.string().min(1),
   expressionMode: z.enum(['grounded', 'advice']).optional(),
+  workflowKind: memoryWorkspaceWorkflowKindSchema.optional(),
   sessionId: z.string().min(1).optional()
 })
 
