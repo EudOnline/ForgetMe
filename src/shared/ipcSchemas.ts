@@ -37,7 +37,8 @@ export const memoryWorkspaceScopeSchema = z.discriminatedUnion('kind', [
 
 export const askMemoryWorkspaceInputSchema = z.object({
   scope: memoryWorkspaceScopeSchema,
-  question: z.string().min(1)
+  question: z.string().min(1),
+  expressionMode: z.enum(['grounded', 'advice']).optional()
 })
 
 export const memoryWorkspaceCompareTargetSchema = z.discriminatedUnion('executionMode', [
@@ -58,6 +59,7 @@ export const memoryWorkspaceCompareTargetSchema = z.discriminatedUnion('executio
 export const runMemoryWorkspaceCompareInputSchema = z.object({
   scope: memoryWorkspaceScopeSchema,
   question: z.string().min(1),
+  expressionMode: z.enum(['grounded', 'advice']).optional(),
   judge: z.object({
     enabled: z.boolean(),
     provider: z.enum(['siliconflow', 'openrouter']).optional(),
@@ -74,6 +76,7 @@ export const memoryWorkspaceCompareMatrixRowInputSchema = z.object({
 
 export const runMemoryWorkspaceCompareMatrixInputSchema = z.object({
   title: z.string().min(1).optional(),
+  expressionMode: z.enum(['grounded', 'advice']).optional(),
   rows: z.array(memoryWorkspaceCompareMatrixRowInputSchema).min(1),
   judge: z.object({
     enabled: z.boolean(),
@@ -106,6 +109,7 @@ export const memoryWorkspaceCompareMatrixIdSchema = z.object({
 export const askMemoryWorkspacePersistedInputSchema = z.object({
   scope: memoryWorkspaceScopeSchema,
   question: z.string().min(1),
+  expressionMode: z.enum(['grounded', 'advice']).optional(),
   sessionId: z.string().min(1).optional()
 })
 

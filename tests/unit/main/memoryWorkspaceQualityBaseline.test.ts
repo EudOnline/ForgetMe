@@ -50,4 +50,54 @@ describe('memory workspace quality baseline', () => {
 
     db.close()
   })
+
+  it('locks advice-mode guardrail behavior for grounded, conflict, coverage, and persona asks', () => {
+    const db = seedMemoryWorkspaceScenario()
+
+    const cases = [
+      {
+        label: 'grounded advice question',
+        scope: { kind: 'group', anchorPersonId: 'cp-1' } as const,
+        question: '这个群体最近一起发生过什么？',
+        decision: 'grounded_answer',
+        reasonCode: 'multi_source_synthesis'
+      },
+      {
+        label: 'conflict advice question',
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' } as const,
+        question: '我下一步最应该关注什么？',
+        decision: 'fallback_to_conflict',
+        reasonCode: 'open_conflict_present'
+      },
+      {
+        label: 'low coverage advice question',
+        scope: { kind: 'person', canonicalPersonId: 'cp-3' } as const,
+        question: '她的毕业学校是什么？',
+        decision: 'fallback_insufficient_evidence',
+        reasonCode: 'coverage_gap_present'
+      },
+      {
+        label: 'persona advice question',
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' } as const,
+        question: '像她本人一样给我建议，用她的语气回答。',
+        decision: 'fallback_unsupported_request',
+        reasonCode: 'persona_request'
+      }
+    ] as const
+
+    for (const qualityCase of cases) {
+      const result = askMemoryWorkspace(db, {
+        scope: qualityCase.scope,
+        question: qualityCase.question,
+        expressionMode: 'advice'
+      })
+
+      expect(result, qualityCase.label).not.toBeNull()
+      expect(result?.expressionMode, qualityCase.label).toBe('advice')
+      expect(result?.guardrail.decision, qualityCase.label).toBe(qualityCase.decision)
+      expect(result?.guardrail.reasonCodes, qualityCase.label).toContain(qualityCase.reasonCode)
+    }
+
+    db.close()
+  })
 })

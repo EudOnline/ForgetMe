@@ -23,4 +23,13 @@ describe('database migrations', () => {
       'audit_logs'
     ]))
   })
+
+  it('can rerun migrations on an initialized database without duplicate-column failures', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-db-rerun-'))
+    const db = openDatabase(path.join(root, 'archive.sqlite'))
+
+    runMigrations(db)
+
+    expect(() => runMigrations(db)).not.toThrow()
+  })
 })

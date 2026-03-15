@@ -18,6 +18,7 @@ import {
 type MatrixSessionRow = {
   id: string
   title: string
+  expressionMode: MemoryWorkspaceCompareSessionDetail['expressionMode'] | null
   rowCount: number
   completedRowCount: number
   failedRowCount: number
@@ -120,6 +121,7 @@ function mapMatrixSummary(row: MatrixSessionRow): MemoryWorkspaceCompareMatrixSu
   return {
     matrixSessionId: row.id,
     title: row.title,
+    expressionMode: row.expressionMode === 'advice' ? 'advice' : 'grounded',
     rowCount: row.rowCount,
     completedRowCount: row.completedRowCount,
     failedRowCount: row.failedRowCount,
@@ -193,6 +195,7 @@ function loadMatrixSessionRow(db: ArchiveDatabase, matrixSessionId: string) {
     `select
       id,
       title,
+      expression_mode as expressionMode,
       row_count as rowCount,
       completed_row_count as completedRowCount,
       failed_row_count as failedRowCount,
@@ -255,6 +258,7 @@ export async function runMemoryWorkspaceCompareMatrix(
       const session = await runCompare(db, {
         scope: row.scope,
         question: row.question,
+        expressionMode: input.expressionMode,
         judge: input.judge,
         targets: input.targets
       })
@@ -323,6 +327,7 @@ export async function runMemoryWorkspaceCompareMatrix(
   const summary: MemoryWorkspaceCompareMatrixSummary = {
     matrixSessionId,
     title: matrixTitle(input),
+    expressionMode: input.expressionMode ?? 'grounded',
     rowCount: rowSnapshots.length,
     completedRowCount,
     failedRowCount,
@@ -338,12 +343,13 @@ export async function runMemoryWorkspaceCompareMatrix(
   try {
     db.prepare(
       `insert into memory_workspace_compare_matrices (
-        id, title, row_count, completed_row_count, failed_row_count,
+        id, title, expression_mode, row_count, completed_row_count, failed_row_count,
         target_labels_json, judge_enabled, judge_status, created_at, updated_at
-      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       summary.matrixSessionId,
       summary.title,
+      summary.expressionMode,
       summary.rowCount,
       summary.completedRowCount,
       summary.failedRowCount,
@@ -412,6 +418,7 @@ export function listMemoryWorkspaceCompareMatrices(db: ArchiveDatabase) {
     `select
       id,
       title,
+      expression_mode as expressionMode,
       row_count as rowCount,
       completed_row_count as completedRowCount,
       failed_row_count as failedRowCount,

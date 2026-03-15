@@ -460,9 +460,12 @@ export type MemoryWorkspaceGuardrail = {
   fallbackApplied: boolean
 }
 
+export type MemoryWorkspaceExpressionMode = 'grounded' | 'advice'
+
 export type MemoryWorkspaceResponse = {
   scope: MemoryWorkspaceScope
   question: string
+  expressionMode: MemoryWorkspaceExpressionMode
   title: string
   answer: MemoryWorkspaceAnswer
   contextCards: MemoryWorkspaceContextCard[]
@@ -472,6 +475,7 @@ export type MemoryWorkspaceResponse = {
 export type AskMemoryWorkspaceInput = {
   scope: MemoryWorkspaceScope
   question: string
+  expressionMode?: MemoryWorkspaceExpressionMode
 }
 
 export type MemoryWorkspaceCompareTarget =
@@ -497,6 +501,7 @@ export type RunMemoryWorkspaceCompareJudgeInput = {
 export type RunMemoryWorkspaceCompareInput = {
   scope: MemoryWorkspaceScope
   question: string
+  expressionMode?: MemoryWorkspaceExpressionMode
   judge?: RunMemoryWorkspaceCompareJudgeInput
   targets?: MemoryWorkspaceCompareTarget[]
 }
@@ -509,6 +514,7 @@ export type MemoryWorkspaceCompareMatrixRowInput = {
 
 export type RunMemoryWorkspaceCompareMatrixInput = {
   title?: string
+  expressionMode?: MemoryWorkspaceExpressionMode
   rows: MemoryWorkspaceCompareMatrixRowInput[]
   judge?: RunMemoryWorkspaceCompareJudgeInput
   targets?: MemoryWorkspaceCompareTarget[]
@@ -624,6 +630,7 @@ export type MemoryWorkspaceCompareSessionSummary = {
   scope: MemoryWorkspaceScope
   title: string
   question: string
+  expressionMode: MemoryWorkspaceExpressionMode
   runCount: number
   metadata: MemoryWorkspaceCompareSessionMetadata
   recommendation: MemoryWorkspaceCompareRecommendation | null
@@ -654,6 +661,7 @@ export type MemoryWorkspaceCompareMatrixRowRecord = {
 export type MemoryWorkspaceCompareMatrixSummary = {
   matrixSessionId: string
   title: string
+  expressionMode: MemoryWorkspaceExpressionMode
   rowCount: number
   completedRowCount: number
   failedRowCount: number

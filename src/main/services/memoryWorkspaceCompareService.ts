@@ -24,6 +24,7 @@ type CompareSessionRow = {
   scopeTargetId: string | null
   title: string
   question: string
+  expressionMode: MemoryWorkspaceResponse['expressionMode'] | null
   runCount: number
   createdAt: string
   updatedAt: string
@@ -359,6 +360,7 @@ function buildJudgePrompt(input: {
 }) {
   return JSON.stringify({
     question: input.baselineResponse.question,
+    expressionMode: input.baselineResponse.expressionMode,
     baselineAnswer: input.baselineResponse.answer.summary,
     candidateAnswer: input.run.response?.answer.summary ?? null,
     baselineDisplayType: input.baselineResponse.answer.displayType,
@@ -406,6 +408,7 @@ function buildComparePrompt(baselineResponse: MemoryWorkspaceResponse) {
   return JSON.stringify({
     title: baselineResponse.title,
     question: baselineResponse.question,
+    expressionMode: baselineResponse.expressionMode,
     baselineAnswer: baselineResponse.answer.summary,
     displayType: baselineResponse.answer.displayType,
     guardrail: baselineResponse.guardrail,
@@ -415,6 +418,10 @@ function buildComparePrompt(baselineResponse: MemoryWorkspaceResponse) {
       displayType: card.displayType
     }))
   })
+}
+
+function compareModeLabel(expressionMode: MemoryWorkspaceResponse['expressionMode']) {
+  return expressionMode === 'advice' ? 'grounded advice' : 'grounded archive'
 }
 
 function buildComparedResponse(
@@ -869,13 +876,15 @@ async function defaultCompareModelCaller(input: {
       ...route,
       model: input.target.model
     },
-    messages: [
-      {
-        role: 'system',
-        content: [
-          'You are comparing grounded archive answers.',
-          'Return JSON only with a single "summary" field.',
-          'Stay strictly within the provided archive context.',
+	    messages: [
+	      {
+	        role: 'system',
+	        content: [
+	          input.baselineResponse.expressionMode === 'advice'
+	            ? 'You are comparing grounded advice answers.'
+	            : 'You are comparing grounded archive answers.',
+	          'Return JSON only with a single "summary" field.',
+	          'Stay strictly within the provided archive context.',
           'Do not roleplay, imitate a person, or invent facts.',
           'If the baseline guardrail shows conflict or evidence gaps, preserve that caution in the summary.'
         ].join(' ')
@@ -908,9 +917,9 @@ async function defaultCompareJudgeCaller(input: {
       decision: input.run.target.executionMode === 'local_baseline' ? 'aligned' : 'needs_review',
       score: input.run.target.executionMode === 'local_baseline' ? 5 : 4,
       rationale: input.run.target.executionMode === 'local_baseline'
-        ? 'Fixture judge confirms the deterministic baseline preserves the grounded answer.'
-        : 'Fixture judge flags this provider summary for light review while staying within grounded scope.',
-      strengths: ['Grounded archive scope preserved'],
+        ? `Fixture judge confirms the deterministic baseline preserves the ${compareModeLabel(input.baselineResponse.expressionMode)} answer.`
+        : `Fixture judge flags this provider summary for light review while staying within ${compareModeLabel(input.baselineResponse.expressionMode)} scope.`,
+      strengths: [`${input.baselineResponse.expressionMode === 'advice' ? 'Grounded advice' : 'Grounded archive'} scope preserved`],
       concerns: input.run.target.executionMode === 'local_baseline' ? [] : ['Review summary style against baseline phrasing'],
       receivedAt: new Date().toISOString()
     }
@@ -926,13 +935,15 @@ async function defaultCompareJudgeCaller(input: {
       ...route,
       model: input.judge.model
     },
-    messages: [
-      {
-        role: 'system',
-        content: [
-          'You are judging a candidate grounded archive answer against its grounded baseline.',
-          'Return JSON only with fields: decision, score, rationale, strengths, concerns.',
-          'decision must be one of aligned, needs_review, not_grounded.',
+	    messages: [
+	      {
+	        role: 'system',
+	        content: [
+	          input.baselineResponse.expressionMode === 'advice'
+	            ? 'You are judging a candidate grounded advice answer against its grounded advice baseline.'
+	            : 'You are judging a candidate grounded archive answer against its grounded baseline.',
+	          'Return JSON only with fields: decision, score, rationale, strengths, concerns.',
+	          'decision must be one of aligned, needs_review, not_grounded.',
           'score must be an integer from 1 to 5.',
           'Use aligned when the candidate preserves grounded facts and guardrail boundaries.',
           'Use needs_review when it stays mostly grounded but weakens specificity or caution.',
@@ -1009,6 +1020,7 @@ function mapCompareSessionRow(row: CompareSessionRow): MemoryWorkspaceCompareSes
     scope: parseScope(row),
     title: row.title,
     question: row.question,
+    expressionMode: row.expressionMode === 'advice' ? 'advice' : 'grounded',
     runCount: row.runCount,
     metadata: {
       targetLabels: [],
@@ -1084,6 +1096,7 @@ function loadCompareSessionRow(db: ArchiveDatabase, compareSessionId: string) {
       scope_target_id as scopeTargetId,
       title,
       question,
+      expression_mode as expressionMode,
       run_count as runCount,
       created_at as createdAt,
       updated_at as updatedAt
@@ -1149,6 +1162,7 @@ export function listMemoryWorkspaceCompareSessions(
       scope_target_id as scopeTargetId,
       title,
       question,
+      expression_mode as expressionMode,
       run_count as runCount,
       created_at as createdAt,
       updated_at as updatedAt
@@ -1191,9 +1205,11 @@ export async function runMemoryWorkspaceCompare(
     callJudgeModel?: CompareJudgeCaller
   } = {}
 ): Promise<MemoryWorkspaceCompareSessionDetail | null> {
+  const expressionMode = input.expressionMode ?? 'grounded'
   const baselineResponse = askMemoryWorkspace(db, {
     scope: input.scope,
-    question: input.question
+    question: input.question,
+    expressionMode
   })
 
   if (!baselineResponse) {
@@ -1213,6 +1229,7 @@ export async function runMemoryWorkspaceCompare(
     const promptHash = hashValue({
       scope: input.scope,
       question: input.question,
+      expressionMode,
       target
     })
 
@@ -1294,6 +1311,7 @@ export async function runMemoryWorkspaceCompare(
     scope: input.scope,
     title: baselineResponse.title.replace('Memory Workspace', 'Memory Workspace Compare'),
     question: input.question,
+    expressionMode,
     runCount: runs.length,
     metadata,
     recommendation,
@@ -1305,14 +1323,15 @@ export async function runMemoryWorkspaceCompare(
   try {
     db.prepare(
       `insert into memory_workspace_compare_sessions (
-        id, scope_kind, scope_target_id, title, question, run_count, created_at, updated_at
-      ) values (?, ?, ?, ?, ?, ?, ?, ?)`
+        id, scope_kind, scope_target_id, title, question, expression_mode, run_count, created_at, updated_at
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       compareSessionId,
       input.scope.kind,
       scopeTargetId(input.scope),
       sessionSummary.title,
       input.question,
+      sessionSummary.expressionMode,
       runs.length,
       createdAt,
       sessionSummary.updatedAt

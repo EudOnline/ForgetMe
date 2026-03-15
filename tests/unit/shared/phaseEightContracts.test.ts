@@ -17,6 +17,7 @@ import type {
   MemoryWorkspaceCompareTarget,
   MemoryWorkspaceCitation,
   MemoryWorkspaceContextCard,
+  MemoryWorkspaceExpressionMode,
   MemoryWorkspaceGuardrail,
   MemoryWorkspaceGuardrailDecision,
   MemoryWorkspaceGuardrailReasonCode,
@@ -75,6 +76,7 @@ describe('phase-eight memory workspace contracts', () => {
     const response: MemoryWorkspaceResponse = {
       scope: personScope,
       question: '她现在有哪些还没解决的冲突？',
+      expressionMode: 'grounded',
       title: 'Memory Workspace · Alice Chen',
       answer,
       contextCards: [contextCard],
@@ -87,11 +89,13 @@ describe('phase-eight memory workspace contracts', () => {
     expect(answer.displayType).toBe('open_conflict')
     expect(response.contextCards[0]?.title).toBe('Conflicts & Gaps')
     expect(response.guardrail.decision).toBe('fallback_to_conflict')
+    expect(response.expressionMode).toBe('grounded')
 
     expectTypeOf(response.scope).toEqualTypeOf<MemoryWorkspaceScope>()
     expectTypeOf(response.answer.citations).toEqualTypeOf<MemoryWorkspaceCitation[]>()
     expectTypeOf(response.contextCards).toEqualTypeOf<MemoryWorkspaceContextCard[]>()
     expectTypeOf(response.guardrail).toEqualTypeOf<MemoryWorkspaceGuardrail>()
+    expectTypeOf<MemoryWorkspaceExpressionMode>().toEqualTypeOf<'grounded' | 'advice'>()
     expectTypeOf<ArchiveApi['askMemoryWorkspace']>().toEqualTypeOf<(input: AskMemoryWorkspaceInput) => Promise<MemoryWorkspaceResponse | null>>()
   })
 
@@ -107,6 +111,7 @@ describe('phase-eight memory workspace contracts', () => {
     const input: RunMemoryWorkspaceCompareInput = {
       scope: { kind: 'person', canonicalPersonId: 'cp-1' },
       question: '她有哪些已保存的资料和已确认信息？',
+      expressionMode: 'advice',
       judge: {
         enabled: true,
         provider: 'openrouter',
@@ -134,6 +139,7 @@ describe('phase-eight memory workspace contracts', () => {
       response: {
         scope: { kind: 'person', canonicalPersonId: 'cp-1' },
         question: input.question,
+        expressionMode: 'advice',
         title: 'Memory Workspace · Alice Chen',
         answer: {
           summary: 'Alice Chen has approved education and note evidence in the archive.',
@@ -185,6 +191,7 @@ describe('phase-eight memory workspace contracts', () => {
       scope: { kind: 'person', canonicalPersonId: 'cp-1' },
       title: 'Memory Workspace Compare · Alice Chen',
       question: input.question,
+      expressionMode: 'advice',
       runCount: 2,
       metadata: {
         targetLabels: ['Local baseline', 'SiliconFlow / Qwen2.5-72B-Instruct'],
@@ -219,6 +226,8 @@ describe('phase-eight memory workspace contracts', () => {
     expect(detail.recommendation?.decision).toBe('recommend_run')
     expect(detail.recommendation?.source).toBe('deterministic')
     expect(input.judge?.enabled).toBe(true)
+    expect(detail.expressionMode).toBe('advice')
+    expect(detail.runs[0]?.response?.expressionMode).toBe('advice')
 
     expectTypeOf<ArchiveApi['runMemoryWorkspaceCompare']>().toEqualTypeOf<
       (input: RunMemoryWorkspaceCompareInput) => Promise<MemoryWorkspaceCompareSessionDetail | null>
@@ -244,6 +253,7 @@ describe('phase-eight memory workspace contracts', () => {
 
     const input: RunMemoryWorkspaceCompareMatrixInput = {
       title: 'Daily compare matrix',
+      expressionMode: 'advice',
       rows: [
         rowInput,
         {
@@ -284,6 +294,7 @@ describe('phase-eight memory workspace contracts', () => {
     const summary: MemoryWorkspaceCompareMatrixSummary = {
       matrixSessionId: 'matrix-session-1',
       title: 'Daily compare matrix',
+      expressionMode: 'advice',
       rowCount: 2,
       completedRowCount: 1,
       failedRowCount: 1,
@@ -307,6 +318,7 @@ describe('phase-eight memory workspace contracts', () => {
     expect(detail.rows[0]?.recommendedTargetLabel).toBe('Local baseline')
     expect(detail.failedRowCount).toBe(1)
     expect(input.rows).toHaveLength(2)
+    expect(detail.expressionMode).toBe('advice')
 
     expectTypeOf<ArchiveApi['runMemoryWorkspaceCompareMatrix']>().toEqualTypeOf<
       (input: RunMemoryWorkspaceCompareMatrixInput) => Promise<MemoryWorkspaceCompareMatrixDetail | null>
@@ -338,6 +350,16 @@ describe('phase-eight memory workspace contracts', () => {
       question: '她现在有哪些还没解决的冲突？'
     })
 
+    expect(askMemoryWorkspaceInputSchema.parse({
+      scope: { kind: 'global' },
+      question: '现在最值得关注什么？',
+      expressionMode: 'advice'
+    })).toEqual({
+      scope: { kind: 'global' },
+      question: '现在最值得关注什么？',
+      expressionMode: 'advice'
+    })
+
     expect(memoryWorkspaceCompareTargetSchema.parse({
       targetId: 'baseline-local',
       label: 'Local baseline',
@@ -365,6 +387,7 @@ describe('phase-eight memory workspace contracts', () => {
     expect(runMemoryWorkspaceCompareInputSchema.parse({
       scope: { kind: 'group', anchorPersonId: 'cp-1' },
       question: '这个群体最近一起发生过什么？',
+      expressionMode: 'advice',
       judge: {
         enabled: false
       },
@@ -376,6 +399,7 @@ describe('phase-eight memory workspace contracts', () => {
     })).toEqual({
       scope: { kind: 'group', anchorPersonId: 'cp-1' },
       question: '这个群体最近一起发生过什么？',
+      expressionMode: 'advice',
       judge: {
         enabled: false
       },
@@ -389,6 +413,7 @@ describe('phase-eight memory workspace contracts', () => {
     expect(runMemoryWorkspaceCompareInputSchema.parse({
       scope: { kind: 'global' },
       question: '现在最值得关注什么？',
+      expressionMode: 'grounded',
       judge: {
         enabled: true,
         provider: 'siliconflow',
@@ -397,6 +422,7 @@ describe('phase-eight memory workspace contracts', () => {
     })).toEqual({
       scope: { kind: 'global' },
       question: '现在最值得关注什么？',
+      expressionMode: 'grounded',
       judge: {
         enabled: true,
         provider: 'siliconflow',
@@ -413,6 +439,7 @@ describe('phase-eight memory workspace contracts', () => {
 
     expect(runMemoryWorkspaceCompareMatrixInputSchema.parse({
       title: 'Daily compare matrix',
+      expressionMode: 'advice',
       rows: [
         {
           label: 'Global row',
@@ -429,6 +456,7 @@ describe('phase-eight memory workspace contracts', () => {
       }
     })).toEqual({
       title: 'Daily compare matrix',
+      expressionMode: 'advice',
       rows: [
         {
           label: 'Global row',

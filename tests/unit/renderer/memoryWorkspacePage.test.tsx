@@ -57,6 +57,7 @@ describe('MemoryWorkspacePage', () => {
         response: {
           scope: { kind: 'global' },
           question: '现在最值得关注什么？',
+          expressionMode: 'grounded',
           title: 'Memory Workspace · Global',
           answer: {
             summary: '2 pending review items remain across 1 conflict group.',
@@ -92,9 +93,69 @@ describe('MemoryWorkspacePage', () => {
 
     expect(await screen.findByRole('heading', { name: 'Memory Workspace' })).toBeInTheDocument()
     expect(screen.getByText('Memory Workspace · Global')).toBeInTheDocument()
+    expect(screen.getByText('Mode: grounded')).toBeInTheDocument()
     expect(screen.getByText('Review Pressure')).toBeInTheDocument()
     expect(screen.getByText('Guardrails')).toBeInTheDocument()
     expect(screen.getByText('fallback_to_conflict')).toBeInTheDocument()
+  })
+
+  it('forwards advice mode asks and renders the mode label', async () => {
+    const askMemoryWorkspacePersisted = vi.fn().mockResolvedValue({
+      turnId: 'turn-advice-1',
+      sessionId: 'session-advice-1',
+      ordinal: 1,
+      question: '这个群体最近一起发生过什么？',
+      provider: null,
+      model: null,
+      contextHash: 'context-hash-advice-1',
+      promptHash: 'prompt-hash-advice-1',
+      createdAt: '2026-03-15T00:20:00.000Z',
+      response: {
+        scope: { kind: 'global' },
+        question: '这个群体最近一起发生过什么？',
+        expressionMode: 'advice',
+        title: 'Memory Workspace · Global',
+        answer: {
+          summary: 'Based on the archive, the safest next step is to review the recent shared timeline first.',
+          displayType: 'derived_summary',
+          citations: []
+        },
+        guardrail: {
+          decision: 'grounded_answer',
+          reasonCodes: ['multi_source_synthesis'],
+          citationCount: 2,
+          sourceKinds: ['group', 'journal'],
+          fallbackApplied: false
+        },
+        contextCards: []
+      }
+    })
+
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceSession: vi.fn().mockResolvedValue(null),
+      listMemoryWorkspaceCompareSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'global' }} />)
+
+    fireEvent.change(screen.getByLabelText('Response mode'), {
+      target: { value: 'advice' }
+    })
+    fireEvent.change(screen.getByLabelText('Ask memory workspace'), {
+      target: { value: '这个群体最近一起发生过什么？' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+
+    expect(await screen.findByText('Mode: advice')).toBeInTheDocument()
+    expect(askMemoryWorkspacePersisted).toHaveBeenCalledWith({
+      scope: { kind: 'global' },
+      question: '这个群体最近一起发生过什么？',
+      expressionMode: 'advice'
+    })
   })
 
   it('renders citation buttons when navigation handlers are supplied', async () => {
@@ -218,6 +279,7 @@ describe('MemoryWorkspacePage', () => {
           scope: { kind: 'global' },
           title: 'Memory Workspace Compare · Global',
           question: '现在最值得关注什么？',
+          expressionMode: 'advice',
           runCount: 2,
           metadata: {
             targetLabels: ['Local baseline', 'SiliconFlow / Compare'],
@@ -244,6 +306,7 @@ describe('MemoryWorkspacePage', () => {
       scope: { kind: 'global' },
       title: 'Memory Workspace Compare · Global',
       question: '现在最值得关注什么？',
+      expressionMode: 'advice',
       runCount: 2,
       metadata: {
         targetLabels: ['Local baseline', 'SiliconFlow / Compare'],
@@ -305,6 +368,7 @@ describe('MemoryWorkspacePage', () => {
           response: {
             scope: { kind: 'global' },
             question: '现在最值得关注什么？',
+            expressionMode: 'advice',
             title: 'Memory Workspace · Global',
             answer: {
               summary: '2 pending review items remain across 1 conflict group.',
@@ -365,6 +429,7 @@ describe('MemoryWorkspacePage', () => {
           response: {
             scope: { kind: 'global' },
             question: '现在最值得关注什么？',
+            expressionMode: 'advice',
             title: 'Memory Workspace · Global',
             answer: {
               summary: '[siliconflow] Keep focus on the remaining conflict group.',
@@ -403,6 +468,9 @@ describe('MemoryWorkspacePage', () => {
     expect(screen.queryByLabelText('Judge model override')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Enable judge review'))
+    fireEvent.change(screen.getByLabelText('Response mode'), {
+      target: { value: 'advice' }
+    })
     fireEvent.change(screen.getByLabelText('Judge provider'), {
       target: { value: 'openrouter' }
     })
@@ -418,6 +486,7 @@ describe('MemoryWorkspacePage', () => {
     expect(runMemoryWorkspaceCompare).toHaveBeenCalledWith({
       scope: { kind: 'global' },
       question: '现在最值得关注什么？',
+      expressionMode: 'advice',
       judge: {
         enabled: true,
         provider: 'openrouter',
@@ -435,6 +504,7 @@ describe('MemoryWorkspacePage', () => {
     expect(screen.getByText(/sf-test-model/)).toBeInTheDocument()
     expect(screen.getAllByText('Score: 14/20')).toHaveLength(2)
     expect(screen.getAllByText('Band: acceptable')).toHaveLength(2)
+    expect(screen.getAllByText('Mode: advice')).toHaveLength(3)
     expect(screen.getAllByText(/Groundedness/)).toHaveLength(2)
     expect(screen.getAllByText('Judge verdict')).toHaveLength(2)
     const judgePanelOne = screen.getByLabelText('Judge Verdict 1')
@@ -614,6 +684,7 @@ describe('MemoryWorkspacePage', () => {
       expect(runMemoryWorkspaceCompare).toHaveBeenCalledWith({
         scope: { kind: 'global' },
         question: '给我一组对比结果',
+        expressionMode: 'grounded',
         judge: {
           enabled: false
         },
@@ -865,6 +936,7 @@ describe('MemoryWorkspacePage', () => {
     expect(runMemoryWorkspaceCompare).toHaveBeenCalledWith({
       scope: { kind: 'global' },
       question: '现在最值得关注什么？',
+      expressionMode: 'grounded',
       judge: {
         enabled: true,
         provider: 'openrouter',
@@ -938,6 +1010,7 @@ describe('MemoryWorkspacePage', () => {
       expect(runMemoryWorkspaceCompare).toHaveBeenCalledWith({
         scope: { kind: 'global' },
         question: '保留这些对比默认值',
+        expressionMode: 'grounded',
         judge: {
           enabled: false
         },
@@ -1198,6 +1271,7 @@ describe('MemoryWorkspacePage', () => {
       expect(runMemoryWorkspaceCompare).toHaveBeenCalledWith({
         scope: { kind: 'global' },
         question: '复用这组历史对比配置',
+        expressionMode: 'grounded',
         judge: {
           enabled: true,
           provider: 'openrouter',
@@ -1279,6 +1353,7 @@ describe('MemoryWorkspacePage', () => {
         {
           matrixSessionId: 'matrix-session-1',
           title: 'Daily matrix',
+          expressionMode: 'advice',
           rowCount: 2,
           completedRowCount: 2,
           failedRowCount: 0,
@@ -1298,6 +1373,7 @@ describe('MemoryWorkspacePage', () => {
       scope: { kind: 'global' },
       title: 'Memory Workspace Compare · Global',
       question: '现在最值得关注什么？',
+      expressionMode: 'advice',
       runCount: 1,
       metadata: {
         targetLabels: ['Local baseline'],
@@ -1354,6 +1430,7 @@ describe('MemoryWorkspacePage', () => {
           response: {
             scope: { kind: 'global' },
             question: '现在最值得关注什么？',
+            expressionMode: 'advice',
             title: 'Memory Workspace · Global',
             answer: {
               summary: 'Grounded matrix result.',
@@ -1387,6 +1464,9 @@ describe('MemoryWorkspacePage', () => {
 
     render(<MemoryWorkspacePage scope={{ kind: 'global' }} />)
 
+    fireEvent.change(screen.getByLabelText('Response mode'), {
+      target: { value: 'advice' }
+    })
     fireEvent.change(screen.getByLabelText('Compare matrix title'), {
       target: { value: 'Daily matrix' }
     })
@@ -1398,6 +1478,7 @@ describe('MemoryWorkspacePage', () => {
     await waitFor(() => {
       expect(runMemoryWorkspaceCompareMatrix).toHaveBeenCalledWith({
         title: 'Daily matrix',
+        expressionMode: 'advice',
         rows: [
           {
             label: 'Global row',
@@ -1424,6 +1505,7 @@ describe('MemoryWorkspacePage', () => {
       expect(getMemoryWorkspaceCompareSession).toHaveBeenCalledWith('compare-session-1')
     })
     expect(await screen.findByText('Grounded matrix result.')).toBeInTheDocument()
+    expect(screen.getAllByText('Mode: advice').length).toBeGreaterThanOrEqual(2)
   })
 
   it('shows a parse error for invalid compare matrix lines and does not run', async () => {

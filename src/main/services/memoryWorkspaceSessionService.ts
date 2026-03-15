@@ -191,7 +191,8 @@ export function askMemoryWorkspacePersisted(
 
   const response = askMemoryWorkspace(db, {
     scope: input.scope,
-    question: input.question
+    question: input.question,
+    expressionMode: input.expressionMode
   })
 
   if (!response) {
@@ -205,6 +206,7 @@ export function askMemoryWorkspacePersisted(
   const promptHash = hashValue({
     scope: input.scope,
     question: input.question,
+    expressionMode: input.expressionMode ?? 'grounded',
     sessionId: existingSession?.id ?? null
   })
   const contextHash = hashValue(response)

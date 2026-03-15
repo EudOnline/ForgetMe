@@ -548,6 +548,8 @@ Phase 8 不应该引入新的事实真相表来“存 AI 结论”。
 ### 未来兼容层
 
 - Phase 9 若进入 persona / style / advice / voice，不需要推翻 Phase 8，只是在它上面加新的“表达模式”
+- 其中 `Phase 9A` 可先从 `Advice Mode Baseline` 起步：只改变 grounded answer 的表达方式，不引入 persona 扮演或代言式回答
+- `Phase 9B` 继续把同一个 `expressionMode` 贯穿 compare / matrix / judge，让 advice 输出也能被对比、回放、审计
 
 ---
 

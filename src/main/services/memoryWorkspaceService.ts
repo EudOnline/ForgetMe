@@ -4,6 +4,7 @@ import type {
   MemoryWorkspaceAnswer,
   MemoryWorkspaceCitation,
   MemoryWorkspaceContextCard,
+  MemoryWorkspaceExpressionMode,
   MemoryWorkspaceGuardrail,
   MemoryWorkspaceGuardrailDecision,
   MemoryWorkspaceGuardrailReasonCode,
@@ -101,6 +102,36 @@ function createPersonaFallbackAnswer(
     summary: `This memory workspace cannot answer as if it were the archived person or imitate their voice/advice for “${question}”. It can only summarize grounded archive material.${groundedSummary}`,
     displayType: 'coverage_gap',
     citations: fallbackCard?.citations ?? []
+  }
+}
+
+function createAdviceAnswer(input: {
+  selectedCard: MemoryWorkspaceContextCard | null
+  question: string
+}): MemoryWorkspaceAnswer {
+  if (!input.selectedCard) {
+    return createCoverageAnswer(input.question)
+  }
+
+  const baseAnswer = createAnswerFromCard(input.selectedCard)
+
+  if (input.selectedCard.displayType === 'open_conflict') {
+    return {
+      ...baseAnswer,
+      summary: `Based on the archive, the safest next step is to resolve the highest-pressure ambiguity first because the archive shows unresolved conflicts. ${input.selectedCard.body}`
+    }
+  }
+
+  if (input.selectedCard.displayType === 'coverage_gap') {
+    return {
+      ...baseAnswer,
+      summary: `Based on the archive, evidence is still insufficient to give reliable next-step advice for “${input.question}”. ${input.selectedCard.body}`
+    }
+  }
+
+  return {
+    ...baseAnswer,
+    summary: `Based on the archive, the safest next step is to focus on this grounded signal first: ${input.selectedCard.body}`
   }
 }
 
@@ -223,12 +254,19 @@ function buildGuardrail(input: {
 function createResponse(input: {
   scope: MemoryWorkspaceResponse['scope']
   question: string
+  expressionMode?: MemoryWorkspaceExpressionMode
   title: string
   contextCards: MemoryWorkspaceContextCard[]
 }) {
+  const expressionMode = input.expressionMode ?? 'grounded'
   const selectedCard = pickAnswerCard(input.question, input.contextCards)
   const answer = hasKeyword(input.question, PERSONA_REQUEST_KEYWORDS)
     ? createPersonaFallbackAnswer(input.contextCards, input.question)
+    : expressionMode === 'advice'
+      ? createAdviceAnswer({
+          selectedCard,
+          question: input.question
+        })
     : selectedCard
       ? createAnswerFromCard(selectedCard)
       : createCoverageAnswer(input.question)
@@ -236,6 +274,7 @@ function createResponse(input: {
   return {
     scope: input.scope,
     question: input.question,
+    expressionMode,
     title: input.title,
     answer,
     contextCards: input.contextCards,
@@ -359,7 +398,8 @@ function buildPersonConflictCard(db: ArchiveDatabase, canonicalPersonId: string)
 export function buildPersonContextPack(
   db: ArchiveDatabase,
   canonicalPersonId: string,
-  question: string
+  question: string,
+  expressionMode?: MemoryWorkspaceExpressionMode
 ): MemoryWorkspaceResponse | null {
   const dossier = getPersonDossier(db, { canonicalPersonId })
   if (!dossier) {
@@ -378,6 +418,7 @@ export function buildPersonContextPack(
   return createResponse({
     scope: { kind: 'person', canonicalPersonId },
     question,
+    expressionMode,
     title: `Memory Workspace · ${dossier.identityCard.primaryDisplayName}`,
     contextCards
   })
@@ -472,7 +513,8 @@ function buildGroupAmbiguityCard(db: ArchiveDatabase, anchorPersonId: string) {
 export function buildGroupContextPack(
   db: ArchiveDatabase,
   anchorPersonId: string,
-  question: string
+  question: string,
+  expressionMode?: MemoryWorkspaceExpressionMode
 ): MemoryWorkspaceResponse | null {
   const portrait = getGroupPortrait(db, { canonicalPersonId: anchorPersonId })
   if (!portrait) {
@@ -489,6 +531,7 @@ export function buildGroupContextPack(
   return createResponse({
     scope: { kind: 'group', anchorPersonId },
     question,
+    expressionMode,
     title: `Memory Workspace · ${anchorDisplayName} Group`,
     contextCards
   })
@@ -567,7 +610,11 @@ function buildGlobalDecisionCard(db: ArchiveDatabase) {
   })
 }
 
-export function buildGlobalContextPack(db: ArchiveDatabase, question: string): MemoryWorkspaceResponse {
+export function buildGlobalContextPack(
+  db: ArchiveDatabase,
+  question: string,
+  expressionMode?: MemoryWorkspaceExpressionMode
+): MemoryWorkspaceResponse {
   const contextCards = [
     buildGlobalPeopleCard(db),
     buildGlobalGroupCard(db),
@@ -578,6 +625,7 @@ export function buildGlobalContextPack(db: ArchiveDatabase, question: string): M
   return createResponse({
     scope: { kind: 'global' },
     question,
+    expressionMode,
     title: 'Memory Workspace · Global',
     contextCards
   })
@@ -588,12 +636,12 @@ export function askMemoryWorkspace(
   input: AskMemoryWorkspaceInput
 ): MemoryWorkspaceResponse | null {
   if (input.scope.kind === 'global') {
-    return buildGlobalContextPack(db, input.question)
+    return buildGlobalContextPack(db, input.question, input.expressionMode)
   }
 
   if (input.scope.kind === 'person') {
-    return buildPersonContextPack(db, input.scope.canonicalPersonId, input.question)
+    return buildPersonContextPack(db, input.scope.canonicalPersonId, input.question, input.expressionMode)
   }
 
-  return buildGroupContextPack(db, input.scope.anchorPersonId, input.question)
+  return buildGroupContextPack(db, input.scope.anchorPersonId, input.question, input.expressionMode)
 }

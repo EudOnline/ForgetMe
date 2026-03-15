@@ -4,6 +4,7 @@ import type {
   MemoryWorkspaceCompareMatrixRowInput,
   MemoryWorkspaceCompareMatrixRowRecord,
   MemoryWorkspaceCompareMatrixSummary,
+  MemoryWorkspaceExpressionMode,
   MemoryWorkspaceCompareTarget,
   MemoryWorkspaceCompareRunRecord,
   MemoryWorkspaceCompareSessionSummary,
@@ -233,6 +234,10 @@ function initialQuestionForScope(scope: MemoryWorkspaceScope) {
   return ''
 }
 
+function defaultExpressionMode(): MemoryWorkspaceExpressionMode {
+  return 'grounded'
+}
+
 function scopeKey(scope: MemoryWorkspaceScope) {
   if (scope.kind === 'person') {
     return `person:${scope.canonicalPersonId}`
@@ -341,6 +346,7 @@ export function MemoryWorkspacePage(props: {
   const scopeIdentity = scopeKey(props.scope)
   const scopeRequestRef = useRef(0)
   const [question, setQuestion] = useState(() => initialQuestionForScope(props.scope))
+  const [expressionMode, setExpressionMode] = useState<MemoryWorkspaceExpressionMode>(() => defaultExpressionMode())
   const [sessionSummaries, setSessionSummaries] = useState<MemoryWorkspaceSessionSummary[]>([])
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
   const [turns, setTurns] = useState<MemoryWorkspaceTurnRecord[]>([])
@@ -523,6 +529,7 @@ export function MemoryWorkspacePage(props: {
     const storedCompareJudgeDefaults = readStoredCompareJudgeDefaults()
     scopeRequestRef.current = scopeRequestId
     setQuestion(initialQuestionForScope(props.scope))
+    setExpressionMode(defaultExpressionMode())
     setMatrixTitle('')
     setMatrixRowsInput('')
     setSessionSummaries([])
@@ -664,6 +671,7 @@ export function MemoryWorkspacePage(props: {
       const nextTurn = await archiveApi.askMemoryWorkspacePersisted({
         scope: props.scope,
         question: trimmedQuestion,
+        expressionMode,
         ...(selectedSessionId ? { sessionId: selectedSessionId } : {})
       })
 
@@ -717,6 +725,7 @@ export function MemoryWorkspacePage(props: {
       const compareSession = await archiveApi.runMemoryWorkspaceCompare({
         scope: props.scope,
         question: trimmedQuestion,
+        expressionMode,
         ...(compareUsesCustomTargets ? { targets: selectedCompareTargets } : {}),
         judge: compareJudgeEnabled
           ? {
@@ -766,6 +775,7 @@ export function MemoryWorkspacePage(props: {
     try {
       const matrix = await runCompareMatrix({
         ...(matrixTitle.trim().length > 0 ? { title: matrixTitle.trim() } : {}),
+        expressionMode,
         rows,
         ...(compareUsesCustomTargets ? { targets: selectedCompareTargets } : {}),
         judge: compareJudgeEnabled
@@ -813,6 +823,16 @@ export function MemoryWorkspacePage(props: {
         <label>
           Ask memory workspace
           <input value={question} onChange={(event) => setQuestion(event.target.value)} />
+        </label>
+        <label>
+          Response mode
+          <select
+            value={expressionMode}
+            onChange={(event) => setExpressionMode(event.target.value === 'advice' ? 'advice' : 'grounded')}
+          >
+            <option value="grounded">Grounded</option>
+            <option value="advice">Advice</option>
+          </select>
         </label>
         <fieldset>
           <legend>Compare options</legend>

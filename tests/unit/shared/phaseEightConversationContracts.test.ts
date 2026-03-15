@@ -39,6 +39,7 @@ describe('phase-eight conversation persistence contracts', () => {
       response: {
         scope,
         question: '她现在有哪些还没解决的冲突？',
+        expressionMode: 'advice',
         title: 'Memory Workspace · Alice Chen',
         answer: {
           summary: 'Open conflicts remain for school_name.',
@@ -69,6 +70,7 @@ describe('phase-eight conversation persistence contracts', () => {
     expect(session.scope.kind).toBe('person')
     expect(turn.ordinal).toBe(1)
     expect(detail.turns[0]?.response.title).toBe('Memory Workspace · Alice Chen')
+    expect(detail.turns[0]?.response.expressionMode).toBe('advice')
 
     expectTypeOf<ArchiveApi['listMemoryWorkspaceSessions']>().toEqualTypeOf<
       (input?: { scope?: MemoryWorkspaceScope }) => Promise<MemoryWorkspaceSessionSummary[]>
@@ -85,6 +87,7 @@ describe('phase-eight conversation persistence contracts', () => {
       scope,
       title: 'Memory Workspace Compare · Alice Chen',
       question: '她有哪些已保存的资料？',
+      expressionMode: 'advice',
       runCount: 3,
       metadata: {
         targetLabels: ['Local baseline'],
@@ -105,6 +108,7 @@ describe('phase-eight conversation persistence contracts', () => {
     }
 
     expect(compareDetail.compareSessionId).toBe('compare-session-1')
+    expect(compareDetail.expressionMode).toBe('advice')
 
     expectTypeOf<ArchiveApi['listMemoryWorkspaceCompareSessions']>().toEqualTypeOf<
       (input?: { scope?: MemoryWorkspaceScope }) => Promise<MemoryWorkspaceCompareSessionSummary[]>
@@ -133,11 +137,13 @@ describe('phase-eight conversation persistence contracts', () => {
     expect(askMemoryWorkspacePersistedInputSchema.parse({
       scope: { kind: 'group', anchorPersonId: 'cp-1' },
       question: '这个群体最近一起发生过什么？',
-      sessionId: 'session-1'
+      sessionId: 'session-1',
+      expressionMode: 'advice'
     })).toEqual({
       scope: { kind: 'group', anchorPersonId: 'cp-1' },
       question: '这个群体最近一起发生过什么？',
-      sessionId: 'session-1'
+      sessionId: 'session-1',
+      expressionMode: 'advice'
     })
   })
 })

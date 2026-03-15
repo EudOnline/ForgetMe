@@ -333,6 +333,41 @@ describe('askMemoryWorkspace', () => {
     db.close()
   })
 
+  it('builds an advice-mode answer without dropping grounded guardrails', () => {
+    const db = seedMemoryWorkspaceScenario()
+
+    const result = askMemoryWorkspace(db, {
+      scope: { kind: 'group', anchorPersonId: 'cp-1' },
+      question: '这个群体最近一起发生过什么？',
+      expressionMode: 'advice'
+    })
+
+    expect(result?.expressionMode).toBe('advice')
+    expect(result?.title).toBe('Memory Workspace · Alice Chen Group')
+    expect(result?.guardrail.decision).toBe('grounded_answer')
+    expect(result?.answer.summary).toContain('Based on the archive')
+    expect(result?.answer.summary).toContain('safest next step')
+    expect(result?.answer.citations.length ?? 0).toBeGreaterThan(0)
+
+    db.close()
+  })
+
+  it('keeps conflict fallback semantics in advice mode', () => {
+    const db = seedMemoryWorkspaceScenario()
+
+    const result = askMemoryWorkspace(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '我下一步最应该关注什么？',
+      expressionMode: 'advice'
+    })
+
+    expect(result?.expressionMode).toBe('advice')
+    expect(result?.guardrail.decision).toBe('fallback_to_conflict')
+    expect(result?.answer.summary).toContain('archive shows unresolved conflicts')
+
+    db.close()
+  })
+
   it('degrades persona-style requests into a grounded policy fallback', () => {
     const db = seedMemoryWorkspaceScenario()
 
@@ -349,6 +384,22 @@ describe('askMemoryWorkspace', () => {
     db.close()
   })
 
+  it('keeps persona fallback primary in advice mode', () => {
+    const db = seedMemoryWorkspaceScenario()
+
+    const result = askMemoryWorkspace(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '像她本人一样给我建议，用她的语气回答。',
+      expressionMode: 'advice'
+    })
+
+    expect(result?.expressionMode).toBe('advice')
+    expect(result?.guardrail.decision).toBe('fallback_unsupported_request')
+    expect(result?.answer.summary).toContain('cannot answer as if it were')
+
+    db.close()
+  })
+
   it('marks low-coverage answers when the archive cannot support the request', () => {
     const db = seedMemoryWorkspaceScenario()
 
@@ -360,6 +411,22 @@ describe('askMemoryWorkspace', () => {
     expect(result?.answer.displayType).toBe('coverage_gap')
     expect(result?.guardrail.decision).toBe('fallback_insufficient_evidence')
     expect(result?.guardrail.fallbackApplied).toBe(true)
+
+    db.close()
+  })
+
+  it('keeps insufficient-evidence fallback semantics in advice mode', () => {
+    const db = seedMemoryWorkspaceScenario()
+
+    const result = askMemoryWorkspace(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-3' },
+      question: '她的毕业学校是什么？',
+      expressionMode: 'advice'
+    })
+
+    expect(result?.expressionMode).toBe('advice')
+    expect(result?.guardrail.decision).toBe('fallback_insufficient_evidence')
+    expect(result?.answer.summary).toContain('insufficient')
 
     db.close()
   })

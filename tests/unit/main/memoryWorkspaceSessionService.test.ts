@@ -242,7 +242,8 @@ describe('memoryWorkspaceSessionService', () => {
 
     const turn = askMemoryWorkspacePersisted(db, {
       scope: { kind: 'person', canonicalPersonId: 'cp-1' },
-      question: '她现在有哪些还没解决的冲突？'
+      question: '她现在有哪些还没解决的冲突？',
+      expressionMode: 'advice'
     })
 
     expect(turn).toMatchObject({
@@ -250,7 +251,8 @@ describe('memoryWorkspaceSessionService', () => {
       ordinal: 1,
       question: '她现在有哪些还没解决的冲突？',
       response: {
-        title: 'Memory Workspace · Alice Chen'
+        title: 'Memory Workspace · Alice Chen',
+        expressionMode: 'advice'
       }
     })
 
@@ -333,13 +335,15 @@ describe('memoryWorkspaceSessionService', () => {
 
     const turn = askMemoryWorkspacePersisted(db, {
       scope: { kind: 'person', canonicalPersonId: 'cp-1' },
-      question: '她有哪些已保存的资料？'
+      question: '她有哪些已保存的资料？',
+      expressionMode: 'advice'
     })
 
     const detail = getMemoryWorkspaceSession(db, { sessionId: turn!.sessionId })
 
     expect(detail?.turns).toHaveLength(1)
     expect(detail?.turns[0]?.response).toEqual(turn?.response)
+    expect(detail?.turns[0]?.response.expressionMode).toBe('advice')
     expect(detail?.turns[0]?.contextHash).toBe(turn?.contextHash)
 
     db.close()

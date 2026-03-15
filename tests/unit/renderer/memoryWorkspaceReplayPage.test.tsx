@@ -56,6 +56,7 @@ describe('MemoryWorkspacePage replay', () => {
             response: {
               scope: { kind: 'global' },
               question: '第一问',
+              expressionMode: 'grounded',
               title: 'Memory Workspace · Global',
               answer: { summary: '第一答', displayType: 'derived_summary', citations: [] },
               contextCards: [],
@@ -81,6 +82,7 @@ describe('MemoryWorkspacePage replay', () => {
             response: {
               scope: { kind: 'global' },
               question: '现在最值得关注什么？',
+              expressionMode: 'advice',
               title: 'Memory Workspace · Global',
               answer: { summary: '第二答', displayType: 'open_conflict', citations: [] },
               contextCards: [],
@@ -117,6 +119,7 @@ describe('MemoryWorkspacePage replay', () => {
             response: {
               scope: { kind: 'global' },
               question: '更早的问题',
+              expressionMode: 'grounded',
               title: 'Memory Workspace · Global',
               answer: { summary: '旧答复', displayType: 'derived_summary', citations: [] },
               contextCards: [],
@@ -146,6 +149,8 @@ describe('MemoryWorkspacePage replay', () => {
     expect(await screen.findByText('Saved Sessions')).toBeInTheDocument()
     expect(getMemoryWorkspaceSession).toHaveBeenCalledWith('session-new')
     expect(await screen.findByText('第二答')).toBeInTheDocument()
+    expect(screen.getByText('Mode: grounded')).toBeInTheDocument()
+    expect(screen.getByText('Mode: advice')).toBeInTheDocument()
     expect(screen.getByText('fallback_to_conflict')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Memory Workspace · Global · 更早的问题' }))
@@ -277,6 +282,7 @@ describe('MemoryWorkspacePage replay', () => {
       expect(askMemoryWorkspacePersisted).toHaveBeenCalledWith({
         scope: { kind: 'person', canonicalPersonId: 'cp-1' },
         question: '她有哪些已保存的资料？',
+        expressionMode: 'grounded',
         sessionId: 'session-1'
       })
     })

@@ -62,19 +62,23 @@ describe('archiveApi dossier methods', () => {
     await expect(archiveApi.getPersonDossier('cp-1')).resolves.toBeNull()
     await expect(archiveApi.askMemoryWorkspace({
       scope: { kind: 'global' },
-      question: '现在最值得关注什么？'
+      question: '现在最值得关注什么？',
+      expressionMode: 'advice'
     })).resolves.toBeNull()
     await expect(archiveApi.listMemoryWorkspaceSessions()).resolves.toEqual([])
     await expect(archiveApi.getMemoryWorkspaceSession('session-1')).resolves.toBeNull()
     await expect(archiveApi.askMemoryWorkspacePersisted({
       scope: { kind: 'global' },
-      question: '现在最值得关注什么？'
+      question: '现在最值得关注什么？',
+      expressionMode: 'advice'
     })).resolves.toBeNull()
     await expect(archiveApi.runMemoryWorkspaceCompare({
       scope: { kind: 'global' },
-      question: '现在最值得关注什么？'
+      question: '现在最值得关注什么？',
+      expressionMode: 'advice'
     })).resolves.toBeNull()
     await expect(archiveApi.runMemoryWorkspaceCompareMatrix({
+      expressionMode: 'advice',
       rows: [{
         scope: { kind: 'global' },
         question: '现在最值得关注什么？'

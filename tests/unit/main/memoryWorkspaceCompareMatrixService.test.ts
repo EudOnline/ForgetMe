@@ -15,6 +15,7 @@ function createCompareSessionDetail(input: {
   compareRunId: string
   scope: RunMemoryWorkspaceCompareInput['scope']
   question: string
+  expressionMode?: RunMemoryWorkspaceCompareInput['expressionMode']
   targetLabel?: string
   failedRunCount?: number
   createdAt?: string
@@ -27,6 +28,7 @@ function createCompareSessionDetail(input: {
     scope: input.scope,
     title: 'Memory Workspace Compare',
     question: input.question,
+    expressionMode: input.expressionMode ?? 'grounded',
     runCount: 1,
     metadata: {
       targetLabels: [targetLabel],
@@ -61,6 +63,7 @@ function createCompareSessionDetail(input: {
       response: {
         scope: input.scope,
         question: input.question,
+        expressionMode: input.expressionMode ?? 'grounded',
         title: 'Memory Workspace',
         answer: {
           summary: 'Grounded summary.',
@@ -153,6 +156,7 @@ describe('memoryWorkspaceCompareMatrixService', () => {
 
     const summaries = listMemoryWorkspaceCompareMatrices(db)
     expect(summaries).toHaveLength(1)
+    expect(summaries[0]?.expressionMode).toBe('grounded')
     expect(summaries[0]?.metadata.targetLabels).toEqual(['Local baseline'])
 
     const reloaded = getMemoryWorkspaceCompareMatrix(db, {
@@ -160,6 +164,7 @@ describe('memoryWorkspaceCompareMatrixService', () => {
     })
     expect(reloaded?.rows[0]?.recommendedTargetLabel).toBe('Local baseline')
     expect(reloaded?.rows[1]?.status).toBe('completed')
+    expect(reloaded?.expressionMode).toBe('grounded')
 
     db.close()
   })
@@ -216,6 +221,49 @@ describe('memoryWorkspaceCompareMatrixService', () => {
     })
     expect(reloaded?.failedRowCount).toBe(1)
     expect(reloaded?.rows[2]?.compareSessionId).toBe('compare-3')
+
+    db.close()
+  })
+
+  it('forwards advice mode into child compare runs and persists it on matrix summaries', async () => {
+    const db = seedMemoryWorkspaceScenario()
+    const forwardedModes: Array<RunMemoryWorkspaceCompareInput['expressionMode']> = []
+
+    const matrix = await runMemoryWorkspaceCompareMatrix(db, {
+      title: 'Advice matrix',
+      expressionMode: 'advice',
+      rows: [
+        {
+          scope: { kind: 'global' },
+          question: '现在最稳妥的下一步是什么？'
+        },
+        {
+          scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+          question: '我下一步最应该关注什么？'
+        }
+      ]
+    }, {
+      runCompare: async (_db, input) => {
+        forwardedModes.push(input.expressionMode)
+        return createCompareSessionDetail({
+          compareSessionId: `compare-${forwardedModes.length}`,
+          compareRunId: `compare-run-${forwardedModes.length}`,
+          scope: input.scope,
+          question: input.question,
+          expressionMode: input.expressionMode,
+          createdAt: `2026-03-15T00:00:0${forwardedModes.length}.000Z`
+        })
+      }
+    })
+
+    expect(matrix).not.toBeNull()
+    expect(matrix?.expressionMode).toBe('advice')
+    expect(forwardedModes).toEqual(['advice', 'advice'])
+
+    const reloaded = getMemoryWorkspaceCompareMatrix(db, {
+      matrixSessionId: matrix!.matrixSessionId
+    })
+    expect(reloaded?.expressionMode).toBe('advice')
 
     db.close()
   })

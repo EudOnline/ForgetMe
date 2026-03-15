@@ -125,6 +125,7 @@ function renderResponse(
     <>
       <section aria-label="Answer">
         <h3>Answer</h3>
+        <p>Mode: {response.expressionMode ?? 'grounded'}</p>
         <p>{response.answer.summary}</p>
         <p>Display type: {formatDisplayType(response.answer.displayType)}</p>
         {response.answer.citations.length ? (
@@ -297,6 +298,7 @@ export function MemoryWorkspaceView(props: {
                     >
                       {matrixSessionLabel(summary)}
                     </button>
+                    <p>Mode: {summary.expressionMode}</p>
                     <p>Rows: {summary.rowCount} · Completed: {summary.completedRowCount} · Failed: {summary.failedRowCount}</p>
                     <p>Targets: {summary.metadata.targetLabels.join(', ') || 'none'}</p>
                     <p>Judge: {summary.metadata.judge.status}</p>
@@ -391,6 +393,7 @@ export function MemoryWorkspaceView(props: {
                   >
                     {compareSessionLabel(summary)}
                   </button>
+                  <p>Mode: {summary.expressionMode}</p>
                   <p>Targets: {compareSessionTargetsLabel(summary)}</p>
                   <p>Judge: {summary.metadata.judge.status}</p>
                   {summary.metadata.failedRunCount > 0 ? <p>Failed runs: {summary.metadata.failedRunCount}</p> : null}
