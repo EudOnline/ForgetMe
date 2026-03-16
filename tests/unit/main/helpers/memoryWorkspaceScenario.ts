@@ -3,6 +3,10 @@ import os from 'node:os'
 import path from 'node:path'
 import { openDatabase, runMigrations } from '../../../../src/main/services/db'
 import { setRelationshipLabel } from '../../../../src/main/services/graphService'
+import {
+  createPersonaDraftReviewFromTurn,
+  transitionPersonaDraftReview
+} from '../../../../src/main/services/memoryWorkspaceDraftReviewService'
 import { askMemoryWorkspacePersisted } from '../../../../src/main/services/memoryWorkspaceSessionService'
 
 function setupDatabase() {
@@ -353,5 +357,32 @@ export function seedPersonaDraftReviewScenario() {
     db,
     sandboxTurn,
     groundedTurn
+  }
+}
+
+export function seedApprovedPersonaDraftHandoffScenario() {
+  const { db, sandboxTurn } = seedPersonaDraftReviewScenario()
+  const review = createPersonaDraftReviewFromTurn(db, {
+    turnId: sandboxTurn.turnId
+  })
+
+  if (!review) {
+    throw new Error('Failed to create draft review for approved handoff scenario.')
+  }
+
+  const approvedReview = transitionPersonaDraftReview(db, {
+    draftReviewId: review.draftReviewId,
+    status: 'approved'
+  })
+
+  if (!approvedReview) {
+    throw new Error('Failed to approve draft review for handoff scenario.')
+  }
+
+  return {
+    db,
+    sandboxTurn,
+    review,
+    approvedReview
   }
 }

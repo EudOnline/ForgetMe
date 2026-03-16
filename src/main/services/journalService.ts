@@ -63,6 +63,10 @@ function formatDecisionLabel(entry: Pick<DecisionJournalEntry, 'decisionType' | 
     return 'Persona draft rejected'
   }
 
+  if (entry.decisionType === 'export_approved_persona_draft') {
+    return 'Approved draft exported'
+  }
+
   return entry.decisionType
 }
 
