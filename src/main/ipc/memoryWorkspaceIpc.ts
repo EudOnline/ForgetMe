@@ -5,6 +5,7 @@ import {
   askMemoryWorkspacePersistedInputSchema,
   exportApprovedPersonaDraftInputSchema,
   listApprovedPersonaDraftHandoffsInputSchema,
+  listApprovedPersonaDraftProviderSendsInputSchema,
   createPersonaDraftReviewFromTurnInputSchema,
   getPersonaDraftReviewByTurnInputSchema,
   memoryWorkspaceCompareMatrixIdSchema,
@@ -14,6 +15,7 @@ import {
   memoryWorkspaceSessionIdSchema,
   runMemoryWorkspaceCompareInputSchema,
   runMemoryWorkspaceCompareMatrixInputSchema,
+  sendApprovedPersonaDraftToProviderInputSchema,
   transitionPersonaDraftReviewInputSchema,
   updatePersonaDraftReviewInputSchema
 } from '../../shared/ipcSchemas'
@@ -45,6 +47,10 @@ import {
   exportApprovedPersonaDraftToDirectory,
   listApprovedPersonaDraftHandoffs
 } from '../services/personaDraftHandoffService'
+import {
+  listApprovedPersonaDraftProviderSends,
+  sendApprovedPersonaDraftToProvider
+} from '../services/approvedDraftProviderSendService'
 
 function databasePath(appPaths: AppPaths) {
   return path.join(appPaths.sqliteDir, 'archive.sqlite')
@@ -81,6 +87,8 @@ export function registerMemoryWorkspaceIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:selectPersonaDraftHandoffDestination')
   ipcMain.removeHandler('archive:listApprovedPersonaDraftHandoffs')
   ipcMain.removeHandler('archive:exportApprovedPersonaDraft')
+  ipcMain.removeHandler('archive:listApprovedPersonaDraftProviderSends')
+  ipcMain.removeHandler('archive:sendApprovedPersonaDraftToProvider')
 
   ipcMain.handle('archive:askMemoryWorkspace', async (_event, payload) => {
     const input = askMemoryWorkspaceInputSchema.parse(payload)
@@ -227,5 +235,23 @@ export function registerMemoryWorkspaceIpc(appPaths: AppPaths) {
     const exported = exportApprovedPersonaDraftToDirectory(db, input)
     db.close()
     return exported
+  })
+
+  ipcMain.handle('archive:listApprovedPersonaDraftProviderSends', async (_event, payload) => {
+    const input = listApprovedPersonaDraftProviderSendsInputSchema.parse(payload)
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    const sends = listApprovedPersonaDraftProviderSends(db, input)
+    db.close()
+    return sends
+  })
+
+  ipcMain.handle('archive:sendApprovedPersonaDraftToProvider', async (_event, payload) => {
+    const input = sendApprovedPersonaDraftToProviderInputSchema.parse(payload)
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    const sent = await sendApprovedPersonaDraftToProvider(db, input)
+    db.close()
+    return sent
   })
 }

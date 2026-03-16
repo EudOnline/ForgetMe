@@ -7,14 +7,18 @@ const {
   openDatabase,
   runMigrations,
   listApprovedPersonaDraftHandoffs,
-  exportApprovedPersonaDraftToDirectory
+  exportApprovedPersonaDraftToDirectory,
+  listApprovedPersonaDraftProviderSends,
+  sendApprovedPersonaDraftToProvider
 } = vi.hoisted(() => ({
   handlerMap: new Map<string, (event: unknown, payload?: unknown) => Promise<unknown>>(),
   showOpenDialog: vi.fn(),
   openDatabase: vi.fn(),
   runMigrations: vi.fn(),
   listApprovedPersonaDraftHandoffs: vi.fn(),
-  exportApprovedPersonaDraftToDirectory: vi.fn()
+  exportApprovedPersonaDraftToDirectory: vi.fn(),
+  listApprovedPersonaDraftProviderSends: vi.fn(),
+  sendApprovedPersonaDraftToProvider: vi.fn()
 }))
 
 vi.mock('electron', () => ({
@@ -41,6 +45,11 @@ vi.mock('../../../src/main/services/personaDraftHandoffService', () => ({
   exportApprovedPersonaDraftToDirectory
 }))
 
+vi.mock('../../../src/main/services/approvedDraftProviderSendService', () => ({
+  listApprovedPersonaDraftProviderSends,
+  sendApprovedPersonaDraftToProvider
+}))
+
 import { registerMemoryWorkspaceIpc } from '../../../src/main/ipc/memoryWorkspaceIpc'
 
 function appPathsFixture(): AppPaths {
@@ -62,6 +71,8 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
     runMigrations.mockReset()
     listApprovedPersonaDraftHandoffs.mockReset()
     exportApprovedPersonaDraftToDirectory.mockReset()
+    listApprovedPersonaDraftProviderSends.mockReset()
+    sendApprovedPersonaDraftToProvider.mockReset()
     delete process.env.FORGETME_E2E_PERSONA_DRAFT_HANDOFF_DESTINATION_DIR
   })
 
@@ -140,6 +151,77 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
     expect(result).toEqual(expect.objectContaining({
       draftReviewId: 'review-1',
       fileName: 'persona-draft-review-review-1-approved.json'
+    }))
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('lists approved draft provider sends through the ipc handler and closes the database', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    listApprovedPersonaDraftProviderSends.mockReturnValue([{
+      artifactId: 'pdpe-1',
+      draftReviewId: 'review-1',
+      sourceTurnId: 'turn-1',
+      provider: 'siliconflow',
+      model: 'Qwen/Qwen2.5-72B-Instruct',
+      policyKey: 'persona_draft.remote_send_approved',
+      requestHash: 'hash-1',
+      redactionSummary: {
+        requestShape: 'approved_persona_draft_handoff_artifact',
+        sourceArtifact: 'approved_persona_draft_handoff',
+        removedFields: []
+      },
+      createdAt: '2026-03-16T08:00:00.000Z',
+      events: []
+    }])
+
+    registerMemoryWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:listApprovedPersonaDraftProviderSends')
+    const result = await handler?.({}, {
+      draftReviewId: 'review-1'
+    })
+
+    expect(openDatabase).toHaveBeenCalledWith('/tmp/forgetme/sqlite/archive.sqlite')
+    expect(runMigrations).toHaveBeenCalled()
+    expect(listApprovedPersonaDraftProviderSends).toHaveBeenCalledWith(expect.anything(), {
+      draftReviewId: 'review-1'
+    })
+    expect(result).toEqual([expect.objectContaining({
+      draftReviewId: 'review-1',
+      policyKey: 'persona_draft.remote_send_approved'
+    })])
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('sends approved drafts through the ipc handler and closes the database', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    sendApprovedPersonaDraftToProvider.mockResolvedValue({
+      status: 'responded',
+      artifactId: 'pdpe-1',
+      draftReviewId: 'review-1',
+      sourceTurnId: 'turn-1',
+      provider: 'siliconflow',
+      model: 'Qwen/Qwen2.5-72B-Instruct',
+      policyKey: 'persona_draft.remote_send_approved',
+      requestHash: 'hash-1',
+      createdAt: '2026-03-16T08:00:00.000Z'
+    })
+
+    registerMemoryWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:sendApprovedPersonaDraftToProvider')
+    const result = await handler?.({}, {
+      draftReviewId: 'review-1'
+    })
+
+    expect(sendApprovedPersonaDraftToProvider).toHaveBeenCalledWith(expect.anything(), {
+      draftReviewId: 'review-1'
+    })
+    expect(result).toEqual(expect.objectContaining({
+      draftReviewId: 'review-1',
+      policyKey: 'persona_draft.remote_send_approved'
     }))
     expect(close).toHaveBeenCalled()
   })
