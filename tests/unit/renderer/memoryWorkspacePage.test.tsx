@@ -741,6 +741,178 @@ describe('MemoryWorkspacePage', () => {
     expect(await screen.findByText('Exported persona-draft-review-review-1-approved.json')).toBeInTheDocument()
   })
 
+  it('sends an approved draft through the provider boundary and renders the latest send summary', async () => {
+    const sandboxTurn = {
+      turnId: 'turn-sandbox-send-1',
+      sessionId: 'session-sandbox-send-1',
+      ordinal: 1,
+      question: '如果她来写一段关于记录和归档的回复，会怎么写？',
+      provider: null,
+      model: null,
+      contextHash: 'context-hash-sandbox-send-1',
+      promptHash: 'prompt-hash-sandbox-send-1',
+      createdAt: '2026-03-15T00:36:00.000Z',
+      response: {
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' } as const,
+        question: '如果她来写一段关于记录和归档的回复，会怎么写？',
+        expressionMode: 'grounded' as const,
+        workflowKind: 'persona_draft_sandbox' as const,
+        title: 'Memory Workspace · Alice Chen',
+        answer: {
+          summary: 'Reviewed simulation draft generated from archive-backed excerpts for this ask.',
+          displayType: 'derived_summary' as const,
+          citations: []
+        },
+        guardrail: {
+          decision: 'sandbox_review_required' as const,
+          reasonCodes: ['persona_draft_sandbox' as const, 'quote_trace_required' as const],
+          citationCount: 2,
+          sourceKinds: ['file'],
+          fallbackApplied: false
+        },
+        contextCards: [],
+        boundaryRedirect: null,
+        communicationEvidence: {
+          title: 'Communication Evidence',
+          summary: 'Direct archive-backed excerpts related to this ask.',
+          excerpts: [
+            {
+              excerptId: 'ce-1',
+              fileId: 'f-1',
+              fileName: 'chat-1.json',
+              ordinal: 1,
+              speakerDisplayName: 'Alice Chen',
+              text: '我们还是把这些记录留在归档里，后面查起来更稳妥。'
+            }
+          ]
+        },
+        personaDraft: {
+          title: 'Reviewed draft sandbox',
+          disclaimer: 'Simulation draft based on archived expressions. Not a statement from the person.',
+          draft: '可审阅草稿：先把关键记录整理进归档。',
+          reviewState: 'review_required' as const,
+          supportingExcerpts: ['ce-1'],
+          trace: [
+            {
+              traceId: 'trace-1',
+              excerptIds: ['ce-1'],
+              explanation: 'Draft segment 1 stays grounded in Alice Chen excerpt ce-1.'
+            }
+          ]
+        }
+      }
+    }
+
+    const approvedReview = {
+      draftReviewId: 'review-send-1',
+      sourceTurnId: 'turn-sandbox-send-1',
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      workflowKind: 'persona_draft_sandbox' as const,
+      status: 'approved' as const,
+      baseDraft: '可审阅草稿：先把关键记录整理进归档。',
+      editedDraft: '可审阅草稿：先把关键记录整理进归档，再补齐细节。',
+      reviewNotes: 'Approved for provider send.',
+      supportingExcerpts: ['ce-1'],
+      trace: [
+        {
+          traceId: 'trace-1',
+          excerptIds: ['ce-1'],
+          explanation: 'Draft segment 1 stays grounded in Alice Chen excerpt ce-1.'
+        }
+      ],
+      approvedJournalId: 'journal-approved-send-1',
+      rejectedJournalId: null,
+      createdAt: '2026-03-16T01:00:00.000Z',
+      updatedAt: '2026-03-16T01:07:00.000Z'
+    }
+
+    let currentSends: Array<Record<string, unknown>> = []
+    const listApprovedPersonaDraftProviderSends = vi.fn().mockImplementation(async () => currentSends)
+    const sendApprovedPersonaDraftToProvider = vi.fn().mockImplementation(async () => {
+      currentSends = [{
+        artifactId: 'pdpe-1',
+        draftReviewId: 'review-send-1',
+        sourceTurnId: 'turn-sandbox-send-1',
+        provider: 'siliconflow',
+        model: 'Qwen/Qwen2.5-72B-Instruct',
+        policyKey: 'persona_draft.remote_send_approved',
+        requestHash: 'hash-1',
+        redactionSummary: {
+          requestShape: 'approved_persona_draft_handoff_artifact',
+          sourceArtifact: 'approved_persona_draft_handoff',
+          removedFields: []
+        },
+        createdAt: '2026-03-16T08:00:00.000Z',
+        events: [
+          {
+            id: 'event-1',
+            eventType: 'request',
+            payload: {
+              requestShape: 'approved_persona_draft_handoff_artifact'
+            },
+            createdAt: '2026-03-16T08:00:00.000Z'
+          },
+          {
+            id: 'event-2',
+            eventType: 'response',
+            payload: {
+              acknowledgement: 'received'
+            },
+            createdAt: '2026-03-16T08:00:01.000Z'
+          }
+        ]
+      }]
+
+      return {
+        status: 'responded',
+        artifactId: 'pdpe-1',
+        draftReviewId: 'review-send-1',
+        sourceTurnId: 'turn-sandbox-send-1',
+        provider: 'siliconflow',
+        model: 'Qwen/Qwen2.5-72B-Instruct',
+        policyKey: 'persona_draft.remote_send_approved',
+        requestHash: 'hash-1',
+        createdAt: '2026-03-16T08:00:00.000Z'
+      }
+    })
+
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceSession: vi.fn().mockResolvedValue(null),
+      listMemoryWorkspaceCompareSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted: vi.fn().mockResolvedValue(sandboxTurn),
+      getPersonaDraftReviewByTurn: vi.fn().mockResolvedValue(approvedReview),
+      listApprovedPersonaDraftHandoffs: vi.fn().mockResolvedValue([]),
+      listApprovedPersonaDraftProviderSends,
+      sendApprovedPersonaDraftToProvider
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'person', canonicalPersonId: 'cp-1' }} />)
+
+    fireEvent.change(screen.getByLabelText('Ask memory workspace'), {
+      target: { value: '如果她来写一段关于记录和归档的回复，会怎么写？' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+
+    expect(await screen.findByRole('heading', { name: 'Approved Draft Handoff' })).toBeInTheDocument()
+    expect(screen.getByText('Provider Boundary Send')).toBeInTheDocument()
+    expect(screen.getByText('No provider sends yet.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send approved draft' }))
+
+    await waitFor(() => {
+      expect(sendApprovedPersonaDraftToProvider).toHaveBeenCalledWith({
+        draftReviewId: 'review-send-1'
+      })
+    })
+
+    expect(await screen.findByText('response recorded')).toBeInTheDocument()
+    expect(screen.getByText('siliconflow · Qwen/Qwen2.5-72B-Instruct')).toBeInTheDocument()
+    expect(screen.getByText('persona_draft.remote_send_approved')).toBeInTheDocument()
+  })
+
   it('runs compare for an active sandbox response with sandbox workflow metadata and labels', async () => {
     const sandboxQuestion = '如果她来写一段关于记录和归档的回复，会怎么写？'
     const listMemoryWorkspaceSessions = vi.fn().mockResolvedValue([

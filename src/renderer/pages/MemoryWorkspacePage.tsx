@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ApprovedPersonaDraftHandoffRecord,
+  ApprovedPersonaDraftProviderSendArtifact,
   ExportApprovedPersonaDraftResult,
   MemoryWorkspaceCompareMatrixDetail,
   MemoryWorkspaceCompareMatrixRowInput,
@@ -439,6 +440,18 @@ export function MemoryWorkspacePage(props: {
       : async () => null as ExportApprovedPersonaDraftResult | null),
     [archiveApi]
   )
+  const listApprovedPersonaDraftProviderSends = useMemo(
+    () => (typeof archiveApi.listApprovedPersonaDraftProviderSends === 'function'
+      ? archiveApi.listApprovedPersonaDraftProviderSends.bind(archiveApi)
+      : async () => [] as ApprovedPersonaDraftProviderSendArtifact[]),
+    [archiveApi]
+  )
+  const sendApprovedPersonaDraftToProvider = useMemo(
+    () => (typeof archiveApi.sendApprovedPersonaDraftToProvider === 'function'
+      ? archiveApi.sendApprovedPersonaDraftToProvider.bind(archiveApi)
+      : async () => null),
+    [archiveApi]
+  )
   const scopeIdentity = scopeKey(props.scope)
   const scopeRequestRef = useRef(0)
   const [question, setQuestion] = useState(() => initialQuestionForScope(props.scope))
@@ -472,6 +485,8 @@ export function MemoryWorkspacePage(props: {
   const [approvedDraftHandoffDestination, setApprovedDraftHandoffDestination] = useState<string | null>(null)
   const [approvedDraftHandoffsByTurnId, setApprovedDraftHandoffsByTurnId] = useState<Record<string, ApprovedPersonaDraftHandoffRecord[]>>({})
   const [approvedDraftHandoffPendingByTurnId, setApprovedDraftHandoffPendingByTurnId] = useState<Record<string, boolean>>({})
+  const [approvedDraftProviderSendsByTurnId, setApprovedDraftProviderSendsByTurnId] = useState<Record<string, ApprovedPersonaDraftProviderSendArtifact[]>>({})
+  const [approvedDraftProviderSendPendingByTurnId, setApprovedDraftProviderSendPendingByTurnId] = useState<Record<string, boolean>>({})
   const [compareTargetControls, setCompareTargetControls] = useState<CompareTargetControls>(() => readStoredCompareTargetDefaults())
   const [compareJudgeEnabled, setCompareJudgeEnabled] = useState(() => readStoredCompareJudgeDefaults().enabled)
   const [compareJudgeProvider, setCompareJudgeProvider] = useState<NonNullable<RunMemoryWorkspaceCompareJudgeInput['provider']>>(
@@ -507,6 +522,16 @@ export function MemoryWorkspacePage(props: {
     }))
   }
 
+  const syncApprovedDraftProviderSendState = (
+    turnId: string,
+    sends: ApprovedPersonaDraftProviderSendArtifact[]
+  ) => {
+    setApprovedDraftProviderSendsByTurnId((previousState) => ({
+      ...previousState,
+      [turnId]: sends
+    }))
+  }
+
   const refreshApprovedDraftHandoffsForTurn = async (
     turn: MemoryWorkspaceTurnRecord,
     review: MemoryWorkspacePersonaDraftReviewRecord | null,
@@ -528,6 +553,27 @@ export function MemoryWorkspacePage(props: {
     return handoffs
   }
 
+  const refreshApprovedDraftProviderSendsForTurn = async (
+    turn: MemoryWorkspaceTurnRecord,
+    review: MemoryWorkspacePersonaDraftReviewRecord | null,
+    scopeRequestId: number
+  ) => {
+    if (!review || review.status !== 'approved') {
+      syncApprovedDraftProviderSendState(turn.turnId, [])
+      return []
+    }
+
+    const sends = await listApprovedPersonaDraftProviderSends({
+      draftReviewId: review.draftReviewId
+    })
+    if (scopeRequestId !== scopeRequestRef.current) {
+      return []
+    }
+
+    syncApprovedDraftProviderSendState(turn.turnId, sends)
+    return sends
+  }
+
   const refreshDraftReviewForTurn = async (
     turn: MemoryWorkspaceTurnRecord,
     scopeRequestId: number
@@ -539,6 +585,7 @@ export function MemoryWorkspacePage(props: {
 
     syncDraftReviewState(turn, review)
     await refreshApprovedDraftHandoffsForTurn(turn, review, scopeRequestId)
+    await refreshApprovedDraftProviderSendsForTurn(turn, review, scopeRequestId)
     return review
   }
 
@@ -715,6 +762,8 @@ export function MemoryWorkspacePage(props: {
     setApprovedDraftHandoffDestination(null)
     setApprovedDraftHandoffsByTurnId({})
     setApprovedDraftHandoffPendingByTurnId({})
+    setApprovedDraftProviderSendsByTurnId({})
+    setApprovedDraftProviderSendPendingByTurnId({})
     setCompareTargetControls(storedCompareTargetDefaults)
     setCompareJudgeEnabled(storedCompareJudgeDefaults.enabled)
     setCompareJudgeProvider(storedCompareJudgeDefaults.provider)
@@ -833,6 +882,46 @@ export function MemoryWorkspacePage(props: {
       })
     })
   }, [draftReviewsByTurnId, listApprovedPersonaDraftHandoffs, turns])
+
+  useEffect(() => {
+    const sandboxTurns = turns.filter(isSandboxDraftTurn)
+    if (sandboxTurns.length === 0) {
+      setApprovedDraftProviderSendsByTurnId({})
+      setApprovedDraftProviderSendPendingByTurnId({})
+      return
+    }
+
+    const scopeRequestId = scopeRequestRef.current
+
+    void Promise.all(
+      sandboxTurns.map(async (turn) => {
+        const review = draftReviewsByTurnId[turn.turnId]
+        if (!review || review.status !== 'approved') {
+          return [turn.turnId, []] as const
+        }
+
+        return [
+          turn.turnId,
+          await listApprovedPersonaDraftProviderSends({
+            draftReviewId: review.draftReviewId
+          })
+        ] as const
+      })
+    ).then((entries) => {
+      if (scopeRequestId !== scopeRequestRef.current) {
+        return
+      }
+
+      setApprovedDraftProviderSendsByTurnId(Object.fromEntries(entries) as Record<string, ApprovedPersonaDraftProviderSendArtifact[]>)
+      setApprovedDraftProviderSendPendingByTurnId((previousState) => {
+        const nextPending: Record<string, boolean> = {}
+        for (const turn of sandboxTurns) {
+          nextPending[turn.turnId] = previousState[turn.turnId] ?? false
+        }
+        return nextPending
+      })
+    })
+  }, [draftReviewsByTurnId, listApprovedPersonaDraftProviderSends, turns])
 
   const handleSelectSession = async (sessionId: string) => {
     const scopeRequestId = scopeRequestRef.current
@@ -1268,6 +1357,38 @@ export function MemoryWorkspacePage(props: {
     }
   }
 
+  const handleSendApprovedDraft = async (turnId: string) => {
+    const turn = turnsById.get(turnId)
+    const review = draftReviewsByTurnId[turnId]
+    if (!turn || !review || review.status !== 'approved') {
+      return
+    }
+
+    const scopeRequestId = scopeRequestRef.current
+    setApprovedDraftProviderSendPendingByTurnId((previousState) => ({
+      ...previousState,
+      [turnId]: true
+    }))
+
+    try {
+      const sent = await sendApprovedPersonaDraftToProvider({
+        draftReviewId: review.draftReviewId
+      })
+      if (!sent || scopeRequestId !== scopeRequestRef.current) {
+        return
+      }
+
+      await refreshApprovedDraftProviderSendsForTurn(turn, review, scopeRequestId)
+    } finally {
+      if (scopeRequestId === scopeRequestRef.current) {
+        setApprovedDraftProviderSendPendingByTurnId((previousState) => ({
+          ...previousState,
+          [turnId]: false
+        }))
+      }
+    }
+  }
+
   return (
     <section>
       <form
@@ -1447,6 +1568,8 @@ export function MemoryWorkspacePage(props: {
         approvedDraftHandoffDestination={approvedDraftHandoffDestination}
         approvedDraftHandoffsByTurnId={approvedDraftHandoffsByTurnId}
         approvedDraftHandoffPendingByTurnId={approvedDraftHandoffPendingByTurnId}
+        approvedDraftProviderSendsByTurnId={approvedDraftProviderSendsByTurnId}
+        approvedDraftProviderSendPendingByTurnId={approvedDraftProviderSendPendingByTurnId}
         onSelectMatrixSession={handleSelectCompareMatrix}
         onOpenMatrixRowCompare={handleOpenMatrixRowCompare}
         onSelectSession={handleSelectSession}
@@ -1470,6 +1593,9 @@ export function MemoryWorkspacePage(props: {
         }}
         onExportApprovedDraft={(turnId) => {
           void handleExportApprovedDraft(turnId)
+        }}
+        onSendApprovedDraft={(turnId) => {
+          void handleSendApprovedDraft(turnId)
         }}
         onOpenPerson={props.onOpenPerson}
         onOpenGroup={props.onOpenGroup}

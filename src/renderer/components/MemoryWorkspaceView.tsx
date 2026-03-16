@@ -1,5 +1,6 @@
 import type {
   ApprovedPersonaDraftHandoffRecord,
+  ApprovedPersonaDraftProviderSendArtifact,
   MemoryWorkspaceBoundaryRedirect,
   MemoryWorkspaceCompareMatrixRowRecord,
   MemoryWorkspaceCompareMatrixSummary,
@@ -378,6 +379,8 @@ export function MemoryWorkspaceView(props: {
   approvedDraftHandoffDestination?: string | null
   approvedDraftHandoffsByTurnId?: Record<string, ApprovedPersonaDraftHandoffRecord[]>
   approvedDraftHandoffPendingByTurnId?: Record<string, boolean>
+  approvedDraftProviderSendsByTurnId?: Record<string, ApprovedPersonaDraftProviderSendArtifact[]>
+  approvedDraftProviderSendPendingByTurnId?: Record<string, boolean>
   onSelectMatrixSession?: (matrixSessionId: string) => void
   onOpenMatrixRowCompare?: (row: MemoryWorkspaceCompareMatrixRowRecord) => void
   onSelectSession?: (sessionId: string) => void
@@ -392,6 +395,7 @@ export function MemoryWorkspaceView(props: {
   onRejectDraftReview?: (turnId: string) => void
   onChooseApprovedDraftHandoffDestination?: () => void
   onExportApprovedDraft?: (turnId: string) => void
+  onSendApprovedDraft?: (turnId: string) => void
   onOpenPerson?: (canonicalPersonId: string) => void
   onOpenGroup?: (anchorPersonId: string) => void
   onOpenEvidenceFile?: (fileId: string) => void
@@ -536,9 +540,14 @@ export function MemoryWorkspaceView(props: {
                 <ApprovedPersonaDraftHandoffPanel
                   destination={props.approvedDraftHandoffDestination ?? null}
                   handoffs={props.approvedDraftHandoffsByTurnId?.[turn.turnId] ?? []}
-                  isPending={props.approvedDraftHandoffPendingByTurnId?.[turn.turnId] ?? false}
+                  providerSends={props.approvedDraftProviderSendsByTurnId?.[turn.turnId] ?? []}
+                  isPending={
+                    (props.approvedDraftHandoffPendingByTurnId?.[turn.turnId] ?? false)
+                    || (props.approvedDraftProviderSendPendingByTurnId?.[turn.turnId] ?? false)
+                  }
                   onChooseExportDestination={props.onChooseApprovedDraftHandoffDestination}
                   onExportApprovedDraft={props.onExportApprovedDraft ? () => props.onExportApprovedDraft?.(turn.turnId) : undefined}
+                  onSendApprovedDraft={props.onSendApprovedDraft ? () => props.onSendApprovedDraft?.(turn.turnId) : undefined}
                 />
               ) : null}
             </section>
