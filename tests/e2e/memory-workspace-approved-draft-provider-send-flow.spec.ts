@@ -67,7 +67,18 @@ test('memory workspace approved draft handoff sends an approved draft through pr
   await expect(sandboxTurn.getByText('response recorded')).toBeVisible()
   await expect(sandboxTurn.getByText('siliconflow')).toBeVisible()
   await expect(sandboxTurn.getByText(/Qwen\/Qwen2\.5-72B-Instruct/)).toBeVisible()
-  await expect(sandboxTurn.getByText('persona_draft.remote_send_approved')).toBeVisible()
+  await expect(sandboxTurn.locator('p', { hasText: 'persona_draft.remote_send_approved' })).toBeVisible()
+  await expect(sandboxTurn.getByText('Latest send audit')).toBeVisible()
+  const requestAudit = sandboxTurn.locator('summary').filter({ hasText: /^request · / })
+  const responseAudit = sandboxTurn.locator('summary').filter({ hasText: /^response · / })
+  await expect(requestAudit).toBeVisible()
+  await expect(responseAudit).toBeVisible()
+
+  await requestAudit.click()
+  await expect(sandboxTurn.locator('pre').filter({ hasText: 'approved_persona_draft_handoff_artifact' })).toBeVisible()
+
+  await responseAudit.click()
+  await expect(sandboxTurn.locator('pre').filter({ hasText: 'acknowledgement' })).toBeVisible()
 
   await electronApp.close()
 })
