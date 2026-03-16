@@ -741,7 +741,7 @@ describe('MemoryWorkspacePage', () => {
     expect(await screen.findByText('Exported persona-draft-review-review-1-approved.json')).toBeInTheDocument()
   })
 
-  it('sends an approved draft through the provider boundary and renders the latest send summary', async () => {
+  it('sends an approved draft through the provider boundary and renders the latest send audit detail', async () => {
     const sandboxTurn = {
       turnId: 'turn-sandbox-send-1',
       sessionId: 'session-sandbox-send-1',
@@ -911,6 +911,11 @@ describe('MemoryWorkspacePage', () => {
     expect(await screen.findByText('response recorded')).toBeInTheDocument()
     expect(screen.getByText('siliconflow · Qwen/Qwen2.5-72B-Instruct')).toBeInTheDocument()
     expect(screen.getByText('persona_draft.remote_send_approved')).toBeInTheDocument()
+    expect(screen.getByText('Latest send audit')).toBeInTheDocument()
+    expect(screen.getByText('request · 2026-03-16T08:00:00.000Z')).toBeInTheDocument()
+    expect(screen.getByText('response · 2026-03-16T08:00:01.000Z')).toBeInTheDocument()
+    expect(screen.getByText(/approved_persona_draft_handoff_artifact/)).toBeInTheDocument()
+    expect(screen.getByText(/acknowledgement/)).toBeInTheDocument()
   })
 
   it('runs compare for an active sandbox response with sandbox workflow metadata and labels', async () => {

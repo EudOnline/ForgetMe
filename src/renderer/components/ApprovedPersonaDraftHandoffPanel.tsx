@@ -3,6 +3,10 @@ import type {
   ApprovedPersonaDraftProviderSendArtifact
 } from '../../shared/archiveContracts'
 
+function formatPayload(payload: Record<string, unknown>) {
+  return JSON.stringify(payload, null, 2)
+}
+
 export function ApprovedPersonaDraftHandoffPanel(props: {
   destination: string | null
   handoffs: ApprovedPersonaDraftHandoffRecord[]
@@ -58,6 +62,17 @@ export function ApprovedPersonaDraftHandoffPanel(props: {
             <p>{latestProviderSend.provider} · {latestProviderSend.model}</p>
             <p>{latestProviderSend.policyKey}</p>
             <p>{latestProviderSend.createdAt}</p>
+            {latestProviderSend.events.length > 0 ? (
+              <section aria-label="Latest send audit">
+                <h5>Latest send audit</h5>
+                {latestProviderSend.events.map((event) => (
+                  <details key={event.id}>
+                    <summary>{event.eventType} · {event.createdAt}</summary>
+                    <pre>{formatPayload(event.payload)}</pre>
+                  </details>
+                ))}
+              </section>
+            ) : null}
           </>
         ) : (
           <p>No provider sends yet.</p>
