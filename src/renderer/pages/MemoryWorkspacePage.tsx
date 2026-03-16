@@ -9,6 +9,7 @@ import type {
   MemoryWorkspaceCompareRunRecord,
   MemoryWorkspaceCompareSessionSummary,
   MemoryWorkspaceCitation,
+  MemoryWorkspacePersonaDraftReviewRecord,
   MemoryWorkspaceScope,
   MemoryWorkspaceSessionSummary,
   MemoryWorkspaceSuggestedAction,
@@ -38,6 +39,11 @@ type CompareTargetControls = {
   siliconflowModel: string
   openrouterEnabled: boolean
   openrouterModel: string
+}
+
+type DraftReviewEditorState = {
+  editedDraft: string
+  reviewNotes: string
 }
 
 function defaultCompareJudgeDefaults(): CompareJudgeDefaults {
@@ -349,6 +355,20 @@ function parseCompareMatrixRows(input: string) {
   }
 }
 
+function isSandboxDraftTurn(turn: MemoryWorkspaceTurnRecord) {
+  return turn.response.workflowKind === 'persona_draft_sandbox' && turn.response.personaDraft !== null
+}
+
+function createDraftReviewEditorState(
+  turn: MemoryWorkspaceTurnRecord,
+  review: MemoryWorkspacePersonaDraftReviewRecord | null
+): DraftReviewEditorState {
+  return {
+    editedDraft: review?.editedDraft ?? turn.response.personaDraft?.draft ?? '',
+    reviewNotes: review?.reviewNotes ?? ''
+  }
+}
+
 export function MemoryWorkspacePage(props: {
   scope: MemoryWorkspaceScope
   onOpenPerson?: (canonicalPersonId: string) => void
@@ -373,6 +393,30 @@ export function MemoryWorkspacePage(props: {
     () => (typeof archiveApi.getMemoryWorkspaceCompareMatrix === 'function'
       ? archiveApi.getMemoryWorkspaceCompareMatrix.bind(archiveApi)
       : async () => null as MemoryWorkspaceCompareMatrixDetail | null),
+    [archiveApi]
+  )
+  const getPersonaDraftReviewByTurn = useMemo(
+    () => (typeof archiveApi.getPersonaDraftReviewByTurn === 'function'
+      ? archiveApi.getPersonaDraftReviewByTurn.bind(archiveApi)
+      : async () => null as MemoryWorkspacePersonaDraftReviewRecord | null),
+    [archiveApi]
+  )
+  const createPersonaDraftReviewFromTurn = useMemo(
+    () => (typeof archiveApi.createPersonaDraftReviewFromTurn === 'function'
+      ? archiveApi.createPersonaDraftReviewFromTurn.bind(archiveApi)
+      : async () => null as MemoryWorkspacePersonaDraftReviewRecord | null),
+    [archiveApi]
+  )
+  const updatePersonaDraftReview = useMemo(
+    () => (typeof archiveApi.updatePersonaDraftReview === 'function'
+      ? archiveApi.updatePersonaDraftReview.bind(archiveApi)
+      : async () => null as MemoryWorkspacePersonaDraftReviewRecord | null),
+    [archiveApi]
+  )
+  const transitionPersonaDraftReview = useMemo(
+    () => (typeof archiveApi.transitionPersonaDraftReview === 'function'
+      ? archiveApi.transitionPersonaDraftReview.bind(archiveApi)
+      : async () => null as MemoryWorkspacePersonaDraftReviewRecord | null),
     [archiveApi]
   )
   const scopeIdentity = scopeKey(props.scope)
@@ -402,6 +446,9 @@ export function MemoryWorkspacePage(props: {
   const [emptyStateMessage, setEmptyStateMessage] = useState<string | null>(null)
   const [compareEmptyStateMessage, setCompareEmptyStateMessage] = useState<string | null>(null)
   const [matrixError, setMatrixError] = useState<string | null>(null)
+  const [draftReviewsByTurnId, setDraftReviewsByTurnId] = useState<Record<string, MemoryWorkspacePersonaDraftReviewRecord | null>>({})
+  const [draftReviewEditorsByTurnId, setDraftReviewEditorsByTurnId] = useState<Record<string, DraftReviewEditorState>>({})
+  const [draftReviewPendingByTurnId, setDraftReviewPendingByTurnId] = useState<Record<string, boolean>>({})
   const [compareTargetControls, setCompareTargetControls] = useState<CompareTargetControls>(() => readStoredCompareTargetDefaults())
   const [compareJudgeEnabled, setCompareJudgeEnabled] = useState(() => readStoredCompareJudgeDefaults().enabled)
   const [compareJudgeProvider, setCompareJudgeProvider] = useState<NonNullable<RunMemoryWorkspaceCompareJudgeInput['provider']>>(
@@ -411,6 +458,34 @@ export function MemoryWorkspacePage(props: {
   const selectedCompareSummary = compareSessionSummaries.find((summary) => summary.compareSessionId === selectedCompareSessionId) ?? null
   const selectedCompareTargets = buildCompareTargets(compareTargetControls)
   const compareUsesCustomTargets = !compareTargetControlsMatchDefaults(compareTargetControls)
+  const turnsById = useMemo(() => new Map(turns.map((turn) => [turn.turnId, turn])), [turns])
+
+  const syncDraftReviewState = (
+    turn: MemoryWorkspaceTurnRecord,
+    review: MemoryWorkspacePersonaDraftReviewRecord | null
+  ) => {
+    setDraftReviewsByTurnId((previousState) => ({
+      ...previousState,
+      [turn.turnId]: review
+    }))
+    setDraftReviewEditorsByTurnId((previousState) => ({
+      ...previousState,
+      [turn.turnId]: createDraftReviewEditorState(turn, review)
+    }))
+  }
+
+  const refreshDraftReviewForTurn = async (
+    turn: MemoryWorkspaceTurnRecord,
+    scopeRequestId: number
+  ) => {
+    const review = await getPersonaDraftReviewByTurn(turn.turnId)
+    if (scopeRequestId !== scopeRequestRef.current) {
+      return null
+    }
+
+    syncDraftReviewState(turn, review)
+    return review
+  }
 
   const loadSessionDetail = async (sessionId: string, scopeRequestId: number, preserveTurns = false) => {
     const session = await archiveApi.getMemoryWorkspaceSession(sessionId)
@@ -579,6 +654,9 @@ export function MemoryWorkspacePage(props: {
     setEmptyStateMessage(null)
     setCompareEmptyStateMessage(null)
     setMatrixError(null)
+    setDraftReviewsByTurnId({})
+    setDraftReviewEditorsByTurnId({})
+    setDraftReviewPendingByTurnId({})
     setCompareTargetControls(storedCompareTargetDefaults)
     setCompareJudgeEnabled(storedCompareJudgeDefaults.enabled)
     setCompareJudgeProvider(storedCompareJudgeDefaults.provider)
@@ -620,6 +698,43 @@ export function MemoryWorkspacePage(props: {
       model: compareJudgeModel
     })
   }, [compareJudgeEnabled, compareJudgeProvider, compareJudgeModel])
+
+  useEffect(() => {
+    const sandboxTurns = turns.filter(isSandboxDraftTurn)
+    if (sandboxTurns.length === 0) {
+      setDraftReviewsByTurnId({})
+      setDraftReviewEditorsByTurnId({})
+      setDraftReviewPendingByTurnId({})
+      return
+    }
+
+    const scopeRequestId = scopeRequestRef.current
+
+    void Promise.all(
+      sandboxTurns.map(async (turn) => [turn.turnId, await getPersonaDraftReviewByTurn(turn.turnId)] as const)
+    ).then((entries) => {
+      if (scopeRequestId !== scopeRequestRef.current) {
+        return
+      }
+
+      const reviewByTurnId = Object.fromEntries(entries) as Record<string, MemoryWorkspacePersonaDraftReviewRecord | null>
+      const nextEditors: Record<string, DraftReviewEditorState> = {}
+
+      for (const turn of sandboxTurns) {
+        nextEditors[turn.turnId] = createDraftReviewEditorState(turn, reviewByTurnId[turn.turnId] ?? null)
+      }
+
+      setDraftReviewsByTurnId(reviewByTurnId)
+      setDraftReviewEditorsByTurnId(nextEditors)
+      setDraftReviewPendingByTurnId((previousState) => {
+        const nextPending: Record<string, boolean> = {}
+        for (const turn of sandboxTurns) {
+          nextPending[turn.turnId] = previousState[turn.turnId] ?? false
+        }
+        return nextPending
+      })
+    })
+  }, [getPersonaDraftReviewByTurn, turns])
 
   const handleSelectSession = async (sessionId: string) => {
     const scopeRequestId = scopeRequestRef.current
@@ -876,6 +991,136 @@ export function MemoryWorkspacePage(props: {
     }
   }
 
+  const handleDraftReviewEditedDraftChange = (turnId: string, value: string) => {
+    const turn = turnsById.get(turnId)
+    if (!turn) {
+      return
+    }
+
+    setDraftReviewEditorsByTurnId((previousState) => ({
+      ...previousState,
+      [turnId]: {
+        editedDraft: value,
+        reviewNotes: previousState[turnId]?.reviewNotes ?? createDraftReviewEditorState(turn, draftReviewsByTurnId[turnId] ?? null).reviewNotes
+      }
+    }))
+  }
+
+  const handleDraftReviewNotesChange = (turnId: string, value: string) => {
+    const turn = turnsById.get(turnId)
+    if (!turn) {
+      return
+    }
+
+    setDraftReviewEditorsByTurnId((previousState) => ({
+      ...previousState,
+      [turnId]: {
+        editedDraft: previousState[turnId]?.editedDraft ?? createDraftReviewEditorState(turn, draftReviewsByTurnId[turnId] ?? null).editedDraft,
+        reviewNotes: value
+      }
+    }))
+  }
+
+  const handleStartDraftReview = async (turnId: string) => {
+    const turn = turnsById.get(turnId)
+    if (!turn) {
+      return
+    }
+
+    const scopeRequestId = scopeRequestRef.current
+    setDraftReviewPendingByTurnId((previousState) => ({
+      ...previousState,
+      [turnId]: true
+    }))
+
+    try {
+      const review = await createPersonaDraftReviewFromTurn(turnId)
+      if (!review || scopeRequestId !== scopeRequestRef.current) {
+        return
+      }
+
+      await refreshDraftReviewForTurn(turn, scopeRequestId)
+    } finally {
+      if (scopeRequestId === scopeRequestRef.current) {
+        setDraftReviewPendingByTurnId((previousState) => ({
+          ...previousState,
+          [turnId]: false
+        }))
+      }
+    }
+  }
+
+  const handleSaveDraftReviewEdits = async (turnId: string) => {
+    const turn = turnsById.get(turnId)
+    const review = draftReviewsByTurnId[turnId]
+    const editorState = draftReviewEditorsByTurnId[turnId]
+    if (!turn || !review || !editorState) {
+      return
+    }
+
+    const scopeRequestId = scopeRequestRef.current
+    setDraftReviewPendingByTurnId((previousState) => ({
+      ...previousState,
+      [turnId]: true
+    }))
+
+    try {
+      const updatedReview = await updatePersonaDraftReview({
+        draftReviewId: review.draftReviewId,
+        editedDraft: editorState.editedDraft,
+        reviewNotes: editorState.reviewNotes
+      })
+      if (!updatedReview || scopeRequestId !== scopeRequestRef.current) {
+        return
+      }
+
+      await refreshDraftReviewForTurn(turn, scopeRequestId)
+    } finally {
+      if (scopeRequestId === scopeRequestRef.current) {
+        setDraftReviewPendingByTurnId((previousState) => ({
+          ...previousState,
+          [turnId]: false
+        }))
+      }
+    }
+  }
+
+  const handleTransitionDraftReview = async (
+    turnId: string,
+    status: MemoryWorkspacePersonaDraftReviewRecord['status']
+  ) => {
+    const turn = turnsById.get(turnId)
+    const review = draftReviewsByTurnId[turnId]
+    if (!turn || !review) {
+      return
+    }
+
+    const scopeRequestId = scopeRequestRef.current
+    setDraftReviewPendingByTurnId((previousState) => ({
+      ...previousState,
+      [turnId]: true
+    }))
+
+    try {
+      const transitionedReview = await transitionPersonaDraftReview({
+        draftReviewId: review.draftReviewId,
+        status
+      })
+      if (!transitionedReview || scopeRequestId !== scopeRequestRef.current) {
+        return
+      }
+
+      await refreshDraftReviewForTurn(turn, scopeRequestId)
+    } finally {
+      if (scopeRequestId === scopeRequestRef.current) {
+        setDraftReviewPendingByTurnId((previousState) => ({
+          ...previousState,
+          [turnId]: false
+        }))
+      }
+    }
+  }
+
   return (
     <section>
       <form
@@ -1049,11 +1294,27 @@ export function MemoryWorkspacePage(props: {
         isLoadingCompareSessions={isLoadingCompareSessions}
         emptyStateMessage={emptyStateMessage}
         compareEmptyStateMessage={compareEmptyStateMessage}
+        draftReviewsByTurnId={draftReviewsByTurnId}
+        draftReviewEditorsByTurnId={draftReviewEditorsByTurnId}
+        draftReviewPendingByTurnId={draftReviewPendingByTurnId}
         onSelectMatrixSession={handleSelectCompareMatrix}
         onOpenMatrixRowCompare={handleOpenMatrixRowCompare}
         onSelectSession={handleSelectSession}
         onSelectCompareSession={handleSelectCompareSession}
         onStartNewSession={handleStartNewSession}
+        onStartDraftReview={handleStartDraftReview}
+        onDraftReviewEditedDraftChange={handleDraftReviewEditedDraftChange}
+        onDraftReviewNotesChange={handleDraftReviewNotesChange}
+        onSaveDraftReviewEdits={handleSaveDraftReviewEdits}
+        onMarkDraftReviewInReview={(turnId) => {
+          void handleTransitionDraftReview(turnId, 'in_review')
+        }}
+        onApproveDraftReview={(turnId) => {
+          void handleTransitionDraftReview(turnId, 'approved')
+        }}
+        onRejectDraftReview={(turnId) => {
+          void handleTransitionDraftReview(turnId, 'rejected')
+        }}
         onOpenPerson={props.onOpenPerson}
         onOpenGroup={props.onOpenGroup}
         onOpenEvidenceFile={props.onOpenEvidenceFile}

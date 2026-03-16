@@ -412,6 +412,182 @@ describe('MemoryWorkspacePage', () => {
     expect(screen.getByText('Draft segment 1 stays grounded in Alice Chen excerpt ce-1.')).toBeInTheDocument()
   })
 
+  it('starts, edits, reviews, and approves a persona draft review from the active sandbox turn', async () => {
+    const sandboxTurn = {
+      turnId: 'turn-sandbox-review-1',
+      sessionId: 'session-sandbox-review-1',
+      ordinal: 1,
+      question: '如果她来写一段关于记录和归档的回复，会怎么写？',
+      provider: null,
+      model: null,
+      contextHash: 'context-hash-sandbox-review-1',
+      promptHash: 'prompt-hash-sandbox-review-1',
+      createdAt: '2026-03-15T00:35:00.000Z',
+      response: {
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' } as const,
+        question: '如果她来写一段关于记录和归档的回复，会怎么写？',
+        expressionMode: 'grounded' as const,
+        workflowKind: 'persona_draft_sandbox' as const,
+        title: 'Memory Workspace · Alice Chen',
+        answer: {
+          summary: 'Reviewed simulation draft generated from archive-backed excerpts for this ask.',
+          displayType: 'derived_summary' as const,
+          citations: []
+        },
+        guardrail: {
+          decision: 'sandbox_review_required' as const,
+          reasonCodes: ['persona_draft_sandbox' as const, 'quote_trace_required' as const],
+          citationCount: 2,
+          sourceKinds: ['file'],
+          fallbackApplied: false
+        },
+        contextCards: [],
+        boundaryRedirect: null,
+        communicationEvidence: {
+          title: 'Communication Evidence',
+          summary: 'Direct archive-backed excerpts related to this ask.',
+          excerpts: [
+            {
+              excerptId: 'ce-1',
+              fileId: 'f-1',
+              fileName: 'chat-1.json',
+              ordinal: 1,
+              speakerDisplayName: 'Alice Chen',
+              text: '我们还是把这些记录留在归档里，后面查起来更稳妥。'
+            }
+          ]
+        },
+        personaDraft: {
+          title: 'Reviewed draft sandbox',
+          disclaimer: 'Simulation draft based on archived expressions. Not a statement from the person.',
+          draft: '可审阅草稿：先把关键记录整理进归档。',
+          reviewState: 'review_required' as const,
+          supportingExcerpts: ['ce-1'],
+          trace: [
+            {
+              traceId: 'trace-1',
+              excerptIds: ['ce-1'],
+              explanation: 'Draft segment 1 stays grounded in Alice Chen excerpt ce-1.'
+            }
+          ]
+        }
+      }
+    }
+
+    let currentReview: Record<string, unknown> | null = null
+    const getPersonaDraftReviewByTurn = vi.fn().mockImplementation(async () => currentReview)
+    const createPersonaDraftReviewFromTurn = vi.fn().mockImplementation(async () => {
+      currentReview = {
+        draftReviewId: 'review-1',
+        sourceTurnId: 'turn-sandbox-review-1',
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+        workflowKind: 'persona_draft_sandbox',
+        status: 'draft',
+        baseDraft: '可审阅草稿：先把关键记录整理进归档。',
+        editedDraft: '可审阅草稿：先把关键记录整理进归档。',
+        reviewNotes: '',
+        supportingExcerpts: ['ce-1'],
+        trace: [
+          {
+            traceId: 'trace-1',
+            excerptIds: ['ce-1'],
+            explanation: 'Draft segment 1 stays grounded in Alice Chen excerpt ce-1.'
+          }
+        ],
+        approvedJournalId: null,
+        rejectedJournalId: null,
+        createdAt: '2026-03-16T01:00:00.000Z',
+        updatedAt: '2026-03-16T01:00:00.000Z'
+      }
+
+      return currentReview
+    })
+    const updatePersonaDraftReview = vi.fn().mockImplementation(async (input: {
+      draftReviewId: string
+      editedDraft?: string
+      reviewNotes?: string
+    }) => {
+      currentReview = {
+        ...currentReview,
+        draftReviewId: input.draftReviewId,
+        editedDraft: input.editedDraft ?? (currentReview as { editedDraft?: string } | null)?.editedDraft ?? '',
+        reviewNotes: input.reviewNotes ?? (currentReview as { reviewNotes?: string } | null)?.reviewNotes ?? '',
+        updatedAt: '2026-03-16T01:05:00.000Z'
+      }
+
+      return currentReview
+    })
+    const transitionPersonaDraftReview = vi.fn().mockImplementation(async (input: {
+      draftReviewId: string
+      status: 'draft' | 'in_review' | 'approved' | 'rejected'
+    }) => {
+      currentReview = {
+        ...currentReview,
+        draftReviewId: input.draftReviewId,
+        status: input.status,
+        approvedJournalId: input.status === 'approved' ? 'journal-approved-1' : null,
+        rejectedJournalId: input.status === 'rejected' ? 'journal-rejected-1' : null,
+        updatedAt: input.status === 'approved'
+          ? '2026-03-16T01:07:00.000Z'
+          : '2026-03-16T01:06:00.000Z'
+      }
+
+      return currentReview
+    })
+
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceSession: vi.fn().mockResolvedValue(null),
+      listMemoryWorkspaceCompareSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted: vi.fn().mockResolvedValue(sandboxTurn),
+      getPersonaDraftReviewByTurn,
+      createPersonaDraftReviewFromTurn,
+      updatePersonaDraftReview,
+      transitionPersonaDraftReview
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'person', canonicalPersonId: 'cp-1' }} />)
+
+    fireEvent.change(screen.getByLabelText('Ask memory workspace'), {
+      target: { value: '如果她来写一段关于记录和归档的回复，会怎么写？' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+
+    expect(await screen.findByRole('button', { name: 'Start draft review' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start draft review' }))
+
+    const bodyField = await screen.findByLabelText('Draft review body')
+    const notesField = screen.getByLabelText('Draft review notes')
+    expect(bodyField).toHaveValue('可审阅草稿：先把关键记录整理进归档。')
+
+    fireEvent.change(bodyField, {
+      target: { value: '可审阅草稿：先把关键记录整理进归档，再补齐细节。' }
+    })
+    fireEvent.change(notesField, {
+      target: { value: 'Sharper and easier to reuse.' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft edits' }))
+
+    await waitFor(() => {
+      expect(updatePersonaDraftReview).toHaveBeenCalledWith({
+        draftReviewId: 'review-1',
+        editedDraft: '可审阅草稿：先把关键记录整理进归档，再补齐细节。',
+        reviewNotes: 'Sharper and easier to reuse.'
+      })
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark in review' }))
+    expect(await screen.findByText('Status: in review')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve draft' }))
+    expect(await screen.findByText('Status: approved')).toBeInTheDocument()
+    expect(screen.getByLabelText('Draft review body')).toBeDisabled()
+    expect(screen.getByLabelText('Draft review notes')).toBeDisabled()
+  })
+
   it('runs compare for an active sandbox response with sandbox workflow metadata and labels', async () => {
     const sandboxQuestion = '如果她来写一段关于记录和归档的回复，会怎么写？'
     const listMemoryWorkspaceSessions = vi.fn().mockResolvedValue([

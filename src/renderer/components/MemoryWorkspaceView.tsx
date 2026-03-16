@@ -5,6 +5,7 @@ import type {
   MemoryWorkspaceCompareRunRecord,
   MemoryWorkspaceCompareSessionSummary,
   MemoryWorkspaceCitation,
+  MemoryWorkspacePersonaDraftReviewRecord,
   MemoryWorkspaceResponse,
   MemoryWorkspaceScope,
   MemoryWorkspaceSessionSummary,
@@ -12,6 +13,7 @@ import type {
   MemoryWorkspaceSuggestedAsk,
   MemoryWorkspaceTurnRecord
 } from '../../shared/archiveContracts'
+import { PersonaDraftReviewPanel } from './PersonaDraftReviewPanel'
 
 function formatDisplayType(displayType: string) {
   return displayType.replace(/_/g, ' ')
@@ -365,11 +367,24 @@ export function MemoryWorkspaceView(props: {
   isLoadingCompareSessions?: boolean
   emptyStateMessage?: string | null
   compareEmptyStateMessage?: string | null
+  draftReviewsByTurnId?: Record<string, MemoryWorkspacePersonaDraftReviewRecord | null>
+  draftReviewEditorsByTurnId?: Record<string, {
+    editedDraft: string
+    reviewNotes: string
+  }>
+  draftReviewPendingByTurnId?: Record<string, boolean>
   onSelectMatrixSession?: (matrixSessionId: string) => void
   onOpenMatrixRowCompare?: (row: MemoryWorkspaceCompareMatrixRowRecord) => void
   onSelectSession?: (sessionId: string) => void
   onSelectCompareSession?: (compareSessionId: string) => void
   onStartNewSession?: () => void
+  onStartDraftReview?: (turnId: string) => void
+  onDraftReviewEditedDraftChange?: (turnId: string, value: string) => void
+  onDraftReviewNotesChange?: (turnId: string, value: string) => void
+  onSaveDraftReviewEdits?: (turnId: string) => void
+  onMarkDraftReviewInReview?: (turnId: string) => void
+  onApproveDraftReview?: (turnId: string) => void
+  onRejectDraftReview?: (turnId: string) => void
   onOpenPerson?: (canonicalPersonId: string) => void
   onOpenGroup?: (anchorPersonId: string) => void
   onOpenEvidenceFile?: (fileId: string) => void
@@ -481,6 +496,32 @@ export function MemoryWorkspaceView(props: {
               <h3>{turn.question}</h3>
               <p>{turn.createdAt}</p>
               {renderResponse(turn.response, props)}
+              {turn.response.personaDraft ? (
+                <PersonaDraftReviewPanel
+                  review={props.draftReviewsByTurnId?.[turn.turnId] ?? null}
+                  editedDraft={
+                    props.draftReviewEditorsByTurnId?.[turn.turnId]?.editedDraft
+                    ?? turn.response.personaDraft.draft
+                  }
+                  reviewNotes={props.draftReviewEditorsByTurnId?.[turn.turnId]?.reviewNotes ?? ''}
+                  isPending={props.draftReviewPendingByTurnId?.[turn.turnId] ?? false}
+                  onStartDraftReview={props.onStartDraftReview ? () => props.onStartDraftReview?.(turn.turnId) : undefined}
+                  onEditedDraftChange={
+                    props.onDraftReviewEditedDraftChange
+                      ? (value) => props.onDraftReviewEditedDraftChange?.(turn.turnId, value)
+                      : undefined
+                  }
+                  onReviewNotesChange={
+                    props.onDraftReviewNotesChange
+                      ? (value) => props.onDraftReviewNotesChange?.(turn.turnId, value)
+                      : undefined
+                  }
+                  onSaveDraftEdits={props.onSaveDraftReviewEdits ? () => props.onSaveDraftReviewEdits?.(turn.turnId) : undefined}
+                  onMarkInReview={props.onMarkDraftReviewInReview ? () => props.onMarkDraftReviewInReview?.(turn.turnId) : undefined}
+                  onApproveDraft={props.onApproveDraftReview ? () => props.onApproveDraftReview?.(turn.turnId) : undefined}
+                  onRejectDraft={props.onRejectDraftReview ? () => props.onRejectDraftReview?.(turn.turnId) : undefined}
+                />
+              ) : null}
             </section>
           ))}
         </section>
