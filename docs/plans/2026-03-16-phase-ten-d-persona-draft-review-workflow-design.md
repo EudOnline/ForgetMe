@@ -153,6 +153,17 @@
 - 显示可编辑正文和备注
 - 根据状态决定按钮是否可用
 
+实现里额外固定了这些 UI 文案，方便回放测试和 e2e 校验：
+
+- `Start draft review`
+- `Draft review body`
+- `Draft review notes`
+- `Save draft edits`
+- `Mark in review`
+- `Approve draft`
+- `Reject draft`
+- `Status: draft | in review | approved | rejected`
+
 这个面板不替代原始 sandbox 内容，而是明确分成两层：
 
 1. 原始 sandbox output
