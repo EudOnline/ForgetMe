@@ -36,6 +36,12 @@ export const memoryWorkspaceScopeSchema = z.discriminatedUnion('kind', [
 ])
 
 export const memoryWorkspaceWorkflowKindSchema = z.enum(['default', 'persona_draft_sandbox'])
+export const memoryWorkspacePersonaDraftReviewStatusSchema = z.enum([
+  'draft',
+  'in_review',
+  'approved',
+  'rejected'
+])
 
 export const askMemoryWorkspaceInputSchema = z.object({
   scope: memoryWorkspaceScopeSchema,
@@ -116,6 +122,25 @@ export const askMemoryWorkspacePersistedInputSchema = z.object({
   expressionMode: z.enum(['grounded', 'advice']).optional(),
   workflowKind: memoryWorkspaceWorkflowKindSchema.optional(),
   sessionId: z.string().min(1).optional()
+})
+
+export const getPersonaDraftReviewByTurnInputSchema = z.object({
+  turnId: z.string().min(1)
+})
+
+export const createPersonaDraftReviewFromTurnInputSchema = z.object({
+  turnId: z.string().min(1)
+})
+
+export const updatePersonaDraftReviewInputSchema = z.object({
+  draftReviewId: z.string().min(1),
+  editedDraft: z.string().optional(),
+  reviewNotes: z.string().optional()
+})
+
+export const transitionPersonaDraftReviewInputSchema = z.object({
+  draftReviewId: z.string().min(1),
+  status: memoryWorkspacePersonaDraftReviewStatusSchema
 })
 
 export const contextPackExportModeSchema = z.enum([

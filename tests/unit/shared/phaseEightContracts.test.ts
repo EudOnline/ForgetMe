@@ -2,6 +2,8 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 import type {
   ArchiveApi,
   AskMemoryWorkspaceInput,
+  CreatePersonaDraftReviewFromTurnInput,
+  GetPersonaDraftReviewByTurnInput,
   MemoryWorkspaceAnswer,
   MemoryWorkspaceBoundaryRedirect,
   MemoryWorkspaceBoundaryRedirectReason,
@@ -26,21 +28,30 @@ import type {
   MemoryWorkspaceGuardrailDecision,
   MemoryWorkspaceGuardrailReasonCode,
   MemoryWorkspacePersonaDraft,
+  MemoryWorkspacePersonaDraftReviewRecord,
+  MemoryWorkspacePersonaDraftReviewStatus,
   MemoryWorkspaceResponse,
   MemoryWorkspaceScope,
   MemoryWorkspaceSuggestedAction,
   MemoryWorkspaceWorkflowKind,
   RunMemoryWorkspaceCompareInput,
-  RunMemoryWorkspaceCompareMatrixInput
+  RunMemoryWorkspaceCompareMatrixInput,
+  TransitionPersonaDraftReviewInput,
+  UpdatePersonaDraftReviewInput
 } from '../../../src/shared/archiveContracts'
 import {
   askMemoryWorkspaceInputSchema,
+  createPersonaDraftReviewFromTurnInputSchema,
+  getPersonaDraftReviewByTurnInputSchema,
   memoryWorkspaceCompareMatrixIdSchema,
   memoryWorkspaceCompareSessionFilterSchema,
+  memoryWorkspacePersonaDraftReviewStatusSchema,
   memoryWorkspaceCompareTargetSchema,
   memoryWorkspaceScopeSchema,
   runMemoryWorkspaceCompareInputSchema,
-  runMemoryWorkspaceCompareMatrixInputSchema
+  runMemoryWorkspaceCompareMatrixInputSchema,
+  transitionPersonaDraftReviewInputSchema,
+  updatePersonaDraftReviewInputSchema
 } from '../../../src/shared/ipcSchemas'
 
 describe('phase-eight memory workspace contracts', () => {
@@ -398,6 +409,62 @@ describe('phase-eight memory workspace contracts', () => {
     >()
   })
 
+  it('exports persona draft review shapes', () => {
+    const status: MemoryWorkspacePersonaDraftReviewStatus = 'draft'
+    const review: MemoryWorkspacePersonaDraftReviewRecord = {
+      draftReviewId: 'review-1',
+      sourceTurnId: 'turn-1',
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      workflowKind: 'persona_draft_sandbox',
+      status,
+      baseDraft: '可审阅草稿：先把关键记录整理进归档。',
+      editedDraft: '可审阅草稿：先把关键记录整理进归档，再补齐细节。',
+      reviewNotes: 'Tone is grounded, but needs a clearer closing line.',
+      supportingExcerpts: ['ce-1', 'ce-3'],
+      trace: [
+        {
+          traceId: 'trace-1',
+          excerptIds: ['ce-1'],
+          explanation: 'Opening sentence is grounded in excerpt ce-1.'
+        }
+      ],
+      approvedJournalId: null,
+      rejectedJournalId: null,
+      createdAt: '2026-03-16T01:00:00.000Z',
+      updatedAt: '2026-03-16T01:05:00.000Z'
+    }
+
+    const getInput: GetPersonaDraftReviewByTurnInput = {
+      turnId: 'turn-1'
+    }
+    const createInput: CreatePersonaDraftReviewFromTurnInput = {
+      turnId: 'turn-1'
+    }
+    const updateInput: UpdatePersonaDraftReviewInput = {
+      draftReviewId: 'review-1',
+      editedDraft: '可审阅草稿：先把关键记录整理进归档，再补齐细节。',
+      reviewNotes: 'Sharper and easier to reuse.'
+    }
+    const transitionInput: TransitionPersonaDraftReviewInput = {
+      draftReviewId: 'review-1',
+      status: 'in_review'
+    }
+
+    expect(review.status).toBe('draft')
+    expect(review.workflowKind).toBe('persona_draft_sandbox')
+    expect(review.supportingExcerpts).toEqual(['ce-1', 'ce-3'])
+    expect(getInput.turnId).toBe('turn-1')
+    expect(createInput.turnId).toBe('turn-1')
+    expect(updateInput.reviewNotes).toContain('Sharper')
+    expect(transitionInput.status).toBe('in_review')
+
+    expectTypeOf<MemoryWorkspacePersonaDraftReviewStatus>().toEqualTypeOf<
+      'draft' | 'in_review' | 'approved' | 'rejected'
+    >()
+    expectTypeOf(review.scope).toEqualTypeOf<MemoryWorkspaceScope>()
+    expectTypeOf(review.trace).toEqualTypeOf<MemoryWorkspacePersonaDraft['trace']>()
+  })
+
   it('exports memory workspace ask input schema', () => {
     expect(memoryWorkspaceScopeSchema.parse({ kind: 'global' })).toEqual({ kind: 'global' })
     expect(memoryWorkspaceScopeSchema.parse({ kind: 'person', canonicalPersonId: 'cp-1' })).toEqual({
@@ -548,6 +615,38 @@ describe('phase-eight memory workspace contracts', () => {
       matrixSessionId: 'matrix-session-1'
     })).toEqual({
       matrixSessionId: 'matrix-session-1'
+    })
+
+    expect(memoryWorkspacePersonaDraftReviewStatusSchema.parse('approved')).toBe('approved')
+
+    expect(getPersonaDraftReviewByTurnInputSchema.parse({
+      turnId: 'turn-1'
+    })).toEqual({
+      turnId: 'turn-1'
+    })
+
+    expect(createPersonaDraftReviewFromTurnInputSchema.parse({
+      turnId: 'turn-1'
+    })).toEqual({
+      turnId: 'turn-1'
+    })
+
+    expect(updatePersonaDraftReviewInputSchema.parse({
+      draftReviewId: 'review-1',
+      editedDraft: '可审阅草稿：先把关键记录整理进归档，再补齐细节。',
+      reviewNotes: 'Sharper and easier to reuse.'
+    })).toEqual({
+      draftReviewId: 'review-1',
+      editedDraft: '可审阅草稿：先把关键记录整理进归档，再补齐细节。',
+      reviewNotes: 'Sharper and easier to reuse.'
+    })
+
+    expect(transitionPersonaDraftReviewInputSchema.parse({
+      draftReviewId: 'review-1',
+      status: 'in_review'
+    })).toEqual({
+      draftReviewId: 'review-1',
+      status: 'in_review'
     })
   })
 })

@@ -529,6 +529,29 @@ export type MemoryWorkspacePersonaDraft = {
   trace: MemoryWorkspacePersonaDraftTrace[]
 }
 
+export type MemoryWorkspacePersonaDraftReviewStatus =
+  | 'draft'
+  | 'in_review'
+  | 'approved'
+  | 'rejected'
+
+export type MemoryWorkspacePersonaDraftReviewRecord = {
+  draftReviewId: string
+  sourceTurnId: string
+  scope: MemoryWorkspaceScope
+  workflowKind: 'persona_draft_sandbox'
+  status: MemoryWorkspacePersonaDraftReviewStatus
+  baseDraft: string
+  editedDraft: string
+  reviewNotes: string
+  supportingExcerpts: string[]
+  trace: MemoryWorkspacePersonaDraftTrace[]
+  approvedJournalId: string | null
+  rejectedJournalId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export type MemoryWorkspaceResponse = {
   scope: MemoryWorkspaceScope
   question: string
@@ -622,6 +645,25 @@ export type MemoryWorkspaceSessionDetail = MemoryWorkspaceSessionSummary & {
 
 export type AskMemoryWorkspacePersistedInput = AskMemoryWorkspaceInput & {
   sessionId?: string
+}
+
+export type GetPersonaDraftReviewByTurnInput = {
+  turnId: string
+}
+
+export type CreatePersonaDraftReviewFromTurnInput = {
+  turnId: string
+}
+
+export type UpdatePersonaDraftReviewInput = {
+  draftReviewId: string
+  editedDraft?: string
+  reviewNotes?: string
+}
+
+export type TransitionPersonaDraftReviewInput = {
+  draftReviewId: string
+  status: MemoryWorkspacePersonaDraftReviewStatus
 }
 
 export type MemoryWorkspaceCompareRunStatus = 'completed' | 'failed'
