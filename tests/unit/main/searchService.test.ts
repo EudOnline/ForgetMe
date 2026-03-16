@@ -51,4 +51,38 @@ describe('archive search', () => {
     }))
     db.close()
   })
+
+  it('finds approved draft provider sends by the new replay summary', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-provider-send-search-'))
+    const appPaths = ensureAppPaths(root)
+    const db = openDatabase(path.join(appPaths.sqliteDir, 'archive.sqlite'))
+    runMigrations(db)
+
+    appendDecisionJournal(db, {
+      decisionType: 'send_approved_persona_draft_to_provider',
+      targetType: 'persona_draft_review',
+      targetId: 'review-1',
+      operationPayload: {
+        draftReviewId: 'review-1',
+        sourceTurnId: 'turn-1',
+        providerSendArtifactId: 'artifact-1',
+        provider: 'siliconflow',
+        model: 'Qwen/Qwen2.5-72B-Instruct',
+        policyKey: 'persona_draft.remote_send_approved',
+        requestHash: 'hash-1',
+        sentAt: '2026-03-16T08:00:00.000Z'
+      },
+      undoPayload: {},
+      actor: 'local-user'
+    })
+
+    const results = await searchDecisionJournal({ appPaths, query: 'siliconflow' })
+
+    expect(results).toContainEqual(expect.objectContaining({
+      decisionType: 'send_approved_persona_draft_to_provider',
+      targetType: 'persona_draft_review',
+      replaySummary: 'Approved draft sent to provider · Persona draft review · turn-1 · siliconflow'
+    }))
+    db.close()
+  })
 })

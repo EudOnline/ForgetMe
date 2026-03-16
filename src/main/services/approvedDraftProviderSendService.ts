@@ -5,12 +5,14 @@ import type {
   SendApprovedPersonaDraftToProviderResult
 } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
+import { appendDecisionJournal } from './journalService'
 import type { ModelRoute } from './modelGatewayService'
 import { callLiteLLM, resolveModelRoute } from './modelGatewayService'
 import { buildApprovedPersonaDraftHandoffArtifact } from './personaDraftHandoffService'
 
 const POLICY_ID = 'rp-persona-draft-remote-send-approved'
 const POLICY_KEY = 'persona_draft.remote_send_approved'
+const LOCAL_ACTOR = 'local-user'
 
 type ApprovedDraftProviderSendRequest = {
   draftReviewId: string
@@ -241,6 +243,25 @@ export async function sendApprovedPersonaDraftToProvider(
       eventType: 'response',
       payload: result.payload,
       createdAt: notBefore(persisted.createdAt, result.receivedAt)
+    })
+
+    appendDecisionJournal(db, {
+      decisionType: 'send_approved_persona_draft_to_provider',
+      targetType: 'persona_draft_review',
+      targetId: request.draftReviewId,
+      operationPayload: {
+        draftReviewId: request.draftReviewId,
+        sourceTurnId: request.sourceTurnId,
+        providerSendArtifactId: persisted.artifactId,
+        provider: request.route.provider,
+        model: request.route.model,
+        policyKey: request.policyKey,
+        requestHash: persisted.requestHash,
+        handoffKind: 'provider_boundary_send',
+        sentAt: persisted.createdAt
+      },
+      undoPayload: {},
+      actor: LOCAL_ACTOR
     })
 
     return {

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { listDecisionJournal } from '../../../src/main/services/journalService'
 import * as modelGatewayService from '../../../src/main/services/modelGatewayService'
 import {
   buildApprovedPersonaDraftProviderSendRequest,
@@ -60,6 +61,9 @@ describe('approvedDraftProviderSendService', () => {
   })
 
   it('persists request and response events for a successful approved draft send', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-03-16T08:00:00.000Z'))
+
     const { db, approvedReview } = seedApprovedPersonaDraftHandoffScenario()
     const callModel = vi.fn().mockResolvedValue({
       provider: 'siliconflow',
@@ -85,6 +89,9 @@ describe('approvedDraftProviderSendService', () => {
     const history = listApprovedPersonaDraftProviderSends(db, {
       draftReviewId: approvedReview.draftReviewId
     })
+    const journalEntries = listDecisionJournal(db, {
+      decisionType: 'send_approved_persona_draft_to_provider'
+    })
 
     expect(sent?.status).toBe('responded')
     expect(sent?.provider).toBe('siliconflow')
@@ -92,6 +99,22 @@ describe('approvedDraftProviderSendService', () => {
     expect(history).toHaveLength(1)
     expect(history[0]?.policyKey).toBe('persona_draft.remote_send_approved')
     expect(history[0]?.events.map((event) => event.eventType)).toEqual(['request', 'response'])
+    expect(journalEntries).toHaveLength(1)
+    expect(journalEntries[0]).toMatchObject({
+      decisionType: 'send_approved_persona_draft_to_provider',
+      targetType: 'persona_draft_review',
+      targetId: approvedReview.draftReviewId,
+      operationPayload: {
+        draftReviewId: approvedReview.draftReviewId,
+        sourceTurnId: sent?.sourceTurnId,
+        providerSendArtifactId: sent?.artifactId,
+        provider: 'siliconflow',
+        model: 'Qwen/Qwen2.5-72B-Instruct',
+        policyKey: 'persona_draft.remote_send_approved',
+        requestHash: sent?.requestHash,
+        sentAt: '2026-03-16T08:00:00.000Z'
+      }
+    })
 
     db.close()
   })
@@ -108,9 +131,13 @@ describe('approvedDraftProviderSendService', () => {
     const history = listApprovedPersonaDraftProviderSends(db, {
       draftReviewId: approvedReview.draftReviewId
     })
+    const journalEntries = listDecisionJournal(db, {
+      decisionType: 'send_approved_persona_draft_to_provider'
+    })
 
     expect(history).toHaveLength(1)
     expect(history[0]?.events.map((event) => event.eventType)).toEqual(['request', 'error'])
+    expect(journalEntries).toHaveLength(0)
 
     db.close()
   })

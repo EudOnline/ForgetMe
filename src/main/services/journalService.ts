@@ -67,13 +67,21 @@ function formatDecisionLabel(entry: Pick<DecisionJournalEntry, 'decisionType' | 
     return 'Approved draft exported'
   }
 
+  if (entry.decisionType === 'send_approved_persona_draft_to_provider') {
+    return 'Approved draft sent to provider'
+  }
+
   return entry.decisionType
 }
 
 function formatTargetLabel(entry: Pick<DecisionJournalEntry, 'targetType' | 'operationPayload'>) {
   if (entry.targetType === 'persona_draft_review') {
     const sourceTurnId = readString(entry.operationPayload.sourceTurnId)
-    return sourceTurnId ? `Persona draft review · ${sourceTurnId}` : 'Persona draft review'
+    const provider = readString(entry.operationPayload.provider)
+    const summaryParts = ['Persona draft review', sourceTurnId, provider]
+      .filter((value): value is string => Boolean(value))
+
+    return summaryParts.join(' · ')
   }
 
   if (entry.targetType !== 'decision_batch') {
