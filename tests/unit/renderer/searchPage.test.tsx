@@ -31,6 +31,17 @@ describe('SearchPage', () => {
         actor: 'reviewer',
         createdAt: '2026-03-12T00:00:00.000Z',
         undoneAt: null
+      },
+      {
+        journalId: 'journal-send-1',
+        decisionType: 'send_approved_persona_draft_to_provider',
+        targetType: 'persona_draft_review',
+        decisionLabel: 'Approved draft sent to provider',
+        targetLabel: 'Persona draft review · turn-1 · siliconflow',
+        replaySummary: 'Approved draft sent to provider · Persona draft review · turn-1 · siliconflow',
+        actor: 'local-user',
+        createdAt: '2026-03-16T08:00:00.000Z',
+        undoneAt: null
       }
     ])
 
@@ -52,5 +63,6 @@ describe('SearchPage', () => {
     expect(searchDecisionJournal).toHaveBeenCalledWith({ query: 'Alice' })
     expect(await screen.findByText('sample-chat.txt')).toBeInTheDocument()
     expect(screen.getByText('Safe batch approve · Alice Chen · school_name · 2 items')).toBeInTheDocument()
+    expect(screen.getByText('Approved draft sent to provider · Persona draft review · turn-1 · siliconflow')).toBeInTheDocument()
   })
 })

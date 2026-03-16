@@ -215,4 +215,58 @@ describe('ReviewQueuePage', () => {
     expect(screen.getByDisplayValue('journal-batch-1')).toBeInTheDocument()
     expect(screen.getByText('Safe batch approve · Bob Li · school_name · 2 items')).toBeInTheDocument()
   })
+
+  it('renders approved draft send history entries in replay detail', async () => {
+    const listReviewQueue = vi.fn().mockResolvedValue([])
+    const listDecisionJournal = vi.fn().mockResolvedValue([
+      {
+        id: 'journal-send-1',
+        decisionType: 'send_approved_persona_draft_to_provider',
+        targetType: 'persona_draft_review',
+        targetId: 'review-send-1',
+        replaySummary: 'Approved draft sent to provider · Persona draft review · turn-1 · siliconflow',
+        targetLabel: 'Persona draft review · turn-1 · siliconflow',
+        decisionLabel: 'Approved draft sent to provider',
+        operationPayload: {
+          draftReviewId: 'review-send-1',
+          sourceTurnId: 'turn-1',
+          providerSendArtifactId: 'artifact-1',
+          provider: 'siliconflow',
+          model: 'Qwen/Qwen2.5-72B-Instruct',
+          policyKey: 'persona_draft.remote_send_approved',
+          requestHash: 'hash-1',
+          sentAt: '2026-03-16T08:00:00.000Z'
+        },
+        undoPayload: {},
+        actor: 'local-user',
+        createdAt: '2026-03-16T08:00:00.000Z',
+        undoneAt: null,
+        undoneBy: null
+      }
+    ])
+
+    vi.stubGlobal('window', {
+      archiveApi: {
+        listReviewQueue,
+        listDecisionJournal,
+        approveReviewItem: vi.fn(),
+        rejectReviewItem: vi.fn(),
+        undoDecision: vi.fn()
+      }
+    })
+
+    render(<ReviewQueuePage />)
+
+    expect(await screen.findByText('Approved draft sent to provider')).toBeInTheDocument()
+    expect(screen.getByText('Persona draft review · turn-1 · siliconflow')).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Replay' }))
+    })
+
+    expect(await screen.findByText('Replay Detail')).toBeInTheDocument()
+    expect(screen.getByText('Approved draft sent to provider · Persona draft review · turn-1 · siliconflow')).toBeInTheDocument()
+    expect(screen.getByText(/providerSendArtifactId/i)).toBeInTheDocument()
+    expect(screen.getByText((content) => content.includes('persona_draft.remote_send_approved'))).toBeInTheDocument()
+  })
 })
