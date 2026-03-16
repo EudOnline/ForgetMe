@@ -98,6 +98,14 @@ describe('archiveApi dossier methods', () => {
       draftReviewId: 'review-1',
       status: 'approved'
     })).resolves.toBeNull()
+    await expect(archiveApi.selectPersonaDraftHandoffDestination()).resolves.toBeNull()
+    await expect(archiveApi.listApprovedPersonaDraftHandoffs({
+      draftReviewId: 'review-1'
+    })).resolves.toEqual([])
+    await expect(archiveApi.exportApprovedPersonaDraft({
+      draftReviewId: 'review-1',
+      destinationRoot: '/tmp/persona-draft-exports'
+    })).resolves.toBeNull()
     await expect(archiveApi.getGroupPortrait('cp-1')).resolves.toBeNull()
     await expect(archiveApi.selectContextPackExportDestination()).resolves.toBeNull()
     await expect(archiveApi.getPersonContextPack({

@@ -143,6 +143,16 @@ export const transitionPersonaDraftReviewInputSchema = z.object({
   status: memoryWorkspacePersonaDraftReviewStatusSchema
 })
 
+export const approvedPersonaDraftReviewIdSchema = z.object({
+  draftReviewId: z.string().min(1)
+})
+
+export const listApprovedPersonaDraftHandoffsInputSchema = approvedPersonaDraftReviewIdSchema
+
+export const exportApprovedPersonaDraftInputSchema = approvedPersonaDraftReviewIdSchema.extend({
+  destinationRoot: z.string().min(1)
+})
+
 export const contextPackExportModeSchema = z.enum([
   'approved_only',
   'approved_plus_derived'

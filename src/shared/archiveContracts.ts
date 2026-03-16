@@ -666,6 +666,61 @@ export type TransitionPersonaDraftReviewInput = {
   status: MemoryWorkspacePersonaDraftReviewStatus
 }
 
+export type ApprovedPersonaDraftHandoffKind = 'local_json_export'
+
+export type ApprovedPersonaDraftHandoffArtifact = {
+  formatVersion: 'phase10e1'
+  handoffKind: ApprovedPersonaDraftHandoffKind
+  exportedAt: string
+  draftReviewId: string
+  sourceTurnId: string
+  scope: MemoryWorkspaceScope
+  workflowKind: 'persona_draft_sandbox'
+  reviewStatus: 'approved'
+  question: string
+  approvedDraft: string
+  reviewNotes: string
+  supportingExcerptIds: string[]
+  communicationExcerpts: MemoryWorkspaceCommunicationExcerpt[]
+  trace: MemoryWorkspacePersonaDraftTrace[]
+  shareEnvelope: {
+    requestShape: 'local_json_persona_draft_handoff'
+    policyKey: 'persona_draft.local_export_approved'
+  }
+}
+
+export type ApprovedPersonaDraftHandoffRecord = {
+  journalId: string
+  draftReviewId: string
+  sourceTurnId: string
+  handoffKind: ApprovedPersonaDraftHandoffKind
+  status: 'exported'
+  filePath: string
+  fileName: string
+  sha256: string
+  exportedAt: string
+}
+
+export type ListApprovedPersonaDraftHandoffsInput = {
+  draftReviewId: string
+}
+
+export type ExportApprovedPersonaDraftInput = {
+  draftReviewId: string
+  destinationRoot: string
+}
+
+export type ExportApprovedPersonaDraftResult = {
+  status: 'exported'
+  journalId: string
+  draftReviewId: string
+  handoffKind: ApprovedPersonaDraftHandoffKind
+  filePath: string
+  fileName: string
+  sha256: string
+  exportedAt: string
+}
+
 export type MemoryWorkspaceCompareRunStatus = 'completed' | 'failed'
 
 export type MemoryWorkspaceCompareEvaluationDimensionKey =
@@ -1176,6 +1231,9 @@ export interface ArchiveApi {
   createPersonaDraftReviewFromTurn: (turnId: string) => Promise<MemoryWorkspacePersonaDraftReviewRecord | null>
   updatePersonaDraftReview: (input: UpdatePersonaDraftReviewInput) => Promise<MemoryWorkspacePersonaDraftReviewRecord | null>
   transitionPersonaDraftReview: (input: TransitionPersonaDraftReviewInput) => Promise<MemoryWorkspacePersonaDraftReviewRecord | null>
+  selectPersonaDraftHandoffDestination: () => Promise<string | null>
+  listApprovedPersonaDraftHandoffs: (input: ListApprovedPersonaDraftHandoffsInput) => Promise<ApprovedPersonaDraftHandoffRecord[]>
+  exportApprovedPersonaDraft: (input: ExportApprovedPersonaDraftInput) => Promise<ExportApprovedPersonaDraftResult | null>
   listGroupPortraits: () => Promise<GroupPortraitBrowseSummary[]>
   getGroupPortrait: (canonicalPersonId: string) => Promise<GroupPortrait | null>
   getGroupContextPack: (input: { anchorPersonId: string; mode?: ContextPackExportMode }) => Promise<GroupContextPack | null>
