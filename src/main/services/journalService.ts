@@ -51,10 +51,27 @@ function formatDecisionLabel(entry: Pick<DecisionJournalEntry, 'decisionType' | 
     return 'Safe batch approve'
   }
 
+  if (entry.decisionType === 'mark_persona_draft_in_review') {
+    return 'Persona draft marked in review'
+  }
+
+  if (entry.decisionType === 'approve_persona_draft_review') {
+    return 'Persona draft approved'
+  }
+
+  if (entry.decisionType === 'reject_persona_draft_review') {
+    return 'Persona draft rejected'
+  }
+
   return entry.decisionType
 }
 
 function formatTargetLabel(entry: Pick<DecisionJournalEntry, 'targetType' | 'operationPayload'>) {
+  if (entry.targetType === 'persona_draft_review') {
+    const sourceTurnId = readString(entry.operationPayload.sourceTurnId)
+    return sourceTurnId ? `Persona draft review · ${sourceTurnId}` : 'Persona draft review'
+  }
+
   if (entry.targetType !== 'decision_batch') {
     return entry.targetType
   }

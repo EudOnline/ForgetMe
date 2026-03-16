@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { openDatabase, runMigrations } from '../../../../src/main/services/db'
 import { setRelationshipLabel } from '../../../../src/main/services/graphService'
+import { askMemoryWorkspacePersisted } from '../../../../src/main/services/memoryWorkspaceSessionService'
 
 function setupDatabase() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-memory-workspace-'))
@@ -328,4 +329,29 @@ export function seedMemoryWorkspaceScenario() {
   setRelationshipLabel(db, { fromPersonId: 'cp-1', toPersonId: 'cp-2', label: 'friend' })
 
   return db
+}
+
+export function seedPersonaDraftReviewScenario() {
+  const db = seedMemoryWorkspaceScenario()
+
+  const sandboxTurn = askMemoryWorkspacePersisted(db, {
+    scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+    question: '如果她来写一段关于记录和归档的回复，会怎么写？',
+    workflowKind: 'persona_draft_sandbox'
+  })
+
+  const groundedTurn = askMemoryWorkspacePersisted(db, {
+    scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+    question: '她现在有哪些还没解决的冲突？'
+  })
+
+  if (!sandboxTurn || !groundedTurn) {
+    throw new Error('Failed to seed persona draft review scenario.')
+  }
+
+  return {
+    db,
+    sandboxTurn,
+    groundedTurn
+  }
 }
