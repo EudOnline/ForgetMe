@@ -1172,6 +1172,10 @@ export interface ArchiveApi {
   runMemoryWorkspaceCompareMatrix: (input: RunMemoryWorkspaceCompareMatrixInput) => Promise<MemoryWorkspaceCompareMatrixDetail | null>
   listMemoryWorkspaceCompareMatrices: () => Promise<MemoryWorkspaceCompareMatrixSummary[]>
   getMemoryWorkspaceCompareMatrix: (matrixSessionId: string) => Promise<MemoryWorkspaceCompareMatrixDetail | null>
+  getPersonaDraftReviewByTurn: (turnId: string) => Promise<MemoryWorkspacePersonaDraftReviewRecord | null>
+  createPersonaDraftReviewFromTurn: (turnId: string) => Promise<MemoryWorkspacePersonaDraftReviewRecord | null>
+  updatePersonaDraftReview: (input: UpdatePersonaDraftReviewInput) => Promise<MemoryWorkspacePersonaDraftReviewRecord | null>
+  transitionPersonaDraftReview: (input: TransitionPersonaDraftReviewInput) => Promise<MemoryWorkspacePersonaDraftReviewRecord | null>
   listGroupPortraits: () => Promise<GroupPortraitBrowseSummary[]>
   getGroupPortrait: (canonicalPersonId: string) => Promise<GroupPortrait | null>
   getGroupContextPack: (input: { anchorPersonId: string; mode?: ContextPackExportMode }) => Promise<GroupContextPack | null>

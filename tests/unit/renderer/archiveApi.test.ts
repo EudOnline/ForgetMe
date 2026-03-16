@@ -88,6 +88,16 @@ describe('archiveApi dossier methods', () => {
     await expect(archiveApi.getMemoryWorkspaceCompareSession('compare-session-1')).resolves.toBeNull()
     await expect(archiveApi.listMemoryWorkspaceCompareMatrices()).resolves.toEqual([])
     await expect(archiveApi.getMemoryWorkspaceCompareMatrix('matrix-session-1')).resolves.toBeNull()
+    await expect(archiveApi.getPersonaDraftReviewByTurn('turn-1')).resolves.toBeNull()
+    await expect(archiveApi.createPersonaDraftReviewFromTurn('turn-1')).resolves.toBeNull()
+    await expect(archiveApi.updatePersonaDraftReview({
+      draftReviewId: 'review-1',
+      editedDraft: '可审阅草稿：先整理归档，再继续补齐细节。'
+    })).resolves.toBeNull()
+    await expect(archiveApi.transitionPersonaDraftReview({
+      draftReviewId: 'review-1',
+      status: 'approved'
+    })).resolves.toBeNull()
     await expect(archiveApi.getGroupPortrait('cp-1')).resolves.toBeNull()
     await expect(archiveApi.selectContextPackExportDestination()).resolves.toBeNull()
     await expect(archiveApi.getPersonContextPack({
@@ -169,10 +179,33 @@ describe('archiveApi dossier methods', () => {
         }
       }
     })
+    const getPersonaDraftReviewByTurn = vi.fn().mockResolvedValue({
+      draftReviewId: 'review-1',
+      sourceTurnId: 'turn-1',
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      workflowKind: 'persona_draft_sandbox',
+      status: 'draft',
+      baseDraft: '可审阅草稿：先把关键记录整理进归档。',
+      editedDraft: '可审阅草稿：先把关键记录整理进归档，再补齐细节。',
+      reviewNotes: 'Sharper and easier to reuse.',
+      supportingExcerpts: ['ce-1'],
+      trace: [
+        {
+          traceId: 'trace-1',
+          excerptIds: ['ce-1'],
+          explanation: 'Draft segment 1 stays grounded in Alice Chen excerpt ce-1.'
+        }
+      ],
+      approvedJournalId: null,
+      rejectedJournalId: null,
+      createdAt: '2026-03-16T01:00:00.000Z',
+      updatedAt: '2026-03-16T01:05:00.000Z'
+    })
 
     vi.stubGlobal('window', {
       archiveApi: {
-        askMemoryWorkspacePersisted
+        askMemoryWorkspacePersisted,
+        getPersonaDraftReviewByTurn
       }
     })
 
@@ -187,5 +220,9 @@ describe('archiveApi dossier methods', () => {
     expect(turn?.response.workflowKind).toBe('persona_draft_sandbox')
     expect(turn?.response.personaDraft?.reviewState).toBe('review_required')
     expect(turn?.response.boundaryRedirect).toBeNull()
+
+    const review = await archiveApi.getPersonaDraftReviewByTurn('turn-1')
+    expect(review?.draftReviewId).toBe('review-1')
+    expect(review?.status).toBe('draft')
   })
 })
