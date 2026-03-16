@@ -721,6 +721,46 @@ export type ExportApprovedPersonaDraftResult = {
   exportedAt: string
 }
 
+export type ApprovedPersonaDraftProviderSendEvent = {
+  id: string
+  eventType: 'request' | 'response' | 'error'
+  payload: Record<string, unknown>
+  createdAt: string
+}
+
+export type ApprovedPersonaDraftProviderSendArtifact = {
+  artifactId: string
+  draftReviewId: string
+  sourceTurnId: string
+  provider: string
+  model: string
+  policyKey: string
+  requestHash: string
+  redactionSummary: Record<string, unknown>
+  createdAt: string
+  events: ApprovedPersonaDraftProviderSendEvent[]
+}
+
+export type ListApprovedPersonaDraftProviderSendsInput = {
+  draftReviewId: string
+}
+
+export type SendApprovedPersonaDraftToProviderInput = {
+  draftReviewId: string
+}
+
+export type SendApprovedPersonaDraftToProviderResult = {
+  status: 'responded'
+  artifactId: string
+  draftReviewId: string
+  sourceTurnId: string
+  provider: string
+  model: string
+  policyKey: string
+  requestHash: string
+  createdAt: string
+}
+
 export type MemoryWorkspaceCompareRunStatus = 'completed' | 'failed'
 
 export type MemoryWorkspaceCompareEvaluationDimensionKey =
@@ -1234,6 +1274,8 @@ export interface ArchiveApi {
   selectPersonaDraftHandoffDestination: () => Promise<string | null>
   listApprovedPersonaDraftHandoffs: (input: ListApprovedPersonaDraftHandoffsInput) => Promise<ApprovedPersonaDraftHandoffRecord[]>
   exportApprovedPersonaDraft: (input: ExportApprovedPersonaDraftInput) => Promise<ExportApprovedPersonaDraftResult | null>
+  listApprovedPersonaDraftProviderSends: (input: ListApprovedPersonaDraftProviderSendsInput) => Promise<ApprovedPersonaDraftProviderSendArtifact[]>
+  sendApprovedPersonaDraftToProvider: (input: SendApprovedPersonaDraftToProviderInput) => Promise<SendApprovedPersonaDraftToProviderResult | null>
   listGroupPortraits: () => Promise<GroupPortraitBrowseSummary[]>
   getGroupPortrait: (canonicalPersonId: string) => Promise<GroupPortrait | null>
   getGroupContextPack: (input: { anchorPersonId: string; mode?: ContextPackExportMode }) => Promise<GroupContextPack | null>

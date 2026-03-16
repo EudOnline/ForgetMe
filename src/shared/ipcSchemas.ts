@@ -153,6 +153,10 @@ export const exportApprovedPersonaDraftInputSchema = approvedPersonaDraftReviewI
   destinationRoot: z.string().min(1)
 })
 
+export const listApprovedPersonaDraftProviderSendsInputSchema = approvedPersonaDraftReviewIdSchema
+
+export const sendApprovedPersonaDraftToProviderInputSchema = approvedPersonaDraftReviewIdSchema
+
 export const contextPackExportModeSchema = z.enum([
   'approved_only',
   'approved_plus_derived'
