@@ -975,6 +975,42 @@ describe('MemoryWorkspacePage replay', () => {
       getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
       runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
       askMemoryWorkspacePersisted: vi.fn(),
+      listApprovedPersonaDraftHandoffs: vi.fn().mockResolvedValue([]),
+      listApprovedPersonaDraftProviderSends: vi.fn().mockResolvedValue([
+        {
+          artifactId: 'pdpe-replay-1',
+          draftReviewId: 'review-approved-1',
+          sourceTurnId: 'turn-sandbox-reviewed',
+          provider: 'siliconflow',
+          model: 'Qwen/Qwen2.5-72B-Instruct',
+          policyKey: 'persona_draft.remote_send_approved',
+          requestHash: 'hash-replay-1',
+          redactionSummary: {
+            requestShape: 'approved_persona_draft_handoff_artifact',
+            sourceArtifact: 'approved_persona_draft_handoff',
+            removedFields: []
+          },
+          createdAt: '2026-03-16T08:00:00.000Z',
+          events: [
+            {
+              id: 'event-replay-1',
+              eventType: 'request',
+              payload: {
+                requestShape: 'approved_persona_draft_handoff_artifact'
+              },
+              createdAt: '2026-03-16T08:00:00.000Z'
+            },
+            {
+              id: 'event-replay-2',
+              eventType: 'response',
+              payload: {
+                acknowledgement: 'received'
+              },
+              createdAt: '2026-03-16T08:00:01.000Z'
+            }
+          ]
+        }
+      ]),
       getPersonaDraftReviewByTurn: vi.fn().mockResolvedValue({
         draftReviewId: 'review-approved-1',
         sourceTurnId: 'turn-sandbox-reviewed',
@@ -1003,6 +1039,10 @@ describe('MemoryWorkspacePage replay', () => {
 
     expect(await screen.findByText('Workflow: persona draft sandbox')).toBeInTheDocument()
     expect(await screen.findByText('Status: approved')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Approved Draft Handoff' })).toBeInTheDocument()
+    expect(screen.getByText('Provider Boundary Send')).toBeInTheDocument()
+    expect(screen.getByText('response recorded')).toBeInTheDocument()
+    expect(screen.getByText('Latest send audit')).toBeInTheDocument()
     expect(screen.getByLabelText('Draft review body')).toHaveValue('可审阅草稿：先把关键记录整理进归档，再补齐细节。')
     expect(screen.getByLabelText('Draft review body')).toBeDisabled()
     expect(screen.getByLabelText('Draft review notes')).toHaveValue('Approved for internal review.')
