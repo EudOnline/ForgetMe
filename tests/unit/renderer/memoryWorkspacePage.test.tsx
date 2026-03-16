@@ -562,6 +562,7 @@ describe('MemoryWorkspacePage', () => {
     const bodyField = await screen.findByLabelText('Draft review body')
     const notesField = screen.getByLabelText('Draft review notes')
     expect(bodyField).toHaveValue('可审阅草稿：先把关键记录整理进归档。')
+    expect(screen.queryByRole('heading', { name: 'Approved Draft Handoff' })).not.toBeInTheDocument()
 
     fireEvent.change(bodyField, {
       target: { value: '可审阅草稿：先把关键记录整理进归档，再补齐细节。' }
@@ -586,6 +587,158 @@ describe('MemoryWorkspacePage', () => {
     expect(await screen.findByText('Status: approved')).toBeInTheDocument()
     expect(screen.getByLabelText('Draft review body')).toBeDisabled()
     expect(screen.getByLabelText('Draft review notes')).toBeDisabled()
+    expect(await screen.findByRole('heading', { name: 'Approved Draft Handoff' })).toBeInTheDocument()
+  })
+
+  it('exports an approved draft after choosing an export destination', async () => {
+    const sandboxTurn = {
+      turnId: 'turn-sandbox-approved-1',
+      sessionId: 'session-sandbox-approved-1',
+      ordinal: 1,
+      question: '如果她来写一段关于记录和归档的回复，会怎么写？',
+      provider: null,
+      model: null,
+      contextHash: 'context-hash-sandbox-approved-1',
+      promptHash: 'prompt-hash-sandbox-approved-1',
+      createdAt: '2026-03-15T00:35:00.000Z',
+      response: {
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' } as const,
+        question: '如果她来写一段关于记录和归档的回复，会怎么写？',
+        expressionMode: 'grounded' as const,
+        workflowKind: 'persona_draft_sandbox' as const,
+        title: 'Memory Workspace · Alice Chen',
+        answer: {
+          summary: 'Reviewed simulation draft generated from archive-backed excerpts for this ask.',
+          displayType: 'derived_summary' as const,
+          citations: []
+        },
+        guardrail: {
+          decision: 'sandbox_review_required' as const,
+          reasonCodes: ['persona_draft_sandbox' as const, 'quote_trace_required' as const],
+          citationCount: 2,
+          sourceKinds: ['file'],
+          fallbackApplied: false
+        },
+        contextCards: [],
+        boundaryRedirect: null,
+        communicationEvidence: {
+          title: 'Communication Evidence',
+          summary: 'Direct archive-backed excerpts related to this ask.',
+          excerpts: [
+            {
+              excerptId: 'ce-1',
+              fileId: 'f-1',
+              fileName: 'chat-1.json',
+              ordinal: 1,
+              speakerDisplayName: 'Alice Chen',
+              text: '我们还是把这些记录留在归档里，后面查起来更稳妥。'
+            }
+          ]
+        },
+        personaDraft: {
+          title: 'Reviewed draft sandbox',
+          disclaimer: 'Simulation draft based on archived expressions. Not a statement from the person.',
+          draft: '可审阅草稿：先把关键记录整理进归档。',
+          reviewState: 'review_required' as const,
+          supportingExcerpts: ['ce-1'],
+          trace: [
+            {
+              traceId: 'trace-1',
+              excerptIds: ['ce-1'],
+              explanation: 'Draft segment 1 stays grounded in Alice Chen excerpt ce-1.'
+            }
+          ]
+        }
+      }
+    }
+
+    const approvedReview = {
+      draftReviewId: 'review-1',
+      sourceTurnId: 'turn-sandbox-approved-1',
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      workflowKind: 'persona_draft_sandbox' as const,
+      status: 'approved' as const,
+      baseDraft: '可审阅草稿：先把关键记录整理进归档。',
+      editedDraft: '可审阅草稿：先把关键记录整理进归档，再补齐细节。',
+      reviewNotes: 'Approved for export.',
+      supportingExcerpts: ['ce-1'],
+      trace: [
+        {
+          traceId: 'trace-1',
+          excerptIds: ['ce-1'],
+          explanation: 'Draft segment 1 stays grounded in Alice Chen excerpt ce-1.'
+        }
+      ],
+      approvedJournalId: 'journal-approved-1',
+      rejectedJournalId: null,
+      createdAt: '2026-03-16T01:00:00.000Z',
+      updatedAt: '2026-03-16T01:07:00.000Z'
+    }
+
+    let currentHandoffs: Array<Record<string, unknown>> = []
+    const selectPersonaDraftHandoffDestination = vi.fn().mockResolvedValue('/tmp/persona-draft-exports')
+    const listApprovedPersonaDraftHandoffs = vi.fn().mockImplementation(async () => currentHandoffs)
+    const exportApprovedPersonaDraft = vi.fn().mockImplementation(async () => {
+      currentHandoffs = [{
+        journalId: 'journal-export-1',
+        draftReviewId: 'review-1',
+        sourceTurnId: 'turn-sandbox-approved-1',
+        handoffKind: 'local_json_export',
+        status: 'exported',
+        filePath: '/tmp/persona-draft-exports/persona-draft-review-review-1-approved.json',
+        fileName: 'persona-draft-review-review-1-approved.json',
+        sha256: 'hash-1',
+        exportedAt: '2026-03-16T03:30:00.000Z'
+      }]
+
+      return {
+        status: 'exported',
+        journalId: 'journal-export-1',
+        draftReviewId: 'review-1',
+        handoffKind: 'local_json_export',
+        filePath: '/tmp/persona-draft-exports/persona-draft-review-review-1-approved.json',
+        fileName: 'persona-draft-review-review-1-approved.json',
+        sha256: 'hash-1',
+        exportedAt: '2026-03-16T03:30:00.000Z'
+      }
+    })
+
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceSession: vi.fn().mockResolvedValue(null),
+      listMemoryWorkspaceCompareSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted: vi.fn().mockResolvedValue(sandboxTurn),
+      getPersonaDraftReviewByTurn: vi.fn().mockResolvedValue(approvedReview),
+      listApprovedPersonaDraftHandoffs,
+      selectPersonaDraftHandoffDestination,
+      exportApprovedPersonaDraft
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'person', canonicalPersonId: 'cp-1' }} />)
+
+    fireEvent.change(screen.getByLabelText('Ask memory workspace'), {
+      target: { value: '如果她来写一段关于记录和归档的回复，会怎么写？' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+
+    expect(await screen.findByRole('heading', { name: 'Approved Draft Handoff' })).toBeInTheDocument()
+    expect(screen.getByText('No export destination selected.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose export destination' }))
+    expect(await screen.findByText('/tmp/persona-draft-exports')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export approved draft' }))
+
+    await waitFor(() => {
+      expect(exportApprovedPersonaDraft).toHaveBeenCalledWith({
+        draftReviewId: 'review-1',
+        destinationRoot: '/tmp/persona-draft-exports'
+      })
+    })
+
+    expect(await screen.findByText('Exported persona-draft-review-review-1-approved.json')).toBeInTheDocument()
   })
 
   it('runs compare for an active sandbox response with sandbox workflow metadata and labels', async () => {
