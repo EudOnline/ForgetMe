@@ -1,8 +1,10 @@
 import path from 'node:path'
-import { ipcMain } from 'electron'
+import { dialog, ipcMain } from 'electron'
 import {
   askMemoryWorkspaceInputSchema,
   askMemoryWorkspacePersistedInputSchema,
+  exportApprovedPersonaDraftInputSchema,
+  listApprovedPersonaDraftHandoffsInputSchema,
   createPersonaDraftReviewFromTurnInputSchema,
   getPersonaDraftReviewByTurnInputSchema,
   memoryWorkspaceCompareMatrixIdSchema,
@@ -39,9 +41,26 @@ import {
   transitionPersonaDraftReview,
   updatePersonaDraftReview
 } from '../services/memoryWorkspaceDraftReviewService'
+import {
+  exportApprovedPersonaDraftToDirectory,
+  listApprovedPersonaDraftHandoffs
+} from '../services/personaDraftHandoffService'
 
 function databasePath(appPaths: AppPaths) {
   return path.join(appPaths.sqliteDir, 'archive.sqlite')
+}
+
+async function selectDirectory(envKey: string) {
+  const envValue = process.env[envKey]
+  if (envValue) {
+    return envValue
+  }
+
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory', 'createDirectory']
+  })
+
+  return result.canceled ? null : result.filePaths[0] ?? null
 }
 
 export function registerMemoryWorkspaceIpc(appPaths: AppPaths) {
@@ -59,6 +78,9 @@ export function registerMemoryWorkspaceIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:createPersonaDraftReviewFromTurn')
   ipcMain.removeHandler('archive:updatePersonaDraftReview')
   ipcMain.removeHandler('archive:transitionPersonaDraftReview')
+  ipcMain.removeHandler('archive:selectPersonaDraftHandoffDestination')
+  ipcMain.removeHandler('archive:listApprovedPersonaDraftHandoffs')
+  ipcMain.removeHandler('archive:exportApprovedPersonaDraft')
 
   ipcMain.handle('archive:askMemoryWorkspace', async (_event, payload) => {
     const input = askMemoryWorkspaceInputSchema.parse(payload)
@@ -183,5 +205,27 @@ export function registerMemoryWorkspaceIpc(appPaths: AppPaths) {
     const review = transitionPersonaDraftReview(db, input)
     db.close()
     return review
+  })
+
+  ipcMain.handle('archive:selectPersonaDraftHandoffDestination', async () => {
+    return selectDirectory('FORGETME_E2E_PERSONA_DRAFT_HANDOFF_DESTINATION_DIR')
+  })
+
+  ipcMain.handle('archive:listApprovedPersonaDraftHandoffs', async (_event, payload) => {
+    const input = listApprovedPersonaDraftHandoffsInputSchema.parse(payload)
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    const handoffs = listApprovedPersonaDraftHandoffs(db, input)
+    db.close()
+    return handoffs
+  })
+
+  ipcMain.handle('archive:exportApprovedPersonaDraft', async (_event, payload) => {
+    const input = exportApprovedPersonaDraftInputSchema.parse(payload)
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    const exported = exportApprovedPersonaDraftToDirectory(db, input)
+    db.close()
+    return exported
   })
 }
