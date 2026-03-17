@@ -9,6 +9,8 @@ const {
   listApprovedDraftSendDestinations,
   listApprovedPersonaDraftHandoffs,
   exportApprovedPersonaDraftToDirectory,
+  listApprovedPersonaDraftPublications,
+  publishApprovedPersonaDraftToDirectory,
   listApprovedPersonaDraftProviderSends,
   retryApprovedPersonaDraftProviderSend,
   sendApprovedPersonaDraftToProvider
@@ -20,6 +22,8 @@ const {
   listApprovedDraftSendDestinations: vi.fn(),
   listApprovedPersonaDraftHandoffs: vi.fn(),
   exportApprovedPersonaDraftToDirectory: vi.fn(),
+  listApprovedPersonaDraftPublications: vi.fn(),
+  publishApprovedPersonaDraftToDirectory: vi.fn(),
   listApprovedPersonaDraftProviderSends: vi.fn(),
   retryApprovedPersonaDraftProviderSend: vi.fn(),
   sendApprovedPersonaDraftToProvider: vi.fn()
@@ -47,6 +51,11 @@ vi.mock('../../../src/main/services/db', () => ({
 vi.mock('../../../src/main/services/personaDraftHandoffService', () => ({
   listApprovedPersonaDraftHandoffs,
   exportApprovedPersonaDraftToDirectory
+}))
+
+vi.mock('../../../src/main/services/approvedDraftPublicationService', () => ({
+  listApprovedPersonaDraftPublications,
+  publishApprovedPersonaDraftToDirectory
 }))
 
 vi.mock('../../../src/main/services/approvedDraftSendDestinationService', () => ({
@@ -81,10 +90,13 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
     listApprovedDraftSendDestinations.mockReset()
     listApprovedPersonaDraftHandoffs.mockReset()
     exportApprovedPersonaDraftToDirectory.mockReset()
+    listApprovedPersonaDraftPublications.mockReset()
+    publishApprovedPersonaDraftToDirectory.mockReset()
     listApprovedPersonaDraftProviderSends.mockReset()
     retryApprovedPersonaDraftProviderSend.mockReset()
     sendApprovedPersonaDraftToProvider.mockReset()
     delete process.env.FORGETME_E2E_PERSONA_DRAFT_HANDOFF_DESTINATION_DIR
+    delete process.env.FORGETME_E2E_APPROVED_DRAFT_PUBLICATION_DESTINATION_DIR
   })
 
   it('returns the e2e handoff destination override without opening a dialog', async () => {
@@ -162,6 +174,105 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
     expect(result).toEqual(expect.objectContaining({
       draftReviewId: 'review-1',
       fileName: 'persona-draft-review-review-1-approved.json'
+    }))
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('returns the e2e publication destination override without opening a dialog', async () => {
+    process.env.FORGETME_E2E_APPROVED_DRAFT_PUBLICATION_DESTINATION_DIR = '/tmp/approved-draft-publications'
+
+    registerMemoryWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:selectApprovedDraftPublicationDestination')
+
+    expect(handler).toBeTypeOf('function')
+    await expect(handler?.({}, undefined)).resolves.toBe('/tmp/approved-draft-publications')
+    expect(showOpenDialog).not.toHaveBeenCalled()
+  })
+
+  it('validates and lists approved draft publications through the ipc handler', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    listApprovedPersonaDraftPublications.mockReturnValue([{
+      journalId: 'journal-1',
+      publicationId: 'publication-1',
+      draftReviewId: 'review-1',
+      sourceTurnId: 'turn-1',
+      publicationKind: 'local_share_package',
+      status: 'published',
+      packageRoot: '/tmp/approved-draft-publication-publication-1',
+      manifestPath: '/tmp/approved-draft-publication-publication-1/manifest.json',
+      publicArtifactPath: '/tmp/approved-draft-publication-publication-1/publication.json',
+      publicArtifactFileName: 'publication.json',
+      publicArtifactSha256: 'hash-1',
+      publishedAt: '2026-03-16T09:00:00.000Z'
+    }])
+
+    registerMemoryWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:listApprovedPersonaDraftPublications')
+
+    await expect(handler?.({}, {
+      draftReviewId: ''
+    })).rejects.toThrow()
+    expect(listApprovedPersonaDraftPublications).not.toHaveBeenCalled()
+
+    const result = await handler?.({}, {
+      draftReviewId: 'review-1'
+    })
+
+    expect(openDatabase).toHaveBeenCalledWith('/tmp/forgetme/sqlite/archive.sqlite')
+    expect(runMigrations).toHaveBeenCalled()
+    expect(listApprovedPersonaDraftPublications).toHaveBeenCalledWith(expect.anything(), {
+      draftReviewId: 'review-1'
+    })
+    expect(result).toEqual([expect.objectContaining({
+      draftReviewId: 'review-1',
+      publicationKind: 'local_share_package'
+    })])
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('validates and publishes approved drafts through the ipc handler', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    publishApprovedPersonaDraftToDirectory.mockReturnValue({
+      status: 'published',
+      journalId: 'journal-1',
+      publicationId: 'publication-1',
+      draftReviewId: 'review-1',
+      sourceTurnId: 'turn-1',
+      publicationKind: 'local_share_package',
+      packageRoot: '/tmp/approved-draft-publication-publication-1',
+      manifestPath: '/tmp/approved-draft-publication-publication-1/manifest.json',
+      publicArtifactPath: '/tmp/approved-draft-publication-publication-1/publication.json',
+      publicArtifactFileName: 'publication.json',
+      publicArtifactSha256: 'hash-1',
+      publishedAt: '2026-03-16T09:00:00.000Z'
+    })
+
+    registerMemoryWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:publishApprovedPersonaDraft')
+
+    await expect(handler?.({}, {
+      draftReviewId: 'review-1',
+      destinationRoot: ''
+    })).rejects.toThrow()
+    expect(publishApprovedPersonaDraftToDirectory).not.toHaveBeenCalled()
+
+    const result = await handler?.({}, {
+      draftReviewId: 'review-1',
+      destinationRoot: '/tmp/approved-draft-publications'
+    })
+
+    expect(publishApprovedPersonaDraftToDirectory).toHaveBeenCalledWith(expect.anything(), {
+      draftReviewId: 'review-1',
+      destinationRoot: '/tmp/approved-draft-publications'
+    })
+    expect(result).toEqual(expect.objectContaining({
+      draftReviewId: 'review-1',
+      publicArtifactFileName: 'publication.json'
     }))
     expect(close).toHaveBeenCalled()
   })

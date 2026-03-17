@@ -5,6 +5,7 @@ import {
   askMemoryWorkspacePersistedInputSchema,
   exportApprovedPersonaDraftInputSchema,
   listApprovedPersonaDraftHandoffsInputSchema,
+  listApprovedPersonaDraftPublicationsInputSchema,
   listApprovedPersonaDraftProviderSendsInputSchema,
   createPersonaDraftReviewFromTurnInputSchema,
   getPersonaDraftReviewByTurnInputSchema,
@@ -16,6 +17,7 @@ import {
   retryApprovedPersonaDraftProviderSendInputSchema,
   runMemoryWorkspaceCompareInputSchema,
   runMemoryWorkspaceCompareMatrixInputSchema,
+  publishApprovedPersonaDraftInputSchema,
   sendApprovedPersonaDraftToProviderInputSchema,
   transitionPersonaDraftReviewInputSchema,
   updatePersonaDraftReviewInputSchema
@@ -48,6 +50,10 @@ import {
   exportApprovedPersonaDraftToDirectory,
   listApprovedPersonaDraftHandoffs
 } from '../services/personaDraftHandoffService'
+import {
+  listApprovedPersonaDraftPublications,
+  publishApprovedPersonaDraftToDirectory
+} from '../services/approvedDraftPublicationService'
 import {
   listApprovedPersonaDraftProviderSends,
   retryApprovedPersonaDraftProviderSend,
@@ -90,6 +96,9 @@ export function registerMemoryWorkspaceIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:selectPersonaDraftHandoffDestination')
   ipcMain.removeHandler('archive:listApprovedPersonaDraftHandoffs')
   ipcMain.removeHandler('archive:exportApprovedPersonaDraft')
+  ipcMain.removeHandler('archive:selectApprovedDraftPublicationDestination')
+  ipcMain.removeHandler('archive:listApprovedPersonaDraftPublications')
+  ipcMain.removeHandler('archive:publishApprovedPersonaDraft')
   ipcMain.removeHandler('archive:listApprovedDraftSendDestinations')
   ipcMain.removeHandler('archive:listApprovedPersonaDraftProviderSends')
   ipcMain.removeHandler('archive:sendApprovedPersonaDraftToProvider')
@@ -240,6 +249,28 @@ export function registerMemoryWorkspaceIpc(appPaths: AppPaths) {
     const exported = exportApprovedPersonaDraftToDirectory(db, input)
     db.close()
     return exported
+  })
+
+  ipcMain.handle('archive:selectApprovedDraftPublicationDestination', async () => {
+    return selectDirectory('FORGETME_E2E_APPROVED_DRAFT_PUBLICATION_DESTINATION_DIR')
+  })
+
+  ipcMain.handle('archive:listApprovedPersonaDraftPublications', async (_event, payload) => {
+    const input = listApprovedPersonaDraftPublicationsInputSchema.parse(payload)
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    const publications = listApprovedPersonaDraftPublications(db, input)
+    db.close()
+    return publications
+  })
+
+  ipcMain.handle('archive:publishApprovedPersonaDraft', async (_event, payload) => {
+    const input = publishApprovedPersonaDraftInputSchema.parse(payload)
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    const published = publishApprovedPersonaDraftToDirectory(db, input)
+    db.close()
+    return published
   })
 
   ipcMain.handle('archive:listApprovedDraftSendDestinations', async () => {
