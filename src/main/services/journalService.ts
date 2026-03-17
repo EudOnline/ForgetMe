@@ -54,6 +54,12 @@ function readApprovedDraftSendAttemptKind(operationPayload: Record<string, unkno
   return operationPayload.attemptKind === 'manual_retry' ? 'manual_retry' : 'initial_send'
 }
 
+function readApprovedDraftPublicationKind(operationPayload: Record<string, unknown>) {
+  return operationPayload.publicationKind === 'local_share_package'
+    ? 'local share package'
+    : null
+}
+
 function formatDecisionLabel(entry: Pick<DecisionJournalEntry, 'decisionType' | 'targetType' | 'operationPayload'>) {
   if (entry.targetType === 'decision_batch' && entry.decisionType === 'approve_safe_review_group') {
     return 'Safe batch approve'
@@ -73,6 +79,10 @@ function formatDecisionLabel(entry: Pick<DecisionJournalEntry, 'decisionType' | 
 
   if (entry.decisionType === 'export_approved_persona_draft') {
     return 'Approved draft exported'
+  }
+
+  if (entry.decisionType === 'publish_approved_persona_draft') {
+    return 'Approved draft published for sharing'
   }
 
   if (entry.decisionType === 'send_approved_persona_draft_to_provider') {
@@ -105,7 +115,8 @@ function formatTargetLabel(entry: Pick<DecisionJournalEntry, 'targetType' | 'ope
     const sourceTurnId = readString(entry.operationPayload.sourceTurnId)
     const destinationLabel = readString(entry.operationPayload.destinationLabel)
     const provider = readString(entry.operationPayload.provider)
-    const summaryParts = ['Persona draft review', sourceTurnId, destinationLabel ?? provider]
+    const publicationKind = readApprovedDraftPublicationKind(entry.operationPayload)
+    const summaryParts = ['Persona draft review', sourceTurnId, destinationLabel ?? provider ?? publicationKind]
       .filter((value): value is string => Boolean(value))
 
     return summaryParts.join(' · ')

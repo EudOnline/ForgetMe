@@ -174,4 +174,41 @@ describe('archive search', () => {
     }))
     db.close()
   })
+
+  it('finds approved draft publication history by the publish replay summary', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-approved-draft-publication-search-'))
+    const appPaths = ensureAppPaths(root)
+    const db = openDatabase(path.join(appPaths.sqliteDir, 'archive.sqlite'))
+    runMigrations(db)
+
+    appendDecisionJournal(db, {
+      decisionType: 'publish_approved_persona_draft',
+      targetType: 'persona_draft_review',
+      targetId: 'review-1',
+      operationPayload: {
+        publicationId: 'publication-1',
+        draftReviewId: 'review-1',
+        sourceTurnId: 'turn-1',
+        publicationKind: 'local_share_package',
+        packageRoot: '/tmp/approved-draft-publication-publication-1',
+        manifestPath: '/tmp/approved-draft-publication-publication-1/manifest.json',
+        publicArtifactPath: '/tmp/approved-draft-publication-publication-1/publication.json',
+        publicArtifactFileName: 'publication.json',
+        publicArtifactSha256: 'hash-1',
+        publishedAt: '2026-03-16T09:00:00.000Z',
+        sourceArtifact: 'approved_persona_draft_handoff'
+      },
+      undoPayload: {},
+      actor: 'local-user'
+    })
+
+    const results = await searchDecisionJournal({ appPaths, query: 'local share package' })
+
+    expect(results).toContainEqual(expect.objectContaining({
+      decisionType: 'publish_approved_persona_draft',
+      targetType: 'persona_draft_review',
+      replaySummary: 'Approved draft published for sharing · Persona draft review · turn-1 · local share package'
+    }))
+    db.close()
+  })
 })
