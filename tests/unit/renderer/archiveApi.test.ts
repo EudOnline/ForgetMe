@@ -106,6 +106,14 @@ describe('archiveApi dossier methods', () => {
       draftReviewId: 'review-1',
       destinationRoot: '/tmp/persona-draft-exports'
     })).resolves.toBeNull()
+    await expect(archiveApi.selectApprovedDraftPublicationDestination()).resolves.toBeNull()
+    await expect(archiveApi.listApprovedPersonaDraftPublications({
+      draftReviewId: 'review-1'
+    })).resolves.toEqual([])
+    await expect(archiveApi.publishApprovedPersonaDraft({
+      draftReviewId: 'review-1',
+      destinationRoot: '/tmp/persona-draft-publications'
+    })).resolves.toBeNull()
     await expect(archiveApi.listApprovedPersonaDraftProviderSends({
       draftReviewId: 'review-1'
     })).resolves.toEqual([])

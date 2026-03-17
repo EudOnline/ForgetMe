@@ -721,6 +721,61 @@ export type ExportApprovedPersonaDraftResult = {
   exportedAt: string
 }
 
+export type ApprovedDraftPublicationKind = 'local_share_package'
+
+export type ApprovedPersonaDraftPublicationArtifact = {
+  formatVersion: 'phase10k1'
+  publicationKind: ApprovedDraftPublicationKind
+  publishedAt: string
+  publicationId: string
+  title: string
+  question: string
+  approvedDraft: string
+  shareEnvelope: {
+    requestShape: 'local_share_persona_draft_publication'
+    policyKey: 'persona_draft.local_publish_share'
+  }
+}
+
+export type ApprovedPersonaDraftPublicationRecord = {
+  journalId: string
+  publicationId: string
+  draftReviewId: string
+  sourceTurnId: string
+  publicationKind: ApprovedDraftPublicationKind
+  status: 'published'
+  packageRoot: string
+  manifestPath: string
+  publicArtifactPath: string
+  publicArtifactFileName: string
+  publicArtifactSha256: string
+  publishedAt: string
+}
+
+export type ListApprovedPersonaDraftPublicationsInput = {
+  draftReviewId: string
+}
+
+export type PublishApprovedPersonaDraftInput = {
+  draftReviewId: string
+  destinationRoot: string
+}
+
+export type PublishApprovedPersonaDraftResult = {
+  status: 'published'
+  journalId: string
+  publicationId: string
+  draftReviewId: string
+  sourceTurnId: string
+  publicationKind: ApprovedDraftPublicationKind
+  packageRoot: string
+  manifestPath: string
+  publicArtifactPath: string
+  publicArtifactFileName: string
+  publicArtifactSha256: string
+  publishedAt: string
+}
+
 export type ApprovedDraftSendDestination = {
   destinationId: string
   label: string
@@ -1315,6 +1370,9 @@ export interface ArchiveApi {
   selectPersonaDraftHandoffDestination: () => Promise<string | null>
   listApprovedPersonaDraftHandoffs: (input: ListApprovedPersonaDraftHandoffsInput) => Promise<ApprovedPersonaDraftHandoffRecord[]>
   exportApprovedPersonaDraft: (input: ExportApprovedPersonaDraftInput) => Promise<ExportApprovedPersonaDraftResult | null>
+  selectApprovedDraftPublicationDestination: () => Promise<string | null>
+  listApprovedPersonaDraftPublications: (input: ListApprovedPersonaDraftPublicationsInput) => Promise<ApprovedPersonaDraftPublicationRecord[]>
+  publishApprovedPersonaDraft: (input: PublishApprovedPersonaDraftInput) => Promise<PublishApprovedPersonaDraftResult | null>
   listApprovedDraftSendDestinations: () => Promise<ApprovedDraftSendDestination[]>
   listApprovedPersonaDraftProviderSends: (input: ListApprovedPersonaDraftProviderSendsInput) => Promise<ApprovedPersonaDraftProviderSendArtifact[]>
   sendApprovedPersonaDraftToProvider: (input: SendApprovedPersonaDraftToProviderInput) => Promise<SendApprovedPersonaDraftToProviderResult | null>

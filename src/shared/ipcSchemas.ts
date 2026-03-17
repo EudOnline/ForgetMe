@@ -153,6 +153,12 @@ export const exportApprovedPersonaDraftInputSchema = approvedPersonaDraftReviewI
   destinationRoot: z.string().min(1)
 })
 
+export const listApprovedPersonaDraftPublicationsInputSchema = approvedPersonaDraftReviewIdSchema
+
+export const publishApprovedPersonaDraftInputSchema = approvedPersonaDraftReviewIdSchema.extend({
+  destinationRoot: z.string().min(1)
+})
+
 export const approvedDraftSendDestinationIdSchema = z.string().min(1)
 export const approvedDraftProviderSendArtifactIdSchema = z.string().min(1)
 
