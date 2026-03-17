@@ -61,12 +61,19 @@ test('memory workspace approved draft handoff sends an approved draft through pr
   await expect(sandboxTurn.getByRole('heading', { name: 'Approved Draft Handoff' })).toBeVisible()
   await expect(sandboxTurn.getByText('Provider Boundary Send')).toBeVisible()
   await expect(sandboxTurn.getByText('No provider sends yet.')).toBeVisible()
+  const destinationSelect = sandboxTurn.getByLabel('Destination')
+  await expect(destinationSelect).toBeVisible()
+  await expect(destinationSelect).toHaveValue('memory-dialogue-default')
+  await expect(destinationSelect).toContainText('Memory Dialogue Default')
+  await expect(destinationSelect).toContainText('OpenRouter / qwen-2.5-72b-instruct')
+
+  await destinationSelect.selectOption('openrouter-qwen25-72b')
 
   await sandboxTurn.getByRole('button', { name: 'Send approved draft' }).click()
 
   await expect(sandboxTurn.getByText('response recorded')).toBeVisible()
-  await expect(sandboxTurn.getByText('siliconflow')).toBeVisible()
-  await expect(sandboxTurn.getByText(/Qwen\/Qwen2\.5-72B-Instruct/)).toBeVisible()
+  await expect(sandboxTurn.getByText('Destination: OpenRouter / qwen-2.5-72b-instruct')).toBeVisible()
+  await expect(sandboxTurn.getByText('openrouter · qwen/qwen-2.5-72b-instruct')).toBeVisible()
   await expect(sandboxTurn.locator('p', { hasText: 'persona_draft.remote_send_approved' })).toBeVisible()
   await expect(sandboxTurn.getByText('Latest send audit')).toBeVisible()
   const requestAudit = sandboxTurn.locator('summary').filter({ hasText: /^request · / })
