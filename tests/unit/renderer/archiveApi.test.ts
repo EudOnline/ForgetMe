@@ -114,6 +114,9 @@ describe('archiveApi dossier methods', () => {
       draftReviewId: 'review-1',
       destinationId: 'openrouter-qwen25-72b'
     })).resolves.toBeNull()
+    await expect(archiveApi.retryApprovedPersonaDraftProviderSend({
+      artifactId: 'pdpe-failed-1'
+    })).resolves.toBeNull()
     await expect(archiveApi.getGroupPortrait('cp-1')).resolves.toBeNull()
     await expect(archiveApi.selectContextPackExportDestination()).resolves.toBeNull()
     await expect(archiveApi.getPersonContextPack({

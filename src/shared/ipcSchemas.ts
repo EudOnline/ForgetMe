@@ -154,11 +154,16 @@ export const exportApprovedPersonaDraftInputSchema = approvedPersonaDraftReviewI
 })
 
 export const approvedDraftSendDestinationIdSchema = z.string().min(1)
+export const approvedDraftProviderSendArtifactIdSchema = z.string().min(1)
 
 export const listApprovedPersonaDraftProviderSendsInputSchema = approvedPersonaDraftReviewIdSchema
 
 export const sendApprovedPersonaDraftToProviderInputSchema = approvedPersonaDraftReviewIdSchema.extend({
   destinationId: approvedDraftSendDestinationIdSchema.optional()
+})
+
+export const retryApprovedPersonaDraftProviderSendInputSchema = z.object({
+  artifactId: approvedDraftProviderSendArtifactIdSchema
 })
 
 export const contextPackExportModeSchema = z.enum([

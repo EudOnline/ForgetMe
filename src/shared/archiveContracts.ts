@@ -737,6 +737,8 @@ export type ApprovedPersonaDraftProviderSendEvent = {
   createdAt: string
 }
 
+export type ApprovedDraftProviderSendAttemptKind = 'initial_send' | 'manual_retry'
+
 export type ApprovedPersonaDraftProviderSendArtifact = {
   artifactId: string
   draftReviewId: string
@@ -747,6 +749,8 @@ export type ApprovedPersonaDraftProviderSendArtifact = {
   requestHash: string
   destinationId: string
   destinationLabel: string
+  attemptKind: ApprovedDraftProviderSendAttemptKind
+  retryOfArtifactId: string | null
   redactionSummary: Record<string, unknown>
   createdAt: string
   events: ApprovedPersonaDraftProviderSendEvent[]
@@ -761,6 +765,10 @@ export type SendApprovedPersonaDraftToProviderInput = {
   destinationId?: string
 }
 
+export type RetryApprovedPersonaDraftProviderSendInput = {
+  artifactId: string
+}
+
 export type SendApprovedPersonaDraftToProviderResult = {
   status: 'responded'
   artifactId: string
@@ -772,6 +780,8 @@ export type SendApprovedPersonaDraftToProviderResult = {
   requestHash: string
   destinationId: string
   destinationLabel: string
+  attemptKind: ApprovedDraftProviderSendAttemptKind
+  retryOfArtifactId: string | null
   createdAt: string
 }
 
@@ -1291,6 +1301,7 @@ export interface ArchiveApi {
   listApprovedDraftSendDestinations: () => Promise<ApprovedDraftSendDestination[]>
   listApprovedPersonaDraftProviderSends: (input: ListApprovedPersonaDraftProviderSendsInput) => Promise<ApprovedPersonaDraftProviderSendArtifact[]>
   sendApprovedPersonaDraftToProvider: (input: SendApprovedPersonaDraftToProviderInput) => Promise<SendApprovedPersonaDraftToProviderResult | null>
+  retryApprovedPersonaDraftProviderSend: (input: RetryApprovedPersonaDraftProviderSendInput) => Promise<SendApprovedPersonaDraftToProviderResult | null>
   listGroupPortraits: () => Promise<GroupPortraitBrowseSummary[]>
   getGroupPortrait: (canonicalPersonId: string) => Promise<GroupPortrait | null>
   getGroupContextPack: (input: { anchorPersonId: string; mode?: ContextPackExportMode }) => Promise<GroupContextPack | null>

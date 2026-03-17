@@ -1,21 +1,25 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import type {
+  ApprovedDraftProviderSendAttemptKind,
   ApprovedDraftSendDestination,
   ApprovedPersonaDraftProviderSendArtifact,
   ApprovedPersonaDraftProviderSendEvent,
   ArchiveApi,
   ListApprovedPersonaDraftProviderSendsInput,
+  RetryApprovedPersonaDraftProviderSendInput,
   SendApprovedPersonaDraftToProviderInput,
   SendApprovedPersonaDraftToProviderResult
 } from '../../../src/shared/archiveContracts'
 import {
   approvedDraftSendDestinationIdSchema,
   listApprovedPersonaDraftProviderSendsInputSchema,
+  retryApprovedPersonaDraftProviderSendInputSchema,
   sendApprovedPersonaDraftToProviderInputSchema
 } from '../../../src/shared/ipcSchemas'
 
 describe('phase-ten approved draft provider send contracts', () => {
   it('exports approved draft provider send shapes', () => {
+    const attemptKind: ApprovedDraftProviderSendAttemptKind = 'manual_retry'
     const destination: ApprovedDraftSendDestination = {
       destinationId: 'openrouter-qwen25-72b',
       label: 'OpenRouter / qwen-2.5-72b-instruct',
@@ -45,6 +49,8 @@ describe('phase-ten approved draft provider send contracts', () => {
       requestHash: 'hash-1',
       destinationId: destination.destinationId,
       destinationLabel: destination.label,
+      attemptKind,
+      retryOfArtifactId: 'pdpe-failed-1',
       redactionSummary: {
         requestShape: 'approved_persona_draft_handoff_artifact',
         sourceArtifact: 'approved_persona_draft_handoff',
@@ -63,6 +69,10 @@ describe('phase-ten approved draft provider send contracts', () => {
       destinationId: destination.destinationId
     }
 
+    const retryInput: RetryApprovedPersonaDraftProviderSendInput = {
+      artifactId: 'pdpe-failed-1'
+    }
+
     const sendResult: SendApprovedPersonaDraftToProviderResult = {
       status: 'responded',
       artifactId: 'pdpe-1',
@@ -74,15 +84,23 @@ describe('phase-ten approved draft provider send contracts', () => {
       requestHash: 'hash-1',
       destinationId: destination.destinationId,
       destinationLabel: destination.label,
+      attemptKind,
+      retryOfArtifactId: 'pdpe-failed-1',
       createdAt: '2026-03-16T08:00:00.000Z'
     }
 
+    expect(attemptKind).toBe('manual_retry')
     expect(destination.destinationId).toBe('openrouter-qwen25-72b')
     expect(artifact.events[0]?.eventType).toBe('request')
+    expect(artifact.attemptKind).toBe('manual_retry')
+    expect(artifact.retryOfArtifactId).toBe('pdpe-failed-1')
     expect(listInput.draftReviewId).toBe('review-1')
     expect(sendInput.destinationId).toBe('openrouter-qwen25-72b')
+    expect(retryInput.artifactId).toBe('pdpe-failed-1')
     expect(sendResult.status).toBe('responded')
     expect(sendResult.destinationLabel).toBe('OpenRouter / qwen-2.5-72b-instruct')
+    expect(sendResult.attemptKind).toBe('manual_retry')
+    expect(sendResult.retryOfArtifactId).toBe('pdpe-failed-1')
 
     expectTypeOf<ArchiveApi['listApprovedDraftSendDestinations']>().toEqualTypeOf<
       () => Promise<ApprovedDraftSendDestination[]>
@@ -92,6 +110,9 @@ describe('phase-ten approved draft provider send contracts', () => {
     >()
     expectTypeOf<ArchiveApi['sendApprovedPersonaDraftToProvider']>().toEqualTypeOf<
       (input: SendApprovedPersonaDraftToProviderInput) => Promise<SendApprovedPersonaDraftToProviderResult | null>
+    >()
+    expectTypeOf<ArchiveApi['retryApprovedPersonaDraftProviderSend']>().toEqualTypeOf<
+      (input: RetryApprovedPersonaDraftProviderSendInput) => Promise<SendApprovedPersonaDraftToProviderResult | null>
     >()
   })
 
@@ -110,6 +131,12 @@ describe('phase-ten approved draft provider send contracts', () => {
     })).toEqual({
       draftReviewId: 'review-1',
       destinationId: 'openrouter-qwen25-72b'
+    })
+
+    expect(retryApprovedPersonaDraftProviderSendInputSchema.parse({
+      artifactId: 'pdpe-failed-1'
+    })).toEqual({
+      artifactId: 'pdpe-failed-1'
     })
   })
 })
