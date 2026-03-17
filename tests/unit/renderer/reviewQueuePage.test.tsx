@@ -224,16 +224,18 @@ describe('ReviewQueuePage', () => {
         decisionType: 'send_approved_persona_draft_to_provider',
         targetType: 'persona_draft_review',
         targetId: 'review-send-1',
-        replaySummary: 'Approved draft sent to provider · Persona draft review · turn-1 · siliconflow',
-        targetLabel: 'Persona draft review · turn-1 · siliconflow',
+        replaySummary: 'Approved draft sent to provider · Persona draft review · turn-1 · OpenRouter / qwen-2.5-72b-instruct',
+        targetLabel: 'Persona draft review · turn-1 · OpenRouter / qwen-2.5-72b-instruct',
         decisionLabel: 'Approved draft sent to provider',
         operationPayload: {
           draftReviewId: 'review-send-1',
           sourceTurnId: 'turn-1',
           providerSendArtifactId: 'artifact-1',
-          provider: 'siliconflow',
-          model: 'Qwen/Qwen2.5-72B-Instruct',
+          provider: 'openrouter',
+          model: 'qwen/qwen-2.5-72b-instruct',
           policyKey: 'persona_draft.remote_send_approved',
+          destinationId: 'openrouter-qwen25-72b',
+          destinationLabel: 'OpenRouter / qwen-2.5-72b-instruct',
           requestHash: 'hash-1',
           sentAt: '2026-03-16T08:00:00.000Z'
         },
@@ -258,14 +260,14 @@ describe('ReviewQueuePage', () => {
     render(<ReviewQueuePage />)
 
     expect(await screen.findByText('Approved draft sent to provider')).toBeInTheDocument()
-    expect(screen.getByText('Persona draft review · turn-1 · siliconflow')).toBeInTheDocument()
+    expect(screen.getByText('Persona draft review · turn-1 · OpenRouter / qwen-2.5-72b-instruct')).toBeInTheDocument()
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Replay' }))
     })
 
     expect(await screen.findByText('Replay Detail')).toBeInTheDocument()
-    expect(screen.getByText('Approved draft sent to provider · Persona draft review · turn-1 · siliconflow')).toBeInTheDocument()
+    expect(screen.getByText('Approved draft sent to provider · Persona draft review · turn-1 · OpenRouter / qwen-2.5-72b-instruct')).toBeInTheDocument()
     expect(screen.getByText(/providerSendArtifactId/i)).toBeInTheDocument()
     expect(screen.getByText((content) => content.includes('persona_draft.remote_send_approved'))).toBeInTheDocument()
   })

@@ -77,8 +77,9 @@ function formatDecisionLabel(entry: Pick<DecisionJournalEntry, 'decisionType' | 
 function formatTargetLabel(entry: Pick<DecisionJournalEntry, 'targetType' | 'operationPayload'>) {
   if (entry.targetType === 'persona_draft_review') {
     const sourceTurnId = readString(entry.operationPayload.sourceTurnId)
+    const destinationLabel = readString(entry.operationPayload.destinationLabel)
     const provider = readString(entry.operationPayload.provider)
-    const summaryParts = ['Persona draft review', sourceTurnId, provider]
+    const summaryParts = ['Persona draft review', sourceTurnId, destinationLabel ?? provider]
       .filter((value): value is string => Boolean(value))
 
     return summaryParts.join(' · ')

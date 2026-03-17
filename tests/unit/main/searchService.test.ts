@@ -66,9 +66,11 @@ describe('archive search', () => {
         draftReviewId: 'review-1',
         sourceTurnId: 'turn-1',
         providerSendArtifactId: 'artifact-1',
-        provider: 'siliconflow',
-        model: 'Qwen/Qwen2.5-72B-Instruct',
+        provider: 'openrouter',
+        model: 'qwen/qwen-2.5-72b-instruct',
         policyKey: 'persona_draft.remote_send_approved',
+        destinationId: 'openrouter-qwen25-72b',
+        destinationLabel: 'OpenRouter / qwen-2.5-72b-instruct',
         requestHash: 'hash-1',
         sentAt: '2026-03-16T08:00:00.000Z'
       },
@@ -76,12 +78,12 @@ describe('archive search', () => {
       actor: 'local-user'
     })
 
-    const results = await searchDecisionJournal({ appPaths, query: 'siliconflow' })
+    const results = await searchDecisionJournal({ appPaths, query: 'OpenRouter / qwen-2.5-72b-instruct' })
 
     expect(results).toContainEqual(expect.objectContaining({
       decisionType: 'send_approved_persona_draft_to_provider',
       targetType: 'persona_draft_review',
-      replaySummary: 'Approved draft sent to provider · Persona draft review · turn-1 · siliconflow'
+      replaySummary: 'Approved draft sent to provider · Persona draft review · turn-1 · OpenRouter / qwen-2.5-72b-instruct'
     }))
     db.close()
   })
