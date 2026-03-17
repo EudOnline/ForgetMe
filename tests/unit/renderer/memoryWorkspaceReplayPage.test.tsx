@@ -981,10 +981,12 @@ describe('MemoryWorkspacePage replay', () => {
           artifactId: 'pdpe-replay-1',
           draftReviewId: 'review-approved-1',
           sourceTurnId: 'turn-sandbox-reviewed',
-          provider: 'siliconflow',
-          model: 'Qwen/Qwen2.5-72B-Instruct',
+          provider: 'openrouter',
+          model: 'qwen/qwen-2.5-72b-instruct',
           policyKey: 'persona_draft.remote_send_approved',
           requestHash: 'hash-replay-1',
+          destinationId: 'openrouter-qwen25-72b',
+          destinationLabel: 'OpenRouter / qwen-2.5-72b-instruct',
           redactionSummary: {
             requestShape: 'approved_persona_draft_handoff_artifact',
             sourceArtifact: 'approved_persona_draft_handoff',
@@ -1042,6 +1044,7 @@ describe('MemoryWorkspacePage replay', () => {
     expect(await screen.findByRole('heading', { name: 'Approved Draft Handoff' })).toBeInTheDocument()
     expect(screen.getByText('Provider Boundary Send')).toBeInTheDocument()
     expect(screen.getByText('response recorded')).toBeInTheDocument()
+    expect(screen.getByText('Destination: OpenRouter / qwen-2.5-72b-instruct')).toBeInTheDocument()
     expect(screen.getByText('Latest send audit')).toBeInTheDocument()
     expect(screen.getByLabelText('Draft review body')).toHaveValue('可审阅草稿：先把关键记录整理进归档，再补齐细节。')
     expect(screen.getByLabelText('Draft review body')).toBeDisabled()

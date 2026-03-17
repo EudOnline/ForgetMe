@@ -828,15 +828,43 @@ describe('MemoryWorkspacePage', () => {
 
     let currentSends: Array<Record<string, unknown>> = []
     const listApprovedPersonaDraftProviderSends = vi.fn().mockImplementation(async () => currentSends)
+    const listApprovedDraftSendDestinations = vi.fn().mockResolvedValue([
+      {
+        destinationId: 'memory-dialogue-default',
+        label: 'Memory Dialogue Default',
+        resolutionMode: 'memory_dialogue_default',
+        provider: 'siliconflow',
+        model: 'Qwen/Qwen2.5-72B-Instruct',
+        isDefault: true
+      },
+      {
+        destinationId: 'siliconflow-qwen25-72b',
+        label: 'SiliconFlow / Qwen2.5-72B-Instruct',
+        resolutionMode: 'provider_model',
+        provider: 'siliconflow',
+        model: 'Qwen/Qwen2.5-72B-Instruct',
+        isDefault: false
+      },
+      {
+        destinationId: 'openrouter-qwen25-72b',
+        label: 'OpenRouter / qwen-2.5-72b-instruct',
+        resolutionMode: 'provider_model',
+        provider: 'openrouter',
+        model: 'qwen/qwen-2.5-72b-instruct',
+        isDefault: false
+      }
+    ])
     const sendApprovedPersonaDraftToProvider = vi.fn().mockImplementation(async () => {
       currentSends = [{
         artifactId: 'pdpe-1',
         draftReviewId: 'review-send-1',
         sourceTurnId: 'turn-sandbox-send-1',
-        provider: 'siliconflow',
-        model: 'Qwen/Qwen2.5-72B-Instruct',
+        provider: 'openrouter',
+        model: 'qwen/qwen-2.5-72b-instruct',
         policyKey: 'persona_draft.remote_send_approved',
         requestHash: 'hash-1',
+        destinationId: 'openrouter-qwen25-72b',
+        destinationLabel: 'OpenRouter / qwen-2.5-72b-instruct',
         redactionSummary: {
           requestShape: 'approved_persona_draft_handoff_artifact',
           sourceArtifact: 'approved_persona_draft_handoff',
@@ -868,10 +896,12 @@ describe('MemoryWorkspacePage', () => {
         artifactId: 'pdpe-1',
         draftReviewId: 'review-send-1',
         sourceTurnId: 'turn-sandbox-send-1',
-        provider: 'siliconflow',
-        model: 'Qwen/Qwen2.5-72B-Instruct',
+        provider: 'openrouter',
+        model: 'qwen/qwen-2.5-72b-instruct',
         policyKey: 'persona_draft.remote_send_approved',
         requestHash: 'hash-1',
+        destinationId: 'openrouter-qwen25-72b',
+        destinationLabel: 'OpenRouter / qwen-2.5-72b-instruct',
         createdAt: '2026-03-16T08:00:00.000Z'
       }
     })
@@ -883,6 +913,7 @@ describe('MemoryWorkspacePage', () => {
       getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
       runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
       askMemoryWorkspacePersisted: vi.fn().mockResolvedValue(sandboxTurn),
+      listApprovedDraftSendDestinations,
       getPersonaDraftReviewByTurn: vi.fn().mockResolvedValue(approvedReview),
       listApprovedPersonaDraftHandoffs: vi.fn().mockResolvedValue([]),
       listApprovedPersonaDraftProviderSends,
@@ -899,23 +930,136 @@ describe('MemoryWorkspacePage', () => {
     expect(await screen.findByRole('heading', { name: 'Approved Draft Handoff' })).toBeInTheDocument()
     expect(screen.getByText('Provider Boundary Send')).toBeInTheDocument()
     expect(screen.getByText('No provider sends yet.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Destination')).toHaveValue('memory-dialogue-default')
+    expect(screen.getByRole('option', { name: 'Memory Dialogue Default' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'SiliconFlow / Qwen2.5-72B-Instruct' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'OpenRouter / qwen-2.5-72b-instruct' })).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Destination'), {
+      target: { value: 'openrouter-qwen25-72b' }
+    })
 
     fireEvent.click(screen.getByRole('button', { name: 'Send approved draft' }))
 
     await waitFor(() => {
       expect(sendApprovedPersonaDraftToProvider).toHaveBeenCalledWith({
-        draftReviewId: 'review-send-1'
+        draftReviewId: 'review-send-1',
+        destinationId: 'openrouter-qwen25-72b'
       })
     })
 
     expect(await screen.findByText('response recorded')).toBeInTheDocument()
-    expect(screen.getByText('siliconflow · Qwen/Qwen2.5-72B-Instruct')).toBeInTheDocument()
+    expect(screen.getByText('Destination: OpenRouter / qwen-2.5-72b-instruct')).toBeInTheDocument()
+    expect(screen.getByText('openrouter · qwen/qwen-2.5-72b-instruct')).toBeInTheDocument()
     expect(screen.getByText('persona_draft.remote_send_approved')).toBeInTheDocument()
     expect(screen.getByText('Latest send audit')).toBeInTheDocument()
     expect(screen.getByText('request · 2026-03-16T08:00:00.000Z')).toBeInTheDocument()
     expect(screen.getByText('response · 2026-03-16T08:00:01.000Z')).toBeInTheDocument()
     expect(screen.getByText(/approved_persona_draft_handoff_artifact/)).toBeInTheDocument()
     expect(screen.getByText(/acknowledgement/)).toBeInTheDocument()
+    expect(window.localStorage.getItem('forgetme.memoryWorkspace.approvedDraftSendDestinationId')).toBe('openrouter-qwen25-72b')
+  })
+
+  it('restores the last-used approved draft send destination from localStorage', async () => {
+    window.localStorage.setItem('forgetme.memoryWorkspace.approvedDraftSendDestinationId', 'openrouter-qwen25-72b')
+
+    const sandboxTurn = {
+      turnId: 'turn-sandbox-restore-1',
+      sessionId: 'session-sandbox-restore-1',
+      ordinal: 1,
+      question: '如果她来写一段关于记录和归档的回复，会怎么写？',
+      provider: null,
+      model: null,
+      contextHash: 'context-hash-sandbox-restore-1',
+      promptHash: 'prompt-hash-sandbox-restore-1',
+      createdAt: '2026-03-15T00:36:00.000Z',
+      response: {
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' } as const,
+        question: '如果她来写一段关于记录和归档的回复，会怎么写？',
+        expressionMode: 'grounded' as const,
+        workflowKind: 'persona_draft_sandbox' as const,
+        title: 'Memory Workspace · Alice Chen',
+        answer: {
+          summary: 'Reviewed simulation draft generated from archive-backed excerpts for this ask.',
+          displayType: 'derived_summary' as const,
+          citations: []
+        },
+        guardrail: {
+          decision: 'sandbox_review_required' as const,
+          reasonCodes: ['persona_draft_sandbox' as const, 'quote_trace_required' as const],
+          citationCount: 2,
+          sourceKinds: ['file'],
+          fallbackApplied: false
+        },
+        contextCards: [],
+        boundaryRedirect: null,
+        communicationEvidence: null,
+        personaDraft: {
+          title: 'Reviewed draft sandbox',
+          disclaimer: 'Simulation draft based on archived expressions. Not a statement from the person.',
+          draft: '可审阅草稿：先把关键记录整理进归档。',
+          reviewState: 'review_required' as const,
+          supportingExcerpts: [],
+          trace: []
+        }
+      }
+    }
+
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceSession: vi.fn().mockResolvedValue(null),
+      listMemoryWorkspaceCompareSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted: vi.fn().mockResolvedValue(sandboxTurn),
+      listApprovedDraftSendDestinations: vi.fn().mockResolvedValue([
+        {
+          destinationId: 'memory-dialogue-default',
+          label: 'Memory Dialogue Default',
+          resolutionMode: 'memory_dialogue_default',
+          provider: 'siliconflow',
+          model: 'Qwen/Qwen2.5-72B-Instruct',
+          isDefault: true
+        },
+        {
+          destinationId: 'openrouter-qwen25-72b',
+          label: 'OpenRouter / qwen-2.5-72b-instruct',
+          resolutionMode: 'provider_model',
+          provider: 'openrouter',
+          model: 'qwen/qwen-2.5-72b-instruct',
+          isDefault: false
+        }
+      ]),
+      getPersonaDraftReviewByTurn: vi.fn().mockResolvedValue({
+        draftReviewId: 'review-restore-1',
+        sourceTurnId: 'turn-sandbox-restore-1',
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+        workflowKind: 'persona_draft_sandbox',
+        status: 'approved',
+        baseDraft: '可审阅草稿：先把关键记录整理进归档。',
+        editedDraft: '可审阅草稿：先把关键记录整理进归档。',
+        reviewNotes: '',
+        supportingExcerpts: [],
+        trace: [],
+        approvedJournalId: 'journal-approved-restore-1',
+        rejectedJournalId: null,
+        createdAt: '2026-03-16T01:00:00.000Z',
+        updatedAt: '2026-03-16T01:07:00.000Z'
+      }),
+      listApprovedPersonaDraftHandoffs: vi.fn().mockResolvedValue([]),
+      listApprovedPersonaDraftProviderSends: vi.fn().mockResolvedValue([]),
+      sendApprovedPersonaDraftToProvider: vi.fn().mockResolvedValue(null)
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'person', canonicalPersonId: 'cp-1' }} />)
+
+    fireEvent.change(screen.getByLabelText('Ask memory workspace'), {
+      target: { value: '如果她来写一段关于记录和归档的回复，会怎么写？' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+
+    expect(await screen.findByRole('heading', { name: 'Approved Draft Handoff' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Destination')).toHaveValue('openrouter-qwen25-72b')
   })
 
   it('runs compare for an active sandbox response with sandbox workflow metadata and labels', async () => {

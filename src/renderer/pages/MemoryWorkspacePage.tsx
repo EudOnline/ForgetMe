@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
+  ApprovedDraftSendDestination,
   ApprovedPersonaDraftHandoffRecord,
   ApprovedPersonaDraftProviderSendArtifact,
   ExportApprovedPersonaDraftResult,
@@ -25,6 +26,7 @@ import { MemoryWorkspaceView } from '../components/MemoryWorkspaceView'
 
 const compareJudgeDefaultsStorageKey = 'forgetme.memoryWorkspace.compareJudgeDefaults'
 const compareTargetDefaultsStorageKey = 'forgetme.memoryWorkspace.compareTargetDefaults'
+const approvedDraftSendDestinationStorageKey = 'forgetme.memoryWorkspace.approvedDraftSendDestinationId'
 const defaultCompareTargetModels = {
   siliconflow: 'Qwen/Qwen2.5-72B-Instruct',
   openrouter: 'qwen/qwen-2.5-72b-instruct'
@@ -98,6 +100,51 @@ function writeStoredCompareJudgeDefaults(defaults: CompareJudgeDefaults) {
   } catch {
     return
   }
+}
+
+function readStoredApprovedDraftSendDestinationId() {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(approvedDraftSendDestinationStorageKey)
+    return rawValue && rawValue.trim().length > 0 ? rawValue : null
+  } catch {
+    return null
+  }
+}
+
+function writeStoredApprovedDraftSendDestinationId(destinationId: string | null) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    if (destinationId) {
+      window.localStorage.setItem(approvedDraftSendDestinationStorageKey, destinationId)
+      return
+    }
+
+    window.localStorage.removeItem(approvedDraftSendDestinationStorageKey)
+  } catch {
+    return
+  }
+}
+
+function resolveApprovedDraftSendDestinationId(destinations: ApprovedDraftSendDestination[]) {
+  const storedDestinationId = readStoredApprovedDraftSendDestinationId()
+  if (destinations.length === 0) {
+    return storedDestinationId
+  }
+
+  if (storedDestinationId && destinations.some((destination) => destination.destinationId === storedDestinationId)) {
+    return storedDestinationId
+  }
+
+  return destinations.find((destination) => destination.isDefault)?.destinationId
+    ?? destinations[0]?.destinationId
+    ?? null
 }
 
 function defaultCompareTargetControls(): CompareTargetControls {
@@ -440,6 +487,12 @@ export function MemoryWorkspacePage(props: {
       : async () => null as ExportApprovedPersonaDraftResult | null),
     [archiveApi]
   )
+  const listApprovedDraftSendDestinations = useMemo(
+    () => (typeof archiveApi.listApprovedDraftSendDestinations === 'function'
+      ? archiveApi.listApprovedDraftSendDestinations.bind(archiveApi)
+      : async () => [] as ApprovedDraftSendDestination[]),
+    [archiveApi]
+  )
   const listApprovedPersonaDraftProviderSends = useMemo(
     () => (typeof archiveApi.listApprovedPersonaDraftProviderSends === 'function'
       ? archiveApi.listApprovedPersonaDraftProviderSends.bind(archiveApi)
@@ -483,6 +536,10 @@ export function MemoryWorkspacePage(props: {
   const [draftReviewEditorsByTurnId, setDraftReviewEditorsByTurnId] = useState<Record<string, DraftReviewEditorState>>({})
   const [draftReviewPendingByTurnId, setDraftReviewPendingByTurnId] = useState<Record<string, boolean>>({})
   const [approvedDraftHandoffDestination, setApprovedDraftHandoffDestination] = useState<string | null>(null)
+  const [approvedDraftSendDestinations, setApprovedDraftSendDestinations] = useState<ApprovedDraftSendDestination[]>([])
+  const [approvedDraftSendDestinationId, setApprovedDraftSendDestinationId] = useState<string | null>(
+    () => readStoredApprovedDraftSendDestinationId()
+  )
   const [approvedDraftHandoffsByTurnId, setApprovedDraftHandoffsByTurnId] = useState<Record<string, ApprovedPersonaDraftHandoffRecord[]>>({})
   const [approvedDraftHandoffPendingByTurnId, setApprovedDraftHandoffPendingByTurnId] = useState<Record<string, boolean>>({})
   const [approvedDraftProviderSendsByTurnId, setApprovedDraftProviderSendsByTurnId] = useState<Record<string, ApprovedPersonaDraftProviderSendArtifact[]>>({})
@@ -760,6 +817,8 @@ export function MemoryWorkspacePage(props: {
     setDraftReviewEditorsByTurnId({})
     setDraftReviewPendingByTurnId({})
     setApprovedDraftHandoffDestination(null)
+    setApprovedDraftSendDestinations([])
+    setApprovedDraftSendDestinationId(readStoredApprovedDraftSendDestinationId())
     setApprovedDraftHandoffsByTurnId({})
     setApprovedDraftHandoffPendingByTurnId({})
     setApprovedDraftProviderSendsByTurnId({})
@@ -779,6 +838,16 @@ export function MemoryWorkspacePage(props: {
         }
       })
 
+    void listApprovedDraftSendDestinations()
+      .then((destinations) => {
+        if (scopeRequestId !== scopeRequestRef.current) {
+          return
+        }
+
+        setApprovedDraftSendDestinations(destinations)
+        setApprovedDraftSendDestinationId(resolveApprovedDraftSendDestinationId(destinations))
+      })
+
     void refreshSessions({ scopeRequestId })
       .finally(() => {
         if (scopeRequestId === scopeRequestRef.current) {
@@ -792,11 +861,15 @@ export function MemoryWorkspacePage(props: {
           setIsLoadingCompareSessions(false)
         }
       })
-  }, [archiveApi, props.scope, scopeIdentity])
+  }, [archiveApi, listApprovedDraftSendDestinations, props.scope, scopeIdentity])
 
   useEffect(() => {
     writeStoredCompareTargetDefaults(compareTargetControls)
   }, [compareTargetControls])
+
+  useEffect(() => {
+    writeStoredApprovedDraftSendDestinationId(approvedDraftSendDestinationId)
+  }, [approvedDraftSendDestinationId])
 
   useEffect(() => {
     writeStoredCompareJudgeDefaults({
@@ -1372,7 +1445,8 @@ export function MemoryWorkspacePage(props: {
 
     try {
       const sent = await sendApprovedPersonaDraftToProvider({
-        draftReviewId: review.draftReviewId
+        draftReviewId: review.draftReviewId,
+        ...(approvedDraftSendDestinationId ? { destinationId: approvedDraftSendDestinationId } : {})
       })
       if (!sent || scopeRequestId !== scopeRequestRef.current) {
         return
@@ -1566,6 +1640,8 @@ export function MemoryWorkspacePage(props: {
         draftReviewEditorsByTurnId={draftReviewEditorsByTurnId}
         draftReviewPendingByTurnId={draftReviewPendingByTurnId}
         approvedDraftHandoffDestination={approvedDraftHandoffDestination}
+        approvedDraftSendDestinations={approvedDraftSendDestinations}
+        approvedDraftSendDestinationId={approvedDraftSendDestinationId}
         approvedDraftHandoffsByTurnId={approvedDraftHandoffsByTurnId}
         approvedDraftHandoffPendingByTurnId={approvedDraftHandoffPendingByTurnId}
         approvedDraftProviderSendsByTurnId={approvedDraftProviderSendsByTurnId}
@@ -1591,6 +1667,7 @@ export function MemoryWorkspacePage(props: {
         onChooseApprovedDraftHandoffDestination={() => {
           void handleChooseApprovedDraftHandoffDestination()
         }}
+        onApprovedDraftSendDestinationChange={setApprovedDraftSendDestinationId}
         onExportApprovedDraft={(turnId) => {
           void handleExportApprovedDraft(turnId)
         }}

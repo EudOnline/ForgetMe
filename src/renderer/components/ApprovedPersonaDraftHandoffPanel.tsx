@@ -1,4 +1,5 @@
 import type {
+  ApprovedDraftSendDestination,
   ApprovedPersonaDraftHandoffRecord,
   ApprovedPersonaDraftProviderSendArtifact
 } from '../../shared/archiveContracts'
@@ -9,10 +10,13 @@ function formatPayload(payload: Record<string, unknown>) {
 
 export function ApprovedPersonaDraftHandoffPanel(props: {
   destination: string | null
+  sendDestinations: ApprovedDraftSendDestination[]
+  selectedSendDestinationId: string | null
   handoffs: ApprovedPersonaDraftHandoffRecord[]
   providerSends: ApprovedPersonaDraftProviderSendArtifact[]
   isPending?: boolean
   onChooseExportDestination?: () => void
+  onSendDestinationChange?: (destinationId: string) => void
   onExportApprovedDraft?: () => void
   onSendApprovedDraft?: () => void
 }) {
@@ -49,6 +53,22 @@ export function ApprovedPersonaDraftHandoffPanel(props: {
       )}
       <section aria-label="Provider Boundary Send">
         <h4>Provider Boundary Send</h4>
+        {props.sendDestinations.length ? (
+          <label>
+            Destination
+            <select
+              value={props.selectedSendDestinationId ?? props.sendDestinations[0]?.destinationId ?? ''}
+              disabled={props.isPending || !props.onSendDestinationChange}
+              onChange={(event) => props.onSendDestinationChange?.(event.target.value)}
+            >
+              {props.sendDestinations.map((destination) => (
+                <option key={destination.destinationId} value={destination.destinationId}>
+                  {destination.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <button
           type="button"
           disabled={props.isPending || !props.onSendApprovedDraft}
@@ -59,6 +79,7 @@ export function ApprovedPersonaDraftHandoffPanel(props: {
         {latestProviderSend ? (
           <>
             <p>{latestProviderEvent ? `${latestProviderEvent.eventType} recorded` : 'request recorded'}</p>
+            <p>Destination: {latestProviderSend.destinationLabel}</p>
             <p>{latestProviderSend.provider} · {latestProviderSend.model}</p>
             <p>{latestProviderSend.policyKey}</p>
             <p>{latestProviderSend.createdAt}</p>
