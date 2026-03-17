@@ -1,6 +1,7 @@
 import type {
   ApprovedDraftSendDestination,
   ApprovedPersonaDraftHandoffRecord,
+  ApprovedPersonaDraftPublicationRecord,
   ApprovedPersonaDraftProviderSendArtifact
 } from '../../shared/archiveContracts'
 
@@ -42,18 +43,23 @@ function backgroundRetryStatusLabel(input: {
 
 export function ApprovedPersonaDraftHandoffPanel(props: {
   destination: string | null
+  publicationDestination: string | null
   sendDestinations: ApprovedDraftSendDestination[]
   selectedSendDestinationId: string | null
   handoffs: ApprovedPersonaDraftHandoffRecord[]
+  publications: ApprovedPersonaDraftPublicationRecord[]
   providerSends: ApprovedPersonaDraftProviderSendArtifact[]
   isPending?: boolean
   onChooseExportDestination?: () => void
+  onChoosePublicationDestination?: () => void
   onSendDestinationChange?: (destinationId: string) => void
   onExportApprovedDraft?: () => void
+  onPublishApprovedDraft?: () => void
   onSendApprovedDraft?: () => void
   onRetryApprovedDraftSend?: () => void
 }) {
   const latestHandoff = props.handoffs[0] ?? null
+  const latestPublication = props.publications[0] ?? null
   const latestProviderSend = props.providerSends[0] ?? null
   const latestProviderEvent = latestProviderSend?.events[latestProviderSend.events.length - 1] ?? null
   const latestAttemptLabel = latestProviderSend ? attemptLabel(latestProviderSend.attemptKind) : 'initial send'
@@ -90,6 +96,47 @@ export function ApprovedPersonaDraftHandoffPanel(props: {
       ) : (
         <p>No approved draft exports yet.</p>
       )}
+      <section aria-label="Publish / Share">
+        <h4>Publish / Share</h4>
+        <div>{props.publicationDestination || 'No publish destination selected.'}</div>
+        {props.onChoosePublicationDestination ? (
+          <button
+            type="button"
+            disabled={props.isPending}
+            onClick={() => props.onChoosePublicationDestination?.()}
+          >
+            Choose publish destination
+          </button>
+        ) : null}
+        {props.onPublishApprovedDraft ? (
+          <button
+            type="button"
+            disabled={props.isPending}
+            onClick={() => props.onPublishApprovedDraft?.()}
+          >
+            Publish approved draft
+          </button>
+        ) : null}
+        {latestPublication ? (
+          <>
+            <p>Published {latestPublication.publicArtifactFileName}</p>
+            <p>{latestPublication.publishedAt}</p>
+            <p>SHA256: {latestPublication.publicArtifactSha256}</p>
+            <section aria-label="Publication history">
+              <h5>Publication history</h5>
+              <ul>
+                {props.publications.map((publication) => (
+                  <li key={publication.journalId}>
+                    <p>{publication.publicArtifactFileName} · {publication.publicationKind}</p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          </>
+        ) : (
+          <p>No approved draft publications yet.</p>
+        )}
+      </section>
       <section aria-label="Provider Boundary Send">
         <h4>Provider Boundary Send</h4>
         {props.sendDestinations.length ? (

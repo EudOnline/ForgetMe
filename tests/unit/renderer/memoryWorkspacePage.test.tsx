@@ -743,6 +743,177 @@ describe('MemoryWorkspacePage', () => {
     expect(await screen.findByText('Exported persona-draft-review-review-1-approved.json')).toBeInTheDocument()
   })
 
+  it('publishes an approved draft through the publish panel and remembers the last-used destination', async () => {
+    localStorageMock.setItem(
+      'forgetme.memoryWorkspace.approvedDraftPublicationDestination',
+      '/tmp/previous-approved-draft-publications'
+    )
+
+    const sandboxTurn = {
+      turnId: 'turn-sandbox-publish-1',
+      sessionId: 'session-sandbox-publish-1',
+      ordinal: 1,
+      question: '如果她来写一段关于记录和归档的回复，会怎么写？',
+      provider: null,
+      model: null,
+      contextHash: 'context-hash-sandbox-publish-1',
+      promptHash: 'prompt-hash-sandbox-publish-1',
+      createdAt: '2026-03-15T00:40:00.000Z',
+      response: {
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' } as const,
+        question: '如果她来写一段关于记录和归档的回复，会怎么写？',
+        expressionMode: 'grounded' as const,
+        workflowKind: 'persona_draft_sandbox' as const,
+        title: 'Memory Workspace · Alice Chen',
+        answer: {
+          summary: 'Reviewed simulation draft generated from archive-backed excerpts for this ask.',
+          displayType: 'derived_summary' as const,
+          citations: []
+        },
+        guardrail: {
+          decision: 'sandbox_review_required' as const,
+          reasonCodes: ['persona_draft_sandbox' as const, 'quote_trace_required' as const],
+          citationCount: 2,
+          sourceKinds: ['file'],
+          fallbackApplied: false
+        },
+        contextCards: [],
+        boundaryRedirect: null,
+        communicationEvidence: {
+          title: 'Communication Evidence',
+          summary: 'Direct archive-backed excerpts related to this ask.',
+          excerpts: [
+            {
+              excerptId: 'ce-1',
+              fileId: 'f-1',
+              fileName: 'chat-1.json',
+              ordinal: 1,
+              speakerDisplayName: 'Alice Chen',
+              text: '我们还是把这些记录留在归档里，后面查起来更稳妥。'
+            }
+          ]
+        },
+        personaDraft: {
+          title: 'Reviewed draft sandbox',
+          disclaimer: 'Simulation draft based on archived expressions. Not a statement from the person.',
+          draft: '可审阅草稿：先把关键记录整理进归档。',
+          reviewState: 'review_required' as const,
+          supportingExcerpts: ['ce-1'],
+          trace: [
+            {
+              traceId: 'trace-1',
+              excerptIds: ['ce-1'],
+              explanation: 'Draft segment 1 stays grounded in Alice Chen excerpt ce-1.'
+            }
+          ]
+        }
+      }
+    }
+
+    const approvedReview = {
+      draftReviewId: 'review-publish-1',
+      sourceTurnId: 'turn-sandbox-publish-1',
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      workflowKind: 'persona_draft_sandbox' as const,
+      status: 'approved' as const,
+      baseDraft: '可审阅草稿：先把关键记录整理进归档。',
+      editedDraft: '可审阅草稿：先把关键记录整理进归档，再补齐细节。',
+      reviewNotes: 'Approved for sharing.',
+      supportingExcerpts: ['ce-1'],
+      trace: [
+        {
+          traceId: 'trace-1',
+          excerptIds: ['ce-1'],
+          explanation: 'Draft segment 1 stays grounded in Alice Chen excerpt ce-1.'
+        }
+      ],
+      approvedJournalId: 'journal-approved-publish-1',
+      rejectedJournalId: null,
+      createdAt: '2026-03-16T01:00:00.000Z',
+      updatedAt: '2026-03-16T01:07:00.000Z'
+    }
+
+    let currentPublications: Array<Record<string, unknown>> = []
+    const selectApprovedDraftPublicationDestination = vi.fn()
+      .mockResolvedValue('/tmp/new-approved-draft-publications')
+    const listApprovedPersonaDraftPublications = vi.fn().mockImplementation(async () => currentPublications)
+    const publishApprovedPersonaDraft = vi.fn().mockImplementation(async () => {
+      currentPublications = [{
+        journalId: 'journal-publication-1',
+        publicationId: 'publication-1',
+        draftReviewId: 'review-publish-1',
+        sourceTurnId: 'turn-sandbox-publish-1',
+        publicationKind: 'local_share_package',
+        status: 'published',
+        packageRoot: '/tmp/new-approved-draft-publications/approved-draft-publication-publication-1',
+        manifestPath: '/tmp/new-approved-draft-publications/approved-draft-publication-publication-1/manifest.json',
+        publicArtifactPath: '/tmp/new-approved-draft-publications/approved-draft-publication-publication-1/publication.json',
+        publicArtifactFileName: 'publication.json',
+        publicArtifactSha256: 'hash-publication-1',
+        publishedAt: '2026-03-16T09:30:00.000Z'
+      }]
+
+      return {
+        status: 'published',
+        journalId: 'journal-publication-1',
+        publicationId: 'publication-1',
+        draftReviewId: 'review-publish-1',
+        sourceTurnId: 'turn-sandbox-publish-1',
+        publicationKind: 'local_share_package',
+        packageRoot: '/tmp/new-approved-draft-publications/approved-draft-publication-publication-1',
+        manifestPath: '/tmp/new-approved-draft-publications/approved-draft-publication-publication-1/manifest.json',
+        publicArtifactPath: '/tmp/new-approved-draft-publications/approved-draft-publication-publication-1/publication.json',
+        publicArtifactFileName: 'publication.json',
+        publicArtifactSha256: 'hash-publication-1',
+        publishedAt: '2026-03-16T09:30:00.000Z'
+      }
+    })
+
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceSession: vi.fn().mockResolvedValue(null),
+      listMemoryWorkspaceCompareSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted: vi.fn().mockResolvedValue(sandboxTurn),
+      getPersonaDraftReviewByTurn: vi.fn().mockResolvedValue(approvedReview),
+      listApprovedPersonaDraftPublications,
+      selectApprovedDraftPublicationDestination,
+      publishApprovedPersonaDraft
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'person', canonicalPersonId: 'cp-1' }} />)
+
+    fireEvent.change(screen.getByLabelText('Ask memory workspace'), {
+      target: { value: '如果她来写一段关于记录和归档的回复，会怎么写？' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+
+    expect(await screen.findByRole('heading', { name: 'Approved Draft Handoff' })).toBeInTheDocument()
+    expect(screen.getByText('Publish / Share')).toBeInTheDocument()
+    expect(screen.getByText('/tmp/previous-approved-draft-publications')).toBeInTheDocument()
+    expect(screen.getByText('No approved draft publications yet.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose publish destination' }))
+    expect(await screen.findByText('/tmp/new-approved-draft-publications')).toBeInTheDocument()
+    expect(window.localStorage.getItem('forgetme.memoryWorkspace.approvedDraftPublicationDestination'))
+      .toBe('/tmp/new-approved-draft-publications')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Publish approved draft' }))
+
+    await waitFor(() => {
+      expect(publishApprovedPersonaDraft).toHaveBeenCalledWith({
+        draftReviewId: 'review-publish-1',
+        destinationRoot: '/tmp/new-approved-draft-publications'
+      })
+    })
+
+    expect(await screen.findByText('Published publication.json')).toBeInTheDocument()
+    expect(screen.getByText('2026-03-16T09:30:00.000Z')).toBeInTheDocument()
+    expect(screen.getByText('SHA256: hash-publication-1')).toBeInTheDocument()
+    expect(screen.getByText('Publication history')).toBeInTheDocument()
+  })
+
   it('sends an approved draft through the provider boundary and renders the latest send audit detail', async () => {
     const sandboxTurn = {
       turnId: 'turn-sandbox-send-1',

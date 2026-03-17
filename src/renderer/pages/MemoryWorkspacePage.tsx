@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ApprovedDraftSendDestination,
   ApprovedPersonaDraftHandoffRecord,
+  ApprovedPersonaDraftPublicationRecord,
   ApprovedPersonaDraftProviderSendArtifact,
   ExportApprovedPersonaDraftResult,
   MemoryWorkspaceCompareMatrixDetail,
@@ -19,6 +20,7 @@ import type {
   MemoryWorkspaceSuggestedAction,
   MemoryWorkspaceTurnRecord,
   MemoryWorkspaceWorkflowKind,
+  PublishApprovedPersonaDraftResult,
   RunMemoryWorkspaceCompareJudgeInput
 } from '../../shared/archiveContracts'
 import { getArchiveApi } from '../archiveApi'
@@ -26,6 +28,7 @@ import { MemoryWorkspaceView } from '../components/MemoryWorkspaceView'
 
 const compareJudgeDefaultsStorageKey = 'forgetme.memoryWorkspace.compareJudgeDefaults'
 const compareTargetDefaultsStorageKey = 'forgetme.memoryWorkspace.compareTargetDefaults'
+const approvedDraftPublicationDestinationStorageKey = 'forgetme.memoryWorkspace.approvedDraftPublicationDestination'
 const approvedDraftSendDestinationStorageKey = 'forgetme.memoryWorkspace.approvedDraftSendDestinationId'
 const DEFAULT_APPROVED_DRAFT_SEND_POLL_INTERVAL_MS = 5_000
 const defaultCompareTargetModels = {
@@ -125,6 +128,36 @@ function readStoredApprovedDraftSendDestinationId() {
     return rawValue && rawValue.trim().length > 0 ? rawValue : null
   } catch {
     return null
+  }
+}
+
+function readStoredApprovedDraftPublicationDestination() {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(approvedDraftPublicationDestinationStorageKey)
+    return rawValue && rawValue.trim().length > 0 ? rawValue : null
+  } catch {
+    return null
+  }
+}
+
+function writeStoredApprovedDraftPublicationDestination(destinationRoot: string | null) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    if (destinationRoot) {
+      window.localStorage.setItem(approvedDraftPublicationDestinationStorageKey, destinationRoot)
+      return
+    }
+
+    window.localStorage.removeItem(approvedDraftPublicationDestinationStorageKey)
+  } catch {
+    return
   }
 }
 
@@ -500,6 +533,24 @@ export function MemoryWorkspacePage(props: {
       : async () => null as ExportApprovedPersonaDraftResult | null),
     [archiveApi]
   )
+  const selectApprovedDraftPublicationDestination = useMemo(
+    () => (typeof archiveApi.selectApprovedDraftPublicationDestination === 'function'
+      ? archiveApi.selectApprovedDraftPublicationDestination.bind(archiveApi)
+      : async () => null as string | null),
+    [archiveApi]
+  )
+  const listApprovedPersonaDraftPublications = useMemo(
+    () => (typeof archiveApi.listApprovedPersonaDraftPublications === 'function'
+      ? archiveApi.listApprovedPersonaDraftPublications.bind(archiveApi)
+      : async () => [] as ApprovedPersonaDraftPublicationRecord[]),
+    [archiveApi]
+  )
+  const publishApprovedPersonaDraft = useMemo(
+    () => (typeof archiveApi.publishApprovedPersonaDraft === 'function'
+      ? archiveApi.publishApprovedPersonaDraft.bind(archiveApi)
+      : async () => null as PublishApprovedPersonaDraftResult | null),
+    [archiveApi]
+  )
   const listApprovedDraftSendDestinations = useMemo(
     () => (typeof archiveApi.listApprovedDraftSendDestinations === 'function'
       ? archiveApi.listApprovedDraftSendDestinations.bind(archiveApi)
@@ -526,6 +577,7 @@ export function MemoryWorkspacePage(props: {
   )
   const scopeIdentity = scopeKey(props.scope)
   const scopeRequestRef = useRef(0)
+  const [isSessionReplayMode, setIsSessionReplayMode] = useState(false)
   const [question, setQuestion] = useState(() => initialQuestionForScope(props.scope))
   const [expressionMode, setExpressionMode] = useState<MemoryWorkspaceExpressionMode>(() => defaultExpressionMode())
   const [sessionSummaries, setSessionSummaries] = useState<MemoryWorkspaceSessionSummary[]>([])
@@ -555,12 +607,21 @@ export function MemoryWorkspacePage(props: {
   const [draftReviewEditorsByTurnId, setDraftReviewEditorsByTurnId] = useState<Record<string, DraftReviewEditorState>>({})
   const [draftReviewPendingByTurnId, setDraftReviewPendingByTurnId] = useState<Record<string, boolean>>({})
   const [approvedDraftHandoffDestination, setApprovedDraftHandoffDestination] = useState<string | null>(null)
+  const [approvedDraftPublicationDestination, setApprovedDraftPublicationDestination] = useState<string | null>(
+    () => readStoredApprovedDraftPublicationDestination()
+  )
   const [approvedDraftSendDestinations, setApprovedDraftSendDestinations] = useState<ApprovedDraftSendDestination[]>([])
   const [approvedDraftSendDestinationId, setApprovedDraftSendDestinationId] = useState<string | null>(
     () => readStoredApprovedDraftSendDestinationId()
   )
   const [approvedDraftHandoffsByTurnId, setApprovedDraftHandoffsByTurnId] = useState<Record<string, ApprovedPersonaDraftHandoffRecord[]>>({})
+  const [approvedDraftPublicationsByTurnId, setApprovedDraftPublicationsByTurnId] = useState<
+    Record<string, ApprovedPersonaDraftPublicationRecord[]>
+  >({})
   const [approvedDraftHandoffPendingByTurnId, setApprovedDraftHandoffPendingByTurnId] = useState<Record<string, boolean>>({})
+  const [approvedDraftPublicationPendingByTurnId, setApprovedDraftPublicationPendingByTurnId] = useState<
+    Record<string, boolean>
+  >({})
   const [approvedDraftProviderSendsByTurnId, setApprovedDraftProviderSendsByTurnId] = useState<Record<string, ApprovedPersonaDraftProviderSendArtifact[]>>({})
   const [approvedDraftProviderSendPendingByTurnId, setApprovedDraftProviderSendPendingByTurnId] = useState<Record<string, boolean>>({})
   const [compareTargetControls, setCompareTargetControls] = useState<CompareTargetControls>(() => readStoredCompareTargetDefaults())
@@ -598,6 +659,16 @@ export function MemoryWorkspacePage(props: {
     }))
   }
 
+  const syncApprovedDraftPublicationState = (
+    turnId: string,
+    publications: ApprovedPersonaDraftPublicationRecord[]
+  ) => {
+    setApprovedDraftPublicationsByTurnId((previousState) => ({
+      ...previousState,
+      [turnId]: publications
+    }))
+  }
+
   const syncApprovedDraftProviderSendState = (
     turnId: string,
     sends: ApprovedPersonaDraftProviderSendArtifact[]
@@ -627,6 +698,27 @@ export function MemoryWorkspacePage(props: {
 
     syncApprovedDraftHandoffState(turn.turnId, handoffs)
     return handoffs
+  }
+
+  const refreshApprovedDraftPublicationsForTurn = async (
+    turn: MemoryWorkspaceTurnRecord,
+    review: MemoryWorkspacePersonaDraftReviewRecord | null,
+    scopeRequestId: number
+  ) => {
+    if (!review || review.status !== 'approved') {
+      syncApprovedDraftPublicationState(turn.turnId, [])
+      return []
+    }
+
+    const publications = await listApprovedPersonaDraftPublications({
+      draftReviewId: review.draftReviewId
+    })
+    if (scopeRequestId !== scopeRequestRef.current) {
+      return []
+    }
+
+    syncApprovedDraftPublicationState(turn.turnId, publications)
+    return publications
   }
 
   const refreshApprovedDraftProviderSendsForTurn = async (
@@ -661,6 +753,7 @@ export function MemoryWorkspacePage(props: {
 
     syncDraftReviewState(turn, review)
     await refreshApprovedDraftHandoffsForTurn(turn, review, scopeRequestId)
+    await refreshApprovedDraftPublicationsForTurn(turn, review, scopeRequestId)
     await refreshApprovedDraftProviderSendsForTurn(turn, review, scopeRequestId)
     return review
   }
@@ -685,10 +778,12 @@ export function MemoryWorkspacePage(props: {
     scopeRequestId?: number
     preferredSessionId?: string | null
     preserveTurns?: boolean
+    replayMode?: boolean
   }) => {
     const scopeRequestId = options?.scopeRequestId ?? scopeRequestRef.current
     const preferredSessionId = options?.preferredSessionId ?? null
     const preserveTurns = options?.preserveTurns ?? false
+    const replayMode = options?.replayMode ?? true
     const sessions = await archiveApi.listMemoryWorkspaceSessions({ scope: props.scope })
     if (scopeRequestId !== scopeRequestRef.current) {
       return
@@ -702,11 +797,13 @@ export function MemoryWorkspacePage(props: {
       if (!preserveTurns) {
         setSelectedSessionId(null)
         setTurns([])
+        setIsSessionReplayMode(false)
       }
       return
     }
 
     setSelectedSessionId(nextSessionId)
+    setIsSessionReplayMode(replayMode)
     await loadSessionDetail(nextSessionId, scopeRequestId, preserveTurns)
   }
 
@@ -813,6 +910,7 @@ export function MemoryWorkspacePage(props: {
     const storedCompareTargetDefaults = readStoredCompareTargetDefaults()
     const storedCompareJudgeDefaults = readStoredCompareJudgeDefaults()
     scopeRequestRef.current = scopeRequestId
+    setIsSessionReplayMode(false)
     setQuestion(initialQuestionForScope(props.scope))
     setExpressionMode(defaultExpressionMode())
     setMatrixTitle('')
@@ -836,10 +934,13 @@ export function MemoryWorkspacePage(props: {
     setDraftReviewEditorsByTurnId({})
     setDraftReviewPendingByTurnId({})
     setApprovedDraftHandoffDestination(null)
+    setApprovedDraftPublicationDestination(readStoredApprovedDraftPublicationDestination())
     setApprovedDraftSendDestinations([])
     setApprovedDraftSendDestinationId(readStoredApprovedDraftSendDestinationId())
     setApprovedDraftHandoffsByTurnId({})
+    setApprovedDraftPublicationsByTurnId({})
     setApprovedDraftHandoffPendingByTurnId({})
+    setApprovedDraftPublicationPendingByTurnId({})
     setApprovedDraftProviderSendsByTurnId({})
     setApprovedDraftProviderSendPendingByTurnId({})
     setCompareTargetControls(storedCompareTargetDefaults)
@@ -889,6 +990,10 @@ export function MemoryWorkspacePage(props: {
   useEffect(() => {
     writeStoredApprovedDraftSendDestinationId(approvedDraftSendDestinationId)
   }, [approvedDraftSendDestinationId])
+
+  useEffect(() => {
+    writeStoredApprovedDraftPublicationDestination(approvedDraftPublicationDestination)
+  }, [approvedDraftPublicationDestination])
 
   useEffect(() => {
     writeStoredCompareJudgeDefaults({
@@ -978,6 +1083,48 @@ export function MemoryWorkspacePage(props: {
   useEffect(() => {
     const sandboxTurns = turns.filter(isSandboxDraftTurn)
     if (sandboxTurns.length === 0) {
+      setApprovedDraftPublicationsByTurnId({})
+      setApprovedDraftPublicationPendingByTurnId({})
+      return
+    }
+
+    const scopeRequestId = scopeRequestRef.current
+
+    void Promise.all(
+      sandboxTurns.map(async (turn) => {
+        const review = draftReviewsByTurnId[turn.turnId]
+        if (!review || review.status !== 'approved') {
+          return [turn.turnId, []] as const
+        }
+
+        return [
+          turn.turnId,
+          await listApprovedPersonaDraftPublications({
+            draftReviewId: review.draftReviewId
+          })
+        ] as const
+      })
+    ).then((entries) => {
+      if (scopeRequestId !== scopeRequestRef.current) {
+        return
+      }
+
+      setApprovedDraftPublicationsByTurnId(
+        Object.fromEntries(entries) as Record<string, ApprovedPersonaDraftPublicationRecord[]>
+      )
+      setApprovedDraftPublicationPendingByTurnId((previousState) => {
+        const nextPending: Record<string, boolean> = {}
+        for (const turn of sandboxTurns) {
+          nextPending[turn.turnId] = previousState[turn.turnId] ?? false
+        }
+        return nextPending
+      })
+    })
+  }, [draftReviewsByTurnId, listApprovedPersonaDraftPublications, turns])
+
+  useEffect(() => {
+    const sandboxTurns = turns.filter(isSandboxDraftTurn)
+    if (sandboxTurns.length === 0) {
       setApprovedDraftProviderSendsByTurnId({})
       setApprovedDraftProviderSendPendingByTurnId({})
       return
@@ -1052,6 +1199,7 @@ export function MemoryWorkspacePage(props: {
   const handleSelectSession = async (sessionId: string) => {
     const scopeRequestId = scopeRequestRef.current
     setSelectedSessionId(sessionId)
+    setIsSessionReplayMode(true)
     setEmptyStateMessage(null)
     setIsLoadingSessions(true)
 
@@ -1064,6 +1212,7 @@ export function MemoryWorkspacePage(props: {
 
   const handleStartNewSession = () => {
     setSelectedSessionId(null)
+    setIsSessionReplayMode(false)
     setTurns([])
     setEmptyStateMessage(null)
   }
@@ -1151,6 +1300,7 @@ export function MemoryWorkspacePage(props: {
       }
 
       setSelectedSessionId(nextTurn.sessionId)
+      setIsSessionReplayMode(false)
       setTurns((previousTurns) => {
         const canAppend =
           previousTurns.length > 0 &&
@@ -1170,7 +1320,8 @@ export function MemoryWorkspacePage(props: {
       await refreshSessions({
         scopeRequestId,
         preferredSessionId: nextTurn.sessionId,
-        preserveTurns: true
+        preserveTurns: true,
+        replayMode: false
       })
     } finally {
       if (scopeRequestId === scopeRequestRef.current) {
@@ -1441,6 +1592,13 @@ export function MemoryWorkspacePage(props: {
     }
   }
 
+  const handleChooseApprovedDraftPublicationDestination = async () => {
+    const selected = await selectApprovedDraftPublicationDestination()
+    if (selected) {
+      setApprovedDraftPublicationDestination(selected)
+    }
+  }
+
   const handleExportApprovedDraft = async (turnId: string) => {
     const turn = turnsById.get(turnId)
     const review = draftReviewsByTurnId[turnId]
@@ -1476,6 +1634,48 @@ export function MemoryWorkspacePage(props: {
     } finally {
       if (scopeRequestId === scopeRequestRef.current) {
         setApprovedDraftHandoffPendingByTurnId((previousState) => ({
+          ...previousState,
+          [turnId]: false
+        }))
+      }
+    }
+  }
+
+  const handlePublishApprovedDraft = async (turnId: string) => {
+    const turn = turnsById.get(turnId)
+    const review = draftReviewsByTurnId[turnId]
+    if (!turn || !review || review.status !== 'approved') {
+      return
+    }
+
+    let destinationRoot = approvedDraftPublicationDestination
+    if (!destinationRoot) {
+      destinationRoot = await selectApprovedDraftPublicationDestination()
+      if (!destinationRoot) {
+        return
+      }
+      setApprovedDraftPublicationDestination(destinationRoot)
+    }
+
+    const scopeRequestId = scopeRequestRef.current
+    setApprovedDraftPublicationPendingByTurnId((previousState) => ({
+      ...previousState,
+      [turnId]: true
+    }))
+
+    try {
+      const published = await publishApprovedPersonaDraft({
+        draftReviewId: review.draftReviewId,
+        destinationRoot
+      })
+      if (!published || scopeRequestId !== scopeRequestRef.current) {
+        return
+      }
+
+      await refreshApprovedDraftPublicationsForTurn(turn, review, scopeRequestId)
+    } finally {
+      if (scopeRequestId === scopeRequestRef.current) {
+        setApprovedDraftPublicationPendingByTurnId((previousState) => ({
           ...previousState,
           [turnId]: false
         }))
@@ -1734,11 +1934,15 @@ export function MemoryWorkspacePage(props: {
         draftReviewsByTurnId={draftReviewsByTurnId}
         draftReviewEditorsByTurnId={draftReviewEditorsByTurnId}
         draftReviewPendingByTurnId={draftReviewPendingByTurnId}
+        isSessionReplayMode={isSessionReplayMode}
         approvedDraftHandoffDestination={approvedDraftHandoffDestination}
+        approvedDraftPublicationDestination={approvedDraftPublicationDestination}
         approvedDraftSendDestinations={approvedDraftSendDestinations}
         approvedDraftSendDestinationId={approvedDraftSendDestinationId}
         approvedDraftHandoffsByTurnId={approvedDraftHandoffsByTurnId}
+        approvedDraftPublicationsByTurnId={approvedDraftPublicationsByTurnId}
         approvedDraftHandoffPendingByTurnId={approvedDraftHandoffPendingByTurnId}
+        approvedDraftPublicationPendingByTurnId={approvedDraftPublicationPendingByTurnId}
         approvedDraftProviderSendsByTurnId={approvedDraftProviderSendsByTurnId}
         approvedDraftProviderSendPendingByTurnId={approvedDraftProviderSendPendingByTurnId}
         onSelectMatrixSession={handleSelectCompareMatrix}
@@ -1762,9 +1966,15 @@ export function MemoryWorkspacePage(props: {
         onChooseApprovedDraftHandoffDestination={() => {
           void handleChooseApprovedDraftHandoffDestination()
         }}
+        onChooseApprovedDraftPublicationDestination={() => {
+          void handleChooseApprovedDraftPublicationDestination()
+        }}
         onApprovedDraftSendDestinationChange={setApprovedDraftSendDestinationId}
         onExportApprovedDraft={(turnId) => {
           void handleExportApprovedDraft(turnId)
+        }}
+        onPublishApprovedDraft={(turnId) => {
+          void handlePublishApprovedDraft(turnId)
         }}
         onSendApprovedDraft={(turnId) => {
           void handleSendApprovedDraft(turnId)

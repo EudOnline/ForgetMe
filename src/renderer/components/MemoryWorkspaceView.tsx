@@ -1,6 +1,7 @@
 import type {
   ApprovedDraftSendDestination,
   ApprovedPersonaDraftHandoffRecord,
+  ApprovedPersonaDraftPublicationRecord,
   ApprovedPersonaDraftProviderSendArtifact,
   MemoryWorkspaceBoundaryRedirect,
   MemoryWorkspaceCompareMatrixRowRecord,
@@ -378,12 +379,16 @@ export function MemoryWorkspaceView(props: {
   }>
   draftReviewPendingByTurnId?: Record<string, boolean>
   approvedDraftHandoffDestination?: string | null
+  approvedDraftPublicationDestination?: string | null
   approvedDraftSendDestinations?: ApprovedDraftSendDestination[]
   approvedDraftSendDestinationId?: string | null
   approvedDraftHandoffsByTurnId?: Record<string, ApprovedPersonaDraftHandoffRecord[]>
+  approvedDraftPublicationsByTurnId?: Record<string, ApprovedPersonaDraftPublicationRecord[]>
   approvedDraftHandoffPendingByTurnId?: Record<string, boolean>
+  approvedDraftPublicationPendingByTurnId?: Record<string, boolean>
   approvedDraftProviderSendsByTurnId?: Record<string, ApprovedPersonaDraftProviderSendArtifact[]>
   approvedDraftProviderSendPendingByTurnId?: Record<string, boolean>
+  isSessionReplayMode?: boolean
   onSelectMatrixSession?: (matrixSessionId: string) => void
   onOpenMatrixRowCompare?: (row: MemoryWorkspaceCompareMatrixRowRecord) => void
   onSelectSession?: (sessionId: string) => void
@@ -397,8 +402,10 @@ export function MemoryWorkspaceView(props: {
   onApproveDraftReview?: (turnId: string) => void
   onRejectDraftReview?: (turnId: string) => void
   onChooseApprovedDraftHandoffDestination?: () => void
+  onChooseApprovedDraftPublicationDestination?: () => void
   onApprovedDraftSendDestinationChange?: (destinationId: string) => void
   onExportApprovedDraft?: (turnId: string) => void
+  onPublishApprovedDraft?: (turnId: string) => void
   onSendApprovedDraft?: (turnId: string) => void
   onRetryApprovedDraftSend?: (turnId: string) => void
   onOpenPerson?: (canonicalPersonId: string) => void
@@ -544,17 +551,28 @@ export function MemoryWorkspaceView(props: {
               {(props.draftReviewsByTurnId?.[turn.turnId]?.status ?? null) === 'approved' ? (
                 <ApprovedPersonaDraftHandoffPanel
                   destination={props.approvedDraftHandoffDestination ?? null}
+                  publicationDestination={props.approvedDraftPublicationDestination ?? null}
                   sendDestinations={props.approvedDraftSendDestinations ?? []}
                   selectedSendDestinationId={props.approvedDraftSendDestinationId ?? null}
                   handoffs={props.approvedDraftHandoffsByTurnId?.[turn.turnId] ?? []}
+                  publications={props.approvedDraftPublicationsByTurnId?.[turn.turnId] ?? []}
                   providerSends={props.approvedDraftProviderSendsByTurnId?.[turn.turnId] ?? []}
                   isPending={
                     (props.approvedDraftHandoffPendingByTurnId?.[turn.turnId] ?? false)
+                    || (props.approvedDraftPublicationPendingByTurnId?.[turn.turnId] ?? false)
                     || (props.approvedDraftProviderSendPendingByTurnId?.[turn.turnId] ?? false)
                   }
                   onChooseExportDestination={props.onChooseApprovedDraftHandoffDestination}
+                  onChoosePublicationDestination={
+                    props.isSessionReplayMode ? undefined : props.onChooseApprovedDraftPublicationDestination
+                  }
                   onSendDestinationChange={props.onApprovedDraftSendDestinationChange}
                   onExportApprovedDraft={props.onExportApprovedDraft ? () => props.onExportApprovedDraft?.(turn.turnId) : undefined}
+                  onPublishApprovedDraft={
+                    !props.isSessionReplayMode && props.onPublishApprovedDraft
+                      ? () => props.onPublishApprovedDraft?.(turn.turnId)
+                      : undefined
+                  }
                   onSendApprovedDraft={props.onSendApprovedDraft ? () => props.onSendApprovedDraft?.(turn.turnId) : undefined}
                   onRetryApprovedDraftSend={
                     props.onRetryApprovedDraftSend ? () => props.onRetryApprovedDraftSend?.(turn.turnId) : undefined
