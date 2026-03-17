@@ -6,6 +6,7 @@ const {
   showOpenDialog,
   openDatabase,
   runMigrations,
+  listApprovedDraftSendDestinations,
   listApprovedPersonaDraftHandoffs,
   exportApprovedPersonaDraftToDirectory,
   listApprovedPersonaDraftProviderSends,
@@ -15,6 +16,7 @@ const {
   showOpenDialog: vi.fn(),
   openDatabase: vi.fn(),
   runMigrations: vi.fn(),
+  listApprovedDraftSendDestinations: vi.fn(),
   listApprovedPersonaDraftHandoffs: vi.fn(),
   exportApprovedPersonaDraftToDirectory: vi.fn(),
   listApprovedPersonaDraftProviderSends: vi.fn(),
@@ -45,6 +47,10 @@ vi.mock('../../../src/main/services/personaDraftHandoffService', () => ({
   exportApprovedPersonaDraftToDirectory
 }))
 
+vi.mock('../../../src/main/services/approvedDraftSendDestinationService', () => ({
+  listApprovedDraftSendDestinations
+}))
+
 vi.mock('../../../src/main/services/approvedDraftProviderSendService', () => ({
   listApprovedPersonaDraftProviderSends,
   sendApprovedPersonaDraftToProvider
@@ -69,6 +75,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
     showOpenDialog.mockReset()
     openDatabase.mockReset()
     runMigrations.mockReset()
+    listApprovedDraftSendDestinations.mockReset()
     listApprovedPersonaDraftHandoffs.mockReset()
     exportApprovedPersonaDraftToDirectory.mockReset()
     listApprovedPersonaDraftProviderSends.mockReset()
@@ -166,6 +173,8 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
       model: 'Qwen/Qwen2.5-72B-Instruct',
       policyKey: 'persona_draft.remote_send_approved',
       requestHash: 'hash-1',
+      destinationId: 'memory-dialogue-default',
+      destinationLabel: 'Memory Dialogue Default',
       redactionSummary: {
         requestShape: 'approved_persona_draft_handoff_artifact',
         sourceArtifact: 'approved_persona_draft_handoff',
@@ -206,6 +215,8 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
       model: 'Qwen/Qwen2.5-72B-Instruct',
       policyKey: 'persona_draft.remote_send_approved',
       requestHash: 'hash-1',
+      destinationId: 'memory-dialogue-default',
+      destinationLabel: 'Memory Dialogue Default',
       createdAt: '2026-03-16T08:00:00.000Z'
     })
 
@@ -213,16 +224,43 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
 
     const handler = handlerMap.get('archive:sendApprovedPersonaDraftToProvider')
     const result = await handler?.({}, {
-      draftReviewId: 'review-1'
+      draftReviewId: 'review-1',
+      destinationId: 'memory-dialogue-default'
     })
 
     expect(sendApprovedPersonaDraftToProvider).toHaveBeenCalledWith(expect.anything(), {
-      draftReviewId: 'review-1'
+      draftReviewId: 'review-1',
+      destinationId: 'memory-dialogue-default'
     })
     expect(result).toEqual(expect.objectContaining({
       draftReviewId: 'review-1',
       policyKey: 'persona_draft.remote_send_approved'
     }))
     expect(close).toHaveBeenCalled()
+  })
+
+  it('lists built-in approved draft send destinations through the ipc handler', async () => {
+    listApprovedDraftSendDestinations.mockReturnValue([
+      {
+        destinationId: 'memory-dialogue-default',
+        label: 'Memory Dialogue Default',
+        resolutionMode: 'memory_dialogue_default',
+        provider: 'siliconflow',
+        model: 'Qwen/Qwen2.5-72B-Instruct',
+        isDefault: true
+      }
+    ])
+
+    registerMemoryWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:listApprovedDraftSendDestinations')
+
+    await expect(handler?.({}, undefined)).resolves.toEqual([
+      expect.objectContaining({
+        destinationId: 'memory-dialogue-default',
+        isDefault: true
+      })
+    ])
+    expect(listApprovedDraftSendDestinations).toHaveBeenCalledTimes(1)
   })
 })

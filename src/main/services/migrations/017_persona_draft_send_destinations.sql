@@ -1,0 +1,2 @@
+alter table persona_draft_provider_egress_artifacts add column destination_id text;
+alter table persona_draft_provider_egress_artifacts add column destination_label text;

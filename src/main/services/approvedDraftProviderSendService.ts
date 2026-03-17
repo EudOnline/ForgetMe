@@ -5,6 +5,7 @@ import type {
   SendApprovedPersonaDraftToProviderResult
 } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
+import { getApprovedDraftSendDestination } from './approvedDraftSendDestinationService'
 import { appendDecisionJournal } from './journalService'
 import type { ModelRoute } from './modelGatewayService'
 import { callLiteLLM, resolveModelRoute } from './modelGatewayService'
@@ -18,6 +19,8 @@ type ApprovedDraftProviderSendRequest = {
   draftReviewId: string
   sourceTurnId: string
   route: ModelRoute
+  destinationId: string
+  destinationLabel: string
   policyKey: typeof POLICY_KEY
   requestEnvelope: {
     requestShape: 'approved_persona_draft_handoff_artifact'
@@ -49,6 +52,32 @@ function notBefore(base: string, candidate?: string) {
   }
 
   return candidate
+}
+
+function resolveApprovedDraftSendRoute(destinationId?: string) {
+  const destination = getApprovedDraftSendDestination(destinationId)
+
+  if (destination.resolutionMode === 'memory_dialogue_default') {
+    return {
+      destination,
+      route: resolveModelRoute({
+        taskType: 'memory_dialogue'
+      })
+    }
+  }
+
+  const route = resolveModelRoute({
+    taskType: 'memory_dialogue',
+    preferredProvider: destination.provider
+  })
+
+  return {
+    destination,
+    route: {
+      ...route,
+      model: destination.model
+    }
+  }
 }
 
 function ensureApprovedDraftSendPolicy(db: ArchiveDatabase, createdAt: string) {
@@ -113,6 +142,8 @@ function persistApprovedDraftProviderSendRequest(db: ArchiveDatabase, input: {
   sourceTurnId: string
   provider: string
   model: string
+  destinationId: string
+  destinationLabel: string
   policyKey: typeof POLICY_KEY
   requestEnvelope: ApprovedDraftProviderSendRequest['requestEnvelope']
   redactionSummary: ApprovedDraftProviderSendRequest['redactionSummary']
@@ -125,8 +156,8 @@ function persistApprovedDraftProviderSendRequest(db: ArchiveDatabase, input: {
   const requestHash = sha256Json(input.requestEnvelope)
 
   db.prepare(`insert into persona_draft_provider_egress_artifacts (
-    id, draft_review_id, source_turn_id, provider, model, policy_key, request_hash, redaction_summary_json, created_at
-  ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    id, draft_review_id, source_turn_id, provider, model, policy_key, request_hash, destination_id, destination_label, redaction_summary_json, created_at
+  ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     artifactId,
     input.draftReviewId,
     input.sourceTurnId,
@@ -134,6 +165,8 @@ function persistApprovedDraftProviderSendRequest(db: ArchiveDatabase, input: {
     input.model,
     input.policyKey,
     requestHash,
+    input.destinationId,
+    input.destinationLabel,
     JSON.stringify(input.redactionSummary),
     createdAt
   )
@@ -175,7 +208,7 @@ function persistApprovedDraftProviderSendEvent(db: ArchiveDatabase, input: {
 
 export function buildApprovedPersonaDraftProviderSendRequest(
   db: ArchiveDatabase,
-  input: { draftReviewId: string }
+  input: SendApprovedPersonaDraftToProviderInput
 ): ApprovedDraftProviderSendRequest | null {
   const handoffArtifact = buildApprovedPersonaDraftHandoffArtifact(db, {
     draftReviewId: input.draftReviewId
@@ -185,14 +218,14 @@ export function buildApprovedPersonaDraftProviderSendRequest(
     return null
   }
 
-  const route = resolveModelRoute({
-    taskType: 'memory_dialogue'
-  })
+  const { destination, route } = resolveApprovedDraftSendRoute(input.destinationId)
 
   return {
     draftReviewId: input.draftReviewId,
     sourceTurnId: handoffArtifact.sourceTurnId,
     route,
+    destinationId: destination.destinationId,
+    destinationLabel: destination.label,
     policyKey: POLICY_KEY,
     requestEnvelope: {
       requestShape: 'approved_persona_draft_handoff_artifact',
@@ -227,6 +260,8 @@ export async function sendApprovedPersonaDraftToProvider(
     sourceTurnId: request.sourceTurnId,
     provider: request.route.provider,
     model: request.route.model,
+    destinationId: request.destinationId,
+    destinationLabel: request.destinationLabel,
     policyKey: request.policyKey,
     requestEnvelope: request.requestEnvelope,
     redactionSummary: request.redactionSummary
@@ -256,6 +291,8 @@ export async function sendApprovedPersonaDraftToProvider(
         provider: request.route.provider,
         model: request.route.model,
         policyKey: request.policyKey,
+        destinationId: request.destinationId,
+        destinationLabel: request.destinationLabel,
         requestHash: persisted.requestHash,
         handoffKind: 'provider_boundary_send',
         sentAt: persisted.createdAt
@@ -273,6 +310,8 @@ export async function sendApprovedPersonaDraftToProvider(
       model: request.route.model,
       policyKey: request.policyKey,
       requestHash: persisted.requestHash,
+      destinationId: request.destinationId,
+      destinationLabel: request.destinationLabel,
       createdAt: persisted.createdAt
     }
   } catch (error) {
@@ -301,6 +340,8 @@ export function listApprovedPersonaDraftProviderSends(
       model,
       policy_key as policyKey,
       request_hash as requestHash,
+      destination_id as destinationId,
+      destination_label as destinationLabel,
       redaction_summary_json as redactionSummaryJson,
       created_at as createdAt
      from persona_draft_provider_egress_artifacts
@@ -314,39 +355,49 @@ export function listApprovedPersonaDraftProviderSends(
     model: string
     policyKey: string
     requestHash: string
+    destinationId: string | null
+    destinationLabel: string | null
     redactionSummaryJson: string
     createdAt: string
   }>
 
-  return artifactRows.map((row) => ({
-    artifactId: row.artifactId,
-    draftReviewId: row.draftReviewId,
-    sourceTurnId: row.sourceTurnId,
-    provider: row.provider,
-    model: row.model,
-    policyKey: row.policyKey,
-    requestHash: row.requestHash,
-    redactionSummary: JSON.parse(row.redactionSummaryJson) as Record<string, unknown>,
-    createdAt: row.createdAt,
-    events: (db.prepare(
-      `select
-        id,
-        event_type as eventType,
-        payload_json as payloadJson,
-        created_at as createdAt
-       from persona_draft_provider_egress_events
-       where artifact_id = ?
-       order by created_at asc, rowid asc`
-    ).all(row.artifactId) as Array<{
-      id: string
-      eventType: 'request' | 'response' | 'error'
-      payloadJson: string
-      createdAt: string
-    }>).map((event) => ({
-      id: event.id,
-      eventType: event.eventType,
-      payload: JSON.parse(event.payloadJson) as Record<string, unknown>,
-      createdAt: event.createdAt
-    }))
-  }))
+  return artifactRows.map((row) => {
+    const destination = row.destinationId
+      ? getApprovedDraftSendDestination(row.destinationId)
+      : getApprovedDraftSendDestination()
+
+    return {
+      artifactId: row.artifactId,
+      draftReviewId: row.draftReviewId,
+      sourceTurnId: row.sourceTurnId,
+      provider: row.provider,
+      model: row.model,
+      policyKey: row.policyKey,
+      requestHash: row.requestHash,
+      destinationId: row.destinationId ?? destination.destinationId,
+      destinationLabel: row.destinationLabel ?? destination.label,
+      redactionSummary: JSON.parse(row.redactionSummaryJson) as Record<string, unknown>,
+      createdAt: row.createdAt,
+      events: (db.prepare(
+        `select
+          id,
+          event_type as eventType,
+          payload_json as payloadJson,
+          created_at as createdAt
+         from persona_draft_provider_egress_events
+         where artifact_id = ?
+         order by created_at asc, rowid asc`
+      ).all(row.artifactId) as Array<{
+        id: string
+        eventType: 'request' | 'response' | 'error'
+        payloadJson: string
+        createdAt: string
+      }>).map((event) => ({
+        id: event.id,
+        eventType: event.eventType,
+        payload: JSON.parse(event.payloadJson) as Record<string, unknown>,
+        createdAt: event.createdAt
+      }))
+    }
+  })
 }

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { listApprovedDraftSendDestinations } from '../../../src/main/services/approvedDraftSendDestinationService'
 import { listDecisionJournal } from '../../../src/main/services/journalService'
 import * as modelGatewayService from '../../../src/main/services/modelGatewayService'
 import {
@@ -19,6 +20,30 @@ afterEach(() => {
 })
 
 describe('approvedDraftProviderSendService', () => {
+  it('lists the built-in approved draft send destinations', () => {
+    const destinations = listApprovedDraftSendDestinations()
+
+    expect(destinations).toHaveLength(3)
+    expect(destinations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        destinationId: 'memory-dialogue-default',
+        label: 'Memory Dialogue Default',
+        resolutionMode: 'memory_dialogue_default',
+        isDefault: true
+      }),
+      expect.objectContaining({
+        destinationId: 'siliconflow-qwen25-72b',
+        provider: 'siliconflow',
+        model: 'Qwen/Qwen2.5-72B-Instruct'
+      }),
+      expect.objectContaining({
+        destinationId: 'openrouter-qwen25-72b',
+        provider: 'openrouter',
+        model: 'qwen/qwen-2.5-72b-instruct'
+      })
+    ]))
+  })
+
   it('returns null when the review is not approved', () => {
     const { db, sandboxTurn } = seedPersonaDraftReviewScenario()
     const review = createPersonaDraftReviewFromTurn(db, {
@@ -95,9 +120,13 @@ describe('approvedDraftProviderSendService', () => {
 
     expect(sent?.status).toBe('responded')
     expect(sent?.provider).toBe('siliconflow')
+    expect(sent?.destinationId).toBe('memory-dialogue-default')
+    expect(sent?.destinationLabel).toBe('Memory Dialogue Default')
     expect(callModel).toHaveBeenCalledTimes(1)
     expect(history).toHaveLength(1)
     expect(history[0]?.policyKey).toBe('persona_draft.remote_send_approved')
+    expect(history[0]?.destinationId).toBe('memory-dialogue-default')
+    expect(history[0]?.destinationLabel).toBe('Memory Dialogue Default')
     expect(history[0]?.events.map((event) => event.eventType)).toEqual(['request', 'response'])
     expect(journalEntries).toHaveLength(1)
     expect(journalEntries[0]).toMatchObject({
@@ -111,6 +140,8 @@ describe('approvedDraftProviderSendService', () => {
         provider: 'siliconflow',
         model: 'Qwen/Qwen2.5-72B-Instruct',
         policyKey: 'persona_draft.remote_send_approved',
+        destinationId: 'memory-dialogue-default',
+        destinationLabel: 'Memory Dialogue Default',
         requestHash: sent?.requestHash,
         sentAt: '2026-03-16T08:00:00.000Z'
       }
@@ -138,6 +169,52 @@ describe('approvedDraftProviderSendService', () => {
     expect(history).toHaveLength(1)
     expect(history[0]?.events.map((event) => event.eventType)).toEqual(['request', 'error'])
     expect(journalEntries).toHaveLength(0)
+
+    db.close()
+  })
+
+  it('resolves an explicit OpenRouter destination and persists destination metadata', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-03-16T09:00:00.000Z'))
+
+    const { db, approvedReview } = seedApprovedPersonaDraftHandoffScenario()
+    const callModel = vi.fn().mockResolvedValue({
+      provider: 'openrouter',
+      model: 'qwen/qwen-2.5-72b-instruct',
+      receivedAt: '2026-03-16T09:00:01.000Z',
+      usage: { total_tokens: 18 },
+      payload: {
+        acknowledgement: 'received'
+      }
+    })
+
+    const sent = await sendApprovedPersonaDraftToProvider(db, {
+      draftReviewId: approvedReview.draftReviewId,
+      destinationId: 'openrouter-qwen25-72b',
+      callModel
+    })
+    const history = listApprovedPersonaDraftProviderSends(db, {
+      draftReviewId: approvedReview.draftReviewId
+    })
+
+    expect(callModel).toHaveBeenCalledWith(expect.objectContaining({
+      route: expect.objectContaining({
+        provider: 'openrouter',
+        model: 'qwen/qwen-2.5-72b-instruct'
+      })
+    }))
+    expect(sent).toMatchObject({
+      destinationId: 'openrouter-qwen25-72b',
+      destinationLabel: 'OpenRouter / qwen-2.5-72b-instruct',
+      provider: 'openrouter',
+      model: 'qwen/qwen-2.5-72b-instruct'
+    })
+    expect(history[0]).toMatchObject({
+      destinationId: 'openrouter-qwen25-72b',
+      destinationLabel: 'OpenRouter / qwen-2.5-72b-instruct',
+      provider: 'openrouter',
+      model: 'qwen/qwen-2.5-72b-instruct'
+    })
 
     db.close()
   })

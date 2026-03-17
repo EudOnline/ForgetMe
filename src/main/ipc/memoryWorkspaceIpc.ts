@@ -51,6 +51,7 @@ import {
   listApprovedPersonaDraftProviderSends,
   sendApprovedPersonaDraftToProvider
 } from '../services/approvedDraftProviderSendService'
+import { listApprovedDraftSendDestinations } from '../services/approvedDraftSendDestinationService'
 
 function databasePath(appPaths: AppPaths) {
   return path.join(appPaths.sqliteDir, 'archive.sqlite')
@@ -87,6 +88,7 @@ export function registerMemoryWorkspaceIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:selectPersonaDraftHandoffDestination')
   ipcMain.removeHandler('archive:listApprovedPersonaDraftHandoffs')
   ipcMain.removeHandler('archive:exportApprovedPersonaDraft')
+  ipcMain.removeHandler('archive:listApprovedDraftSendDestinations')
   ipcMain.removeHandler('archive:listApprovedPersonaDraftProviderSends')
   ipcMain.removeHandler('archive:sendApprovedPersonaDraftToProvider')
 
@@ -235,6 +237,10 @@ export function registerMemoryWorkspaceIpc(appPaths: AppPaths) {
     const exported = exportApprovedPersonaDraftToDirectory(db, input)
     db.close()
     return exported
+  })
+
+  ipcMain.handle('archive:listApprovedDraftSendDestinations', async () => {
+    return listApprovedDraftSendDestinations()
   })
 
   ipcMain.handle('archive:listApprovedPersonaDraftProviderSends', async (_event, payload) => {
