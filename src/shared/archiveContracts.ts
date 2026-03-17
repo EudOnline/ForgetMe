@@ -721,6 +721,15 @@ export type ExportApprovedPersonaDraftResult = {
   exportedAt: string
 }
 
+export type ApprovedDraftSendDestination = {
+  destinationId: string
+  label: string
+  resolutionMode: 'memory_dialogue_default' | 'provider_model'
+  provider: 'siliconflow' | 'openrouter'
+  model: string
+  isDefault: boolean
+}
+
 export type ApprovedPersonaDraftProviderSendEvent = {
   id: string
   eventType: 'request' | 'response' | 'error'
@@ -736,6 +745,8 @@ export type ApprovedPersonaDraftProviderSendArtifact = {
   model: string
   policyKey: string
   requestHash: string
+  destinationId: string
+  destinationLabel: string
   redactionSummary: Record<string, unknown>
   createdAt: string
   events: ApprovedPersonaDraftProviderSendEvent[]
@@ -747,6 +758,7 @@ export type ListApprovedPersonaDraftProviderSendsInput = {
 
 export type SendApprovedPersonaDraftToProviderInput = {
   draftReviewId: string
+  destinationId?: string
 }
 
 export type SendApprovedPersonaDraftToProviderResult = {
@@ -758,6 +770,8 @@ export type SendApprovedPersonaDraftToProviderResult = {
   model: string
   policyKey: string
   requestHash: string
+  destinationId: string
+  destinationLabel: string
   createdAt: string
 }
 
@@ -1274,6 +1288,7 @@ export interface ArchiveApi {
   selectPersonaDraftHandoffDestination: () => Promise<string | null>
   listApprovedPersonaDraftHandoffs: (input: ListApprovedPersonaDraftHandoffsInput) => Promise<ApprovedPersonaDraftHandoffRecord[]>
   exportApprovedPersonaDraft: (input: ExportApprovedPersonaDraftInput) => Promise<ExportApprovedPersonaDraftResult | null>
+  listApprovedDraftSendDestinations: () => Promise<ApprovedDraftSendDestination[]>
   listApprovedPersonaDraftProviderSends: (input: ListApprovedPersonaDraftProviderSendsInput) => Promise<ApprovedPersonaDraftProviderSendArtifact[]>
   sendApprovedPersonaDraftToProvider: (input: SendApprovedPersonaDraftToProviderInput) => Promise<SendApprovedPersonaDraftToProviderResult | null>
   listGroupPortraits: () => Promise<GroupPortraitBrowseSummary[]>

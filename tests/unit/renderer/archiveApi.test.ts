@@ -109,8 +109,10 @@ describe('archiveApi dossier methods', () => {
     await expect(archiveApi.listApprovedPersonaDraftProviderSends({
       draftReviewId: 'review-1'
     })).resolves.toEqual([])
+    await expect(archiveApi.listApprovedDraftSendDestinations()).resolves.toEqual([])
     await expect(archiveApi.sendApprovedPersonaDraftToProvider({
-      draftReviewId: 'review-1'
+      draftReviewId: 'review-1',
+      destinationId: 'openrouter-qwen25-72b'
     })).resolves.toBeNull()
     await expect(archiveApi.getGroupPortrait('cp-1')).resolves.toBeNull()
     await expect(archiveApi.selectContextPackExportDestination()).resolves.toBeNull()

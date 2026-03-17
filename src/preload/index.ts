@@ -36,6 +36,7 @@ const archiveApi: ArchiveApi = {
   selectPersonaDraftHandoffDestination: () => ipcRenderer.invoke('archive:selectPersonaDraftHandoffDestination'),
   listApprovedPersonaDraftHandoffs: (input) => ipcRenderer.invoke('archive:listApprovedPersonaDraftHandoffs', input),
   exportApprovedPersonaDraft: (input) => ipcRenderer.invoke('archive:exportApprovedPersonaDraft', input),
+  listApprovedDraftSendDestinations: () => ipcRenderer.invoke('archive:listApprovedDraftSendDestinations'),
   listApprovedPersonaDraftProviderSends: (input) => ipcRenderer.invoke('archive:listApprovedPersonaDraftProviderSends', input),
   sendApprovedPersonaDraftToProvider: (input) => ipcRenderer.invoke('archive:sendApprovedPersonaDraftToProvider', input),
   listGroupPortraits: () => ipcRenderer.invoke('archive:listGroupPortraits'),
