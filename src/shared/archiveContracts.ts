@@ -737,7 +737,23 @@ export type ApprovedPersonaDraftProviderSendEvent = {
   createdAt: string
 }
 
-export type ApprovedDraftProviderSendAttemptKind = 'initial_send' | 'manual_retry'
+export type ApprovedDraftProviderSendAttemptKind = 'initial_send' | 'manual_retry' | 'automatic_retry'
+
+export type ApprovedDraftProviderSendBackgroundRetryStatus =
+  | 'pending'
+  | 'processing'
+  | 'completed'
+  | 'cancelled'
+  | 'failed'
+  | 'exhausted'
+
+export type ApprovedDraftProviderSendBackgroundRetry = {
+  status: ApprovedDraftProviderSendBackgroundRetryStatus
+  autoRetryAttemptIndex: number | null
+  maxAutoRetryAttempts: number
+  nextRetryAt: string | null
+  claimedAt: string | null
+}
 
 export type ApprovedPersonaDraftProviderSendArtifact = {
   artifactId: string
@@ -751,6 +767,7 @@ export type ApprovedPersonaDraftProviderSendArtifact = {
   destinationLabel: string
   attemptKind: ApprovedDraftProviderSendAttemptKind
   retryOfArtifactId: string | null
+  backgroundRetry: ApprovedDraftProviderSendBackgroundRetry | null
   redactionSummary: Record<string, unknown>
   createdAt: string
   events: ApprovedPersonaDraftProviderSendEvent[]

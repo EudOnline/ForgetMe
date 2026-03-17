@@ -13,11 +13,37 @@ import {
   seedApprovedPersonaDraftHandoffScenario,
   seedPersonaDraftReviewScenario
 } from './helpers/memoryWorkspaceScenario'
+import type { ArchiveDatabase } from '../../../src/main/services/db'
+
+function listRetryJobs(db: ArchiveDatabase) {
+  return db.prepare(
+    `select
+      failed_artifact_id as failedArtifactId,
+      status,
+      auto_retry_attempt_index as autoRetryAttemptIndex,
+      next_retry_at as nextRetryAt,
+      claimed_at as claimedAt,
+      retry_artifact_id as retryArtifactId,
+      last_error_message as lastErrorMessage
+     from persona_draft_provider_send_retry_jobs
+     order by created_at asc, rowid asc`
+  ).all() as Array<{
+    failedArtifactId: string
+    status: string
+    autoRetryAttemptIndex: number
+    nextRetryAt: string
+    claimedAt: string | null
+    retryArtifactId: string | null
+    lastErrorMessage: string | null
+  }>
+}
 
 afterEach(() => {
   vi.useRealTimers()
   delete process.env.FORGETME_E2E_APPROVED_DRAFT_PROVIDER_SEND_FIXTURE
   delete process.env.FORGETME_E2E_APPROVED_DRAFT_PROVIDER_SEND_FAIL_ONCE
+  delete process.env.FORGETME_APPROVED_DRAFT_SEND_AUTO_RETRY_DELAY_MS
+  delete process.env.FORGETME_APPROVED_DRAFT_SEND_AUTO_RETRY_MAX_ATTEMPTS
   vi.restoreAllMocks()
 })
 
@@ -159,6 +185,9 @@ describe('approvedDraftProviderSendService', () => {
   })
 
   it('persists an error event when the provider send fails', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-03-16T08:00:00.000Z'))
+
     const { db, approvedReview } = seedApprovedPersonaDraftHandoffScenario()
     const callModel = vi.fn().mockRejectedValue(new Error('provider offline'))
 
@@ -170,6 +199,7 @@ describe('approvedDraftProviderSendService', () => {
     const history = listApprovedPersonaDraftProviderSends(db, {
       draftReviewId: approvedReview.draftReviewId
     })
+    const retryJobs = listRetryJobs(db)
     const journalEntries = listDecisionJournal(db, {
       decisionType: 'send_approved_persona_draft_to_provider_failed'
     })
@@ -177,7 +207,24 @@ describe('approvedDraftProviderSendService', () => {
     expect(history).toHaveLength(1)
     expect(history[0]?.attemptKind).toBe('initial_send')
     expect(history[0]?.retryOfArtifactId).toBeNull()
+    expect(history[0]?.backgroundRetry).toMatchObject({
+      status: 'pending',
+      autoRetryAttemptIndex: 1,
+      maxAutoRetryAttempts: 3,
+      nextRetryAt: '2026-03-16T08:00:30.000Z',
+      claimedAt: null
+    })
     expect(history[0]?.events.map((event) => event.eventType)).toEqual(['request', 'error'])
+    expect(retryJobs).toEqual([
+      expect.objectContaining({
+        failedArtifactId: history[0]?.artifactId,
+        status: 'pending',
+        autoRetryAttemptIndex: 1,
+        nextRetryAt: '2026-03-16T08:00:30.000Z',
+        claimedAt: null,
+        retryArtifactId: null
+      })
+    ])
     expect(journalEntries).toHaveLength(1)
     expect(journalEntries[0]).toMatchObject({
       decisionType: 'send_approved_persona_draft_to_provider_failed',
@@ -299,6 +346,7 @@ describe('approvedDraftProviderSendService', () => {
       destinationId: 'openrouter-qwen25-72b',
       attemptKind: 'manual_retry',
       retryOfArtifactId: failedArtifact!.artifactId,
+      backgroundRetry: null,
       events: [
         expect.objectContaining({ eventType: 'request' }),
         expect.objectContaining({ eventType: 'response' })
@@ -313,6 +361,117 @@ describe('approvedDraftProviderSendService', () => {
         expect.objectContaining({ eventType: 'request' }),
         expect.objectContaining({ eventType: 'error' })
       ]
+    })
+    expect(listRetryJobs(db)).toEqual([
+      expect.objectContaining({
+        failedArtifactId: failedArtifact!.artifactId,
+        status: 'cancelled'
+      })
+    ])
+
+    db.close()
+  })
+
+  it('enqueues the next automatic retry after an automatic retry failure', async () => {
+    process.env.FORGETME_APPROVED_DRAFT_SEND_AUTO_RETRY_MAX_ATTEMPTS = '2'
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-03-16T12:00:00.000Z'))
+
+    const { db, approvedReview } = seedApprovedPersonaDraftHandoffScenario()
+
+    await expect(sendApprovedPersonaDraftToProvider(db, {
+      draftReviewId: approvedReview.draftReviewId,
+      destinationId: 'openrouter-qwen25-72b',
+      callModel: vi.fn().mockRejectedValue(new Error('initial failure'))
+    })).rejects.toThrow('initial failure')
+
+    const firstFailedArtifact = listApprovedPersonaDraftProviderSends(db, {
+      draftReviewId: approvedReview.draftReviewId
+    })[0]
+
+    vi.setSystemTime(new Date('2026-03-16T12:05:00.000Z'))
+
+    await expect(sendApprovedPersonaDraftToProvider(db, {
+      draftReviewId: approvedReview.draftReviewId,
+      destinationId: 'openrouter-qwen25-72b',
+      attemptKind: 'automatic_retry',
+      retryOfArtifactId: firstFailedArtifact!.artifactId,
+      callModel: vi.fn().mockRejectedValue(new Error('automatic failure'))
+    })).rejects.toThrow('automatic failure')
+
+    const history = listApprovedPersonaDraftProviderSends(db, {
+      draftReviewId: approvedReview.draftReviewId
+    })
+    const retryJobs = listRetryJobs(db)
+
+    expect(history[0]).toMatchObject({
+      attemptKind: 'automatic_retry',
+      retryOfArtifactId: firstFailedArtifact!.artifactId,
+      backgroundRetry: {
+        status: 'pending',
+        autoRetryAttemptIndex: 2,
+        maxAutoRetryAttempts: 2,
+        nextRetryAt: '2026-03-16T12:05:30.000Z',
+        claimedAt: null
+      }
+    })
+    expect(retryJobs).toEqual([
+      expect.objectContaining({
+        failedArtifactId: firstFailedArtifact!.artifactId,
+        status: 'pending',
+        autoRetryAttemptIndex: 1
+      }),
+      expect.objectContaining({
+        failedArtifactId: history[0]?.artifactId,
+        status: 'pending',
+        autoRetryAttemptIndex: 2
+      })
+    ])
+
+    db.close()
+  })
+
+  it('surfaces exhausted background retry state after the last automatic retry fails', async () => {
+    process.env.FORGETME_APPROVED_DRAFT_SEND_AUTO_RETRY_MAX_ATTEMPTS = '1'
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-03-16T13:00:00.000Z'))
+
+    const { db, approvedReview } = seedApprovedPersonaDraftHandoffScenario()
+
+    await expect(sendApprovedPersonaDraftToProvider(db, {
+      draftReviewId: approvedReview.draftReviewId,
+      destinationId: 'openrouter-qwen25-72b',
+      callModel: vi.fn().mockRejectedValue(new Error('initial failure'))
+    })).rejects.toThrow('initial failure')
+
+    const firstFailedArtifact = listApprovedPersonaDraftProviderSends(db, {
+      draftReviewId: approvedReview.draftReviewId
+    })[0]
+
+    vi.setSystemTime(new Date('2026-03-16T13:05:00.000Z'))
+
+    await expect(sendApprovedPersonaDraftToProvider(db, {
+      draftReviewId: approvedReview.draftReviewId,
+      destinationId: 'openrouter-qwen25-72b',
+      attemptKind: 'automatic_retry',
+      retryOfArtifactId: firstFailedArtifact!.artifactId,
+      callModel: vi.fn().mockRejectedValue(new Error('automatic failure'))
+    })).rejects.toThrow('automatic failure')
+
+    const history = listApprovedPersonaDraftProviderSends(db, {
+      draftReviewId: approvedReview.draftReviewId
+    })
+
+    expect(history[0]).toMatchObject({
+      attemptKind: 'automatic_retry',
+      retryOfArtifactId: firstFailedArtifact!.artifactId,
+      backgroundRetry: {
+        status: 'exhausted',
+        autoRetryAttemptIndex: 1,
+        maxAutoRetryAttempts: 1,
+        nextRetryAt: null,
+        claimedAt: null
+      }
     })
 
     db.close()

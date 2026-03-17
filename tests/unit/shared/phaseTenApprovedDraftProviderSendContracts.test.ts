@@ -1,6 +1,7 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import type {
   ApprovedDraftProviderSendAttemptKind,
+  ApprovedDraftProviderSendBackgroundRetry,
   ApprovedDraftSendDestination,
   ApprovedPersonaDraftProviderSendArtifact,
   ApprovedPersonaDraftProviderSendEvent,
@@ -19,7 +20,7 @@ import {
 
 describe('phase-ten approved draft provider send contracts', () => {
   it('exports approved draft provider send shapes', () => {
-    const attemptKind: ApprovedDraftProviderSendAttemptKind = 'manual_retry'
+    const attemptKind: ApprovedDraftProviderSendAttemptKind = 'automatic_retry'
     const destination: ApprovedDraftSendDestination = {
       destinationId: 'openrouter-qwen25-72b',
       label: 'OpenRouter / qwen-2.5-72b-instruct',
@@ -39,6 +40,14 @@ describe('phase-ten approved draft provider send contracts', () => {
       createdAt: '2026-03-16T08:00:00.000Z'
     }
 
+    const backgroundRetry: ApprovedDraftProviderSendBackgroundRetry = {
+      status: 'pending',
+      autoRetryAttemptIndex: 1,
+      maxAutoRetryAttempts: 3,
+      nextRetryAt: '2026-03-17T09:00:30.000Z',
+      claimedAt: null
+    }
+
     const artifact: ApprovedPersonaDraftProviderSendArtifact = {
       artifactId: 'pdpe-1',
       draftReviewId: 'review-1',
@@ -51,6 +60,7 @@ describe('phase-ten approved draft provider send contracts', () => {
       destinationLabel: destination.label,
       attemptKind,
       retryOfArtifactId: 'pdpe-failed-1',
+      backgroundRetry,
       redactionSummary: {
         requestShape: 'approved_persona_draft_handoff_artifact',
         sourceArtifact: 'approved_persona_draft_handoff',
@@ -89,17 +99,18 @@ describe('phase-ten approved draft provider send contracts', () => {
       createdAt: '2026-03-16T08:00:00.000Z'
     }
 
-    expect(attemptKind).toBe('manual_retry')
+    expect(attemptKind).toBe('automatic_retry')
     expect(destination.destinationId).toBe('openrouter-qwen25-72b')
     expect(artifact.events[0]?.eventType).toBe('request')
-    expect(artifact.attemptKind).toBe('manual_retry')
+    expect(artifact.attemptKind).toBe('automatic_retry')
     expect(artifact.retryOfArtifactId).toBe('pdpe-failed-1')
+    expect(artifact.backgroundRetry).toEqual(backgroundRetry)
     expect(listInput.draftReviewId).toBe('review-1')
     expect(sendInput.destinationId).toBe('openrouter-qwen25-72b')
     expect(retryInput.artifactId).toBe('pdpe-failed-1')
     expect(sendResult.status).toBe('responded')
     expect(sendResult.destinationLabel).toBe('OpenRouter / qwen-2.5-72b-instruct')
-    expect(sendResult.attemptKind).toBe('manual_retry')
+    expect(sendResult.attemptKind).toBe('automatic_retry')
     expect(sendResult.retryOfArtifactId).toBe('pdpe-failed-1')
 
     expectTypeOf<ArchiveApi['listApprovedDraftSendDestinations']>().toEqualTypeOf<

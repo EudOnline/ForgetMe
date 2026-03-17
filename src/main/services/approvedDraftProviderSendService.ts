@@ -1,6 +1,8 @@
 import crypto from 'node:crypto'
 import type {
   ApprovedDraftProviderSendAttemptKind,
+  ApprovedDraftProviderSendBackgroundRetry,
+  ApprovedDraftProviderSendBackgroundRetryStatus,
   ApprovedPersonaDraftProviderSendArtifact,
   RetryApprovedPersonaDraftProviderSendInput,
   SendApprovedPersonaDraftToProviderInput,
@@ -16,6 +18,8 @@ import { buildApprovedPersonaDraftHandoffArtifact } from './personaDraftHandoffS
 const POLICY_ID = 'rp-persona-draft-remote-send-approved'
 const POLICY_KEY = 'persona_draft.remote_send_approved'
 const LOCAL_ACTOR = 'local-user'
+const DEFAULT_APPROVED_DRAFT_SEND_AUTO_RETRY_DELAY_MS = 30_000
+const DEFAULT_APPROVED_DRAFT_SEND_AUTO_RETRY_MAX_ATTEMPTS = 3
 let approvedDraftProviderSendFixtureFailureConsumed = false
 
 type ApprovedDraftProviderSendRequest = {
@@ -50,6 +54,37 @@ type ApprovedDraftProviderSendAttemptMetadata = {
   retryOfArtifactId: string | null
 }
 
+type ApprovedDraftProviderSendRetryJobStatus = Exclude<ApprovedDraftProviderSendBackgroundRetryStatus, 'exhausted'>
+
+type ApprovedDraftProviderSendRetryJobRow = {
+  failedArtifactId: string
+  status: ApprovedDraftProviderSendRetryJobStatus
+  autoRetryAttemptIndex: number
+  nextRetryAt: string
+  claimedAt: string | null
+  retryArtifactId: string | null
+  lastErrorMessage: string | null
+}
+
+function parsePositiveInteger(value: string | undefined, fallback: number) {
+  const parsed = Number.parseInt(value ?? '', 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function approvedDraftSendAutoRetryDelayMs() {
+  return parsePositiveInteger(
+    process.env.FORGETME_APPROVED_DRAFT_SEND_AUTO_RETRY_DELAY_MS,
+    DEFAULT_APPROVED_DRAFT_SEND_AUTO_RETRY_DELAY_MS
+  )
+}
+
+function approvedDraftSendAutoRetryMaxAttempts() {
+  return parsePositiveInteger(
+    process.env.FORGETME_APPROVED_DRAFT_SEND_AUTO_RETRY_MAX_ATTEMPTS,
+    DEFAULT_APPROVED_DRAFT_SEND_AUTO_RETRY_MAX_ATTEMPTS
+  )
+}
+
 function sha256Json(value: unknown) {
   return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex')
 }
@@ -60,6 +95,15 @@ function notBefore(base: string, candidate?: string) {
   }
 
   return candidate
+}
+
+function plusDelay(base: string, delayMs: number) {
+  const parsed = Date.parse(base)
+  if (Number.isNaN(parsed)) {
+    return new Date(Date.now() + delayMs).toISOString()
+  }
+
+  return new Date(parsed + delayMs).toISOString()
 }
 
 function resolveApprovedDraftSendRoute(destinationId?: string) {
@@ -240,6 +284,189 @@ function persistApprovedDraftProviderSendEvent(db: ArchiveDatabase, input: {
   )
 }
 
+function getLatestApprovedDraftProviderSendEventType(db: ArchiveDatabase, artifactId: string) {
+  return db.prepare(
+    `select event_type as eventType
+     from persona_draft_provider_egress_events
+     where artifact_id = ?
+     order by created_at desc, rowid desc
+     limit 1`
+  ).get(artifactId) as {
+    eventType: 'request' | 'response' | 'error'
+  } | undefined
+}
+
+function readApprovedDraftProviderSendRetryJob(
+  db: ArchiveDatabase,
+  failedArtifactId: string
+): ApprovedDraftProviderSendRetryJobRow | null {
+  const row = db.prepare(
+    `select
+      failed_artifact_id as failedArtifactId,
+      status,
+      auto_retry_attempt_index as autoRetryAttemptIndex,
+      next_retry_at as nextRetryAt,
+      claimed_at as claimedAt,
+      retry_artifact_id as retryArtifactId,
+      last_error_message as lastErrorMessage
+     from persona_draft_provider_send_retry_jobs
+     where failed_artifact_id = ?`
+  ).get(failedArtifactId) as ApprovedDraftProviderSendRetryJobRow | undefined
+
+  return row ?? null
+}
+
+function countAutomaticRetryAttemptsInLineage(db: ArchiveDatabase, artifactId: string) {
+  let count = 0
+  let currentArtifactId: string | null = artifactId
+
+  while (currentArtifactId) {
+    const row = db.prepare(
+      `select
+        attempt_kind as attemptKind,
+        retry_of_artifact_id as retryOfArtifactId
+       from persona_draft_provider_egress_artifacts
+       where id = ?`
+    ).get(currentArtifactId) as {
+      attemptKind: ApprovedDraftProviderSendAttemptKind | null
+      retryOfArtifactId: string | null
+    } | undefined
+
+    if (!row) {
+      break
+    }
+
+    if (row.attemptKind === 'automatic_retry') {
+      count += 1
+    }
+
+    currentArtifactId = row.retryOfArtifactId
+  }
+
+  return count
+}
+
+function hasRetryChildArtifact(db: ArchiveDatabase, artifactId: string) {
+  const row = db.prepare(
+    `select id
+     from persona_draft_provider_egress_artifacts
+     where retry_of_artifact_id = ?
+     limit 1`
+  ).get(artifactId) as {
+    id: string
+  } | undefined
+
+  return Boolean(row)
+}
+
+function enqueueApprovedDraftProviderSendRetryJob(db: ArchiveDatabase, input: {
+  failedArtifactId: string
+  draftReviewId: string
+  sourceTurnId: string
+  destinationId: string
+  destinationLabel: string
+  failedAt: string
+}) {
+  if (hasRetryChildArtifact(db, input.failedArtifactId)) {
+    return null
+  }
+
+  const existingJob = readApprovedDraftProviderSendRetryJob(db, input.failedArtifactId)
+  if (existingJob) {
+    return existingJob
+  }
+
+  const automaticRetryCount = countAutomaticRetryAttemptsInLineage(db, input.failedArtifactId)
+  const maxAutoRetryAttempts = approvedDraftSendAutoRetryMaxAttempts()
+  if (automaticRetryCount >= maxAutoRetryAttempts) {
+    return null
+  }
+
+  const createdAt = new Date().toISOString()
+  db.prepare(
+    `insert into persona_draft_provider_send_retry_jobs (
+      id,
+      failed_artifact_id,
+      draft_review_id,
+      source_turn_id,
+      destination_id,
+      destination_label,
+      status,
+      auto_retry_attempt_index,
+      next_retry_at,
+      claimed_at,
+      retry_artifact_id,
+      last_error_message,
+      created_at,
+      updated_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    crypto.randomUUID(),
+    input.failedArtifactId,
+    input.draftReviewId,
+    input.sourceTurnId,
+    input.destinationId,
+    input.destinationLabel,
+    'pending',
+    automaticRetryCount + 1,
+    plusDelay(input.failedAt, approvedDraftSendAutoRetryDelayMs()),
+    null,
+    null,
+    null,
+    createdAt,
+    createdAt
+  )
+
+  return readApprovedDraftProviderSendRetryJob(db, input.failedArtifactId)
+}
+
+function cancelPendingApprovedDraftProviderSendRetryJob(db: ArchiveDatabase, failedArtifactId: string) {
+  const updatedAt = new Date().toISOString()
+  db.prepare(
+    `update persona_draft_provider_send_retry_jobs
+     set status = ?,
+         updated_at = ?
+     where failed_artifact_id = ?
+       and status = 'pending'`
+  ).run('cancelled', updatedAt, failedArtifactId)
+}
+
+function deriveBackgroundRetryState(
+  db: ArchiveDatabase,
+  artifactId: string,
+  latestEventType: 'request' | 'response' | 'error' | null
+): ApprovedDraftProviderSendBackgroundRetry | null {
+  const retryJob = readApprovedDraftProviderSendRetryJob(db, artifactId)
+  const maxAutoRetryAttempts = approvedDraftSendAutoRetryMaxAttempts()
+
+  if (retryJob) {
+    return {
+      status: retryJob.status,
+      autoRetryAttemptIndex: retryJob.autoRetryAttemptIndex,
+      maxAutoRetryAttempts,
+      nextRetryAt: retryJob.nextRetryAt,
+      claimedAt: retryJob.claimedAt
+    }
+  }
+
+  if (latestEventType !== 'error') {
+    return null
+  }
+
+  const automaticRetryCount = countAutomaticRetryAttemptsInLineage(db, artifactId)
+  if (automaticRetryCount < maxAutoRetryAttempts) {
+    return null
+  }
+
+  return {
+    status: 'exhausted',
+    autoRetryAttemptIndex: automaticRetryCount,
+    maxAutoRetryAttempts,
+    nextRetryAt: null,
+    claimedAt: null
+  }
+}
+
 export function buildApprovedPersonaDraftProviderSendRequest(
   db: ArchiveDatabase,
   input: SendApprovedPersonaDraftToProviderInput
@@ -394,6 +621,15 @@ export async function sendApprovedPersonaDraftToProvider(
       actor: LOCAL_ACTOR
     })
 
+    enqueueApprovedDraftProviderSendRetryJob(db, {
+      failedArtifactId: persisted.artifactId,
+      draftReviewId: request.draftReviewId,
+      sourceTurnId: request.sourceTurnId,
+      destinationId: request.destinationId,
+      destinationLabel: request.destinationLabel,
+      failedAt
+    })
+
     throw error
   }
 }
@@ -424,19 +660,13 @@ export async function retryApprovedPersonaDraftProviderSend(
     return null
   }
 
-  const latestEvent = db.prepare(
-    `select event_type as eventType
-     from persona_draft_provider_egress_events
-     where artifact_id = ?
-     order by created_at desc, rowid desc
-     limit 1`
-  ).get(input.artifactId) as {
-    eventType: 'request' | 'response' | 'error'
-  } | undefined
+  const latestEvent = getLatestApprovedDraftProviderSendEventType(db, input.artifactId)
 
   if (latestEvent?.eventType !== 'error') {
     return null
   }
+
+  cancelPendingApprovedDraftProviderSendRetryJob(db, artifact.artifactId)
 
   return sendApprovedPersonaDraftToProvider(db, {
     draftReviewId: artifact.draftReviewId,
@@ -489,6 +719,27 @@ export function listApprovedPersonaDraftProviderSends(
     const destination = row.destinationId
       ? getApprovedDraftSendDestination(row.destinationId)
       : getApprovedDraftSendDestination()
+    const events = (db.prepare(
+      `select
+        id,
+        event_type as eventType,
+        payload_json as payloadJson,
+        created_at as createdAt
+       from persona_draft_provider_egress_events
+       where artifact_id = ?
+       order by created_at asc, rowid asc`
+    ).all(row.artifactId) as Array<{
+      id: string
+      eventType: 'request' | 'response' | 'error'
+      payloadJson: string
+      createdAt: string
+    }>).map((event) => ({
+      id: event.id,
+      eventType: event.eventType,
+      payload: JSON.parse(event.payloadJson) as Record<string, unknown>,
+      createdAt: event.createdAt
+    }))
+    const latestEventType = events[events.length - 1]?.eventType ?? null
 
     return {
       artifactId: row.artifactId,
@@ -502,28 +753,10 @@ export function listApprovedPersonaDraftProviderSends(
       destinationLabel: row.destinationLabel ?? destination.label,
       attemptKind: row.attemptKind ?? 'initial_send',
       retryOfArtifactId: row.retryOfArtifactId ?? null,
+      backgroundRetry: deriveBackgroundRetryState(db, row.artifactId, latestEventType),
       redactionSummary: JSON.parse(row.redactionSummaryJson) as Record<string, unknown>,
       createdAt: row.createdAt,
-      events: (db.prepare(
-        `select
-          id,
-          event_type as eventType,
-          payload_json as payloadJson,
-          created_at as createdAt
-         from persona_draft_provider_egress_events
-         where artifact_id = ?
-         order by created_at asc, rowid asc`
-      ).all(row.artifactId) as Array<{
-        id: string
-        eventType: 'request' | 'response' | 'error'
-        payloadJson: string
-        createdAt: string
-      }>).map((event) => ({
-        id: event.id,
-        eventType: event.eventType,
-        payload: JSON.parse(event.payloadJson) as Record<string, unknown>,
-        createdAt: event.createdAt
-      }))
+      events
     }
   })
 }

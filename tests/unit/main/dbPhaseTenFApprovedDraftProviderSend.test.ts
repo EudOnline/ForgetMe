@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
 
 describe('phase-ten-f/h migrations', () => {
-  it('creates approved draft provider boundary audit tables and destination columns', () => {
+  it('creates approved draft provider boundary audit tables, destination columns, and retry queue tables', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase10f-db-'))
     const db = openDatabase(path.join(root, 'archive.sqlite'))
 
@@ -16,7 +16,8 @@ describe('phase-ten-f/h migrations', () => {
 
     expect(names).toEqual(expect.arrayContaining([
       'persona_draft_provider_egress_artifacts',
-      'persona_draft_provider_egress_events'
+      'persona_draft_provider_egress_events',
+      'persona_draft_provider_send_retry_jobs'
     ]))
 
     const foreignKeys = db.prepare("pragma foreign_key_list('persona_draft_provider_egress_events')").all() as Array<{ table: string }>
@@ -30,6 +31,19 @@ describe('phase-ten-f/h migrations', () => {
       'destination_label',
       'attempt_kind',
       'retry_of_artifact_id'
+    ]))
+
+    const retryJobColumns = db.prepare("pragma table_info('persona_draft_provider_send_retry_jobs')").all() as Array<{ name: string }>
+    const retryJobColumnNames = retryJobColumns.map((column) => column.name)
+
+    expect(retryJobColumnNames).toEqual(expect.arrayContaining([
+      'failed_artifact_id',
+      'status',
+      'auto_retry_attempt_index',
+      'next_retry_at',
+      'claimed_at',
+      'retry_artifact_id',
+      'last_error_message'
     ]))
 
     db.close()
