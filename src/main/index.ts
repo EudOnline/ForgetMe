@@ -10,6 +10,7 @@ import { registerPeopleIpc } from './ipc/peopleIpc'
 import { registerReviewIpc } from './ipc/reviewIpc'
 import { registerSearchIpc } from './ipc/searchIpc'
 import { ensureAppPaths } from './services/appPaths'
+import { createApprovedDraftProviderSendRetryRunner } from './services/approvedDraftProviderSendRetryRunnerService'
 import { createEnrichmentRunner } from './services/enrichmentRunnerService'
 
 const e2eUserDataDir = process.env.FORGETME_E2E_USER_DATA_DIR?.trim() || null
@@ -63,6 +64,7 @@ const createWindow = () => {
 }
 
 let enrichmentRunner: ReturnType<typeof createEnrichmentRunner> | null = null
+let approvedDraftProviderSendRetryRunner: ReturnType<typeof createApprovedDraftProviderSendRetryRunner> | null = null
 
 app.whenReady().then(() => {
   const appPaths = ensureAppPaths(resolveAppDataRoot())
@@ -75,6 +77,7 @@ app.whenReady().then(() => {
   registerReviewIpc(appPaths)
   registerSearchIpc(appPaths)
   enrichmentRunner = createEnrichmentRunner({ appPaths })
+  approvedDraftProviderSendRetryRunner = createApprovedDraftProviderSendRetryRunner({ appPaths })
   createWindow()
 
   app.on('activate', () => {
@@ -86,6 +89,7 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   enrichmentRunner?.stop()
+  approvedDraftProviderSendRetryRunner?.stop()
 })
 
 app.on('window-all-closed', () => {

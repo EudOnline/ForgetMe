@@ -27,6 +27,7 @@ import { MemoryWorkspaceView } from '../components/MemoryWorkspaceView'
 const compareJudgeDefaultsStorageKey = 'forgetme.memoryWorkspace.compareJudgeDefaults'
 const compareTargetDefaultsStorageKey = 'forgetme.memoryWorkspace.compareTargetDefaults'
 const approvedDraftSendDestinationStorageKey = 'forgetme.memoryWorkspace.approvedDraftSendDestinationId'
+const DEFAULT_APPROVED_DRAFT_SEND_POLL_INTERVAL_MS = 5_000
 const defaultCompareTargetModels = {
   siliconflow: 'Qwen/Qwen2.5-72B-Instruct',
   openrouter: 'qwen/qwen-2.5-72b-instruct'
@@ -49,6 +50,18 @@ type CompareTargetControls = {
 type DraftReviewEditorState = {
   editedDraft: string
   reviewNotes: string
+}
+
+function parsePositiveInteger(value: string | undefined, fallback: number) {
+  const parsed = Number.parseInt(value ?? '', 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function approvedDraftProviderSendPollIntervalMs() {
+  return parsePositiveInteger(
+    process.env.FORGETME_APPROVED_DRAFT_SEND_POLL_INTERVAL_MS,
+    DEFAULT_APPROVED_DRAFT_SEND_POLL_INTERVAL_MS
+  )
 }
 
 function defaultCompareJudgeDefaults(): CompareJudgeDefaults {
@@ -1000,6 +1013,40 @@ export function MemoryWorkspacePage(props: {
         return nextPending
       })
     })
+  }, [draftReviewsByTurnId, listApprovedPersonaDraftProviderSends, turns])
+
+  useEffect(() => {
+    const approvedSandboxTurns = turns.filter((turn) => {
+      if (!isSandboxDraftTurn(turn)) {
+        return false
+      }
+
+      const review = draftReviewsByTurnId[turn.turnId]
+      return review?.status === 'approved'
+    })
+
+    if (approvedSandboxTurns.length === 0) {
+      return
+    }
+
+    const interval = window.setInterval(() => {
+      const scopeRequestId = scopeRequestRef.current
+
+      void Promise.all(
+        approvedSandboxTurns.map(async (turn) => {
+          const review = draftReviewsByTurnId[turn.turnId]
+          if (!review || review.status !== 'approved') {
+            return
+          }
+
+          await refreshApprovedDraftProviderSendsForTurn(turn, review, scopeRequestId)
+        })
+      )
+    }, approvedDraftProviderSendPollIntervalMs())
+
+    return () => {
+      window.clearInterval(interval)
+    }
   }, [draftReviewsByTurnId, listApprovedPersonaDraftProviderSends, turns])
 
   const handleSelectSession = async (sessionId: string) => {

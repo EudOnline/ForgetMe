@@ -637,6 +637,7 @@ export async function sendApprovedPersonaDraftToProvider(
 export async function retryApprovedPersonaDraftProviderSend(
   db: ArchiveDatabase,
   input: RetryApprovedPersonaDraftProviderSendInput & {
+    attemptKind?: ApprovedDraftProviderSendAttemptKind
     callModel?: (input: {
       route: ModelRoute
       requestEnvelope: ApprovedDraftProviderSendRequest['requestEnvelope']
@@ -671,7 +672,7 @@ export async function retryApprovedPersonaDraftProviderSend(
   return sendApprovedPersonaDraftToProvider(db, {
     draftReviewId: artifact.draftReviewId,
     destinationId: artifact.destinationId ?? undefined,
-    attemptKind: 'manual_retry',
+    attemptKind: input.attemptKind ?? 'manual_retry',
     retryOfArtifactId: artifact.artifactId,
     callModel: input.callModel
   })

@@ -47,6 +47,10 @@ function readPositiveNumber(value: unknown) {
 }
 
 function readApprovedDraftSendAttemptKind(operationPayload: Record<string, unknown>) {
+  if (operationPayload.attemptKind === 'automatic_retry') {
+    return 'automatic_retry'
+  }
+
   return operationPayload.attemptKind === 'manual_retry' ? 'manual_retry' : 'initial_send'
 }
 
@@ -72,13 +76,23 @@ function formatDecisionLabel(entry: Pick<DecisionJournalEntry, 'decisionType' | 
   }
 
   if (entry.decisionType === 'send_approved_persona_draft_to_provider') {
-    return readApprovedDraftSendAttemptKind(entry.operationPayload) === 'manual_retry'
+    const attemptKind = readApprovedDraftSendAttemptKind(entry.operationPayload)
+    if (attemptKind === 'automatic_retry') {
+      return 'Approved draft auto-retried to provider'
+    }
+
+    return attemptKind === 'manual_retry'
       ? 'Approved draft resent to provider'
       : 'Approved draft sent to provider'
   }
 
   if (entry.decisionType === 'send_approved_persona_draft_to_provider_failed') {
-    return readApprovedDraftSendAttemptKind(entry.operationPayload) === 'manual_retry'
+    const attemptKind = readApprovedDraftSendAttemptKind(entry.operationPayload)
+    if (attemptKind === 'automatic_retry') {
+      return 'Approved draft auto-retry failed'
+    }
+
+    return attemptKind === 'manual_retry'
       ? 'Approved draft resend failed'
       : 'Approved draft send failed'
   }

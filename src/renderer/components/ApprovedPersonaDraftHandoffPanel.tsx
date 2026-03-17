@@ -8,6 +8,38 @@ function formatPayload(payload: Record<string, unknown>) {
   return JSON.stringify(payload, null, 2)
 }
 
+function attemptLabel(attemptKind: 'initial_send' | 'manual_retry' | 'automatic_retry') {
+  if (attemptKind === 'manual_retry') {
+    return 'manual retry'
+  }
+
+  if (attemptKind === 'automatic_retry') {
+    return 'automatic retry'
+  }
+
+  return 'initial send'
+}
+
+function backgroundRetryStatusLabel(input: {
+  status: 'pending' | 'processing' | 'completed' | 'cancelled' | 'failed' | 'exhausted'
+  autoRetryAttemptIndex: number | null
+  maxAutoRetryAttempts: number
+}) {
+  if (input.status === 'pending') {
+    return `Auto retry: queued · attempt ${input.autoRetryAttemptIndex ?? '?'} of ${input.maxAutoRetryAttempts}`
+  }
+
+  if (input.status === 'processing') {
+    return 'Auto retry: processing'
+  }
+
+  if (input.status === 'exhausted') {
+    return `Auto retry exhausted after ${input.maxAutoRetryAttempts} attempts`
+  }
+
+  return `Auto retry: ${input.status}`
+}
+
 export function ApprovedPersonaDraftHandoffPanel(props: {
   destination: string | null
   sendDestinations: ApprovedDraftSendDestination[]
@@ -24,10 +56,12 @@ export function ApprovedPersonaDraftHandoffPanel(props: {
   const latestHandoff = props.handoffs[0] ?? null
   const latestProviderSend = props.providerSends[0] ?? null
   const latestProviderEvent = latestProviderSend?.events[latestProviderSend.events.length - 1] ?? null
-  const latestAttemptLabel = latestProviderSend?.attemptKind === 'manual_retry' ? 'manual retry' : 'initial send'
+  const latestAttemptLabel = latestProviderSend ? attemptLabel(latestProviderSend.attemptKind) : 'initial send'
   const latestErrorMessage = latestProviderEvent?.eventType === 'error' && typeof latestProviderEvent.payload.message === 'string'
     ? latestProviderEvent.payload.message
     : null
+  const latestBackgroundRetry = latestProviderSend?.backgroundRetry ?? null
+  const retryActionDisabled = props.isPending || !props.onRetryApprovedDraftSend || latestBackgroundRetry?.status === 'processing'
 
   return (
     <section aria-label="Approved Draft Handoff">
@@ -84,10 +118,10 @@ export function ApprovedPersonaDraftHandoffPanel(props: {
         {latestProviderEvent?.eventType === 'error' ? (
           <button
             type="button"
-            disabled={props.isPending || !props.onRetryApprovedDraftSend}
+            disabled={retryActionDisabled}
             onClick={() => props.onRetryApprovedDraftSend?.()}
           >
-            Retry failed send
+            Retry failed send now
           </button>
         ) : null}
         {latestProviderSend ? (
@@ -98,6 +132,12 @@ export function ApprovedPersonaDraftHandoffPanel(props: {
             <p>{latestProviderSend.provider} · {latestProviderSend.model}</p>
             <p>{latestProviderSend.policyKey}</p>
             <p>{latestProviderSend.createdAt}</p>
+            {latestBackgroundRetry ? (
+              <p>{backgroundRetryStatusLabel(latestBackgroundRetry)}</p>
+            ) : null}
+            {latestBackgroundRetry?.nextRetryAt ? (
+              <p>Next retry: {latestBackgroundRetry.nextRetryAt}</p>
+            ) : null}
             {latestErrorMessage ? (
               <p>Error: {latestErrorMessage}</p>
             ) : null}
