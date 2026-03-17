@@ -3,11 +3,11 @@ import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron } from '@playwright/test'
 
-test('memory workspace approved draft handoff exports an approved draft artifact', async () => {
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase10e-handoff-user-'))
-  const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase10e-handoff-fixtures-'))
-  const exportDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase10e-handoff-export-'))
-  const chatFixture = path.join(fixtureDir, 'chat-phase10e-handoff.json')
+test('memory workspace approved draft publication writes a share package and shows publication history', async () => {
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase10k-publication-user-'))
+  const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase10k-publication-fixtures-'))
+  const publicationDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase10k-publication-output-'))
+  const chatFixture = path.join(fixtureDir, 'chat-phase10k-publication.json')
 
   fs.writeFileSync(chatFixture, JSON.stringify({
     messages: [
@@ -22,13 +22,13 @@ test('memory workspace approved draft handoff exports an approved draft artifact
       ...process.env,
       FORGETME_E2E_FIXTURE: chatFixture,
       FORGETME_E2E_USER_DATA_DIR: userDataDir,
-      FORGETME_E2E_PERSONA_DRAFT_HANDOFF_DESTINATION_DIR: exportDir
+      FORGETME_E2E_APPROVED_DRAFT_PUBLICATION_DESTINATION_DIR: publicationDir
     }
   })
 
   const page = await electronApp.firstWindow()
   await page.getByText('Choose Files').click()
-  await expect(page.getByRole('button', { name: 'chat-phase10e-handoff.json' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'chat-phase10k-publication.json' })).toBeVisible()
 
   await page.getByRole('button', { name: 'People' }).click()
   await expect(page.getByRole('button', { name: /^Alice Chen$/ })).toBeVisible({ timeout: 15_000 })
@@ -51,7 +51,7 @@ test('memory workspace approved draft handoff exports an approved draft artifact
   const draftReviewNotes = sandboxTurn.getByLabel('Draft review notes')
 
   await draftReviewBody.fill('可审阅草稿：先把关键记录整理进归档，再补齐细节。')
-  await draftReviewNotes.fill('Approved for export handoff.')
+  await draftReviewNotes.fill('Approved for publication share package.')
   await sandboxTurn.getByRole('button', { name: 'Save draft edits' }).click()
 
   await sandboxTurn.getByRole('button', { name: 'Mark in review' }).click()
@@ -62,27 +62,33 @@ test('memory workspace approved draft handoff exports an approved draft artifact
   await expect(sandboxTurn.getByRole('heading', { name: 'Approved Draft Handoff' })).toBeVisible()
   await expect(sandboxTurn.getByText('Publish / Share')).toBeVisible()
 
-  await sandboxTurn.getByRole('button', { name: 'Choose export destination' }).click()
-  await expect(sandboxTurn.getByText(exportDir)).toBeVisible()
-  await sandboxTurn.getByRole('button', { name: 'Export approved draft' }).click()
+  await sandboxTurn.getByRole('button', { name: 'Choose publish destination' }).click()
+  await expect(sandboxTurn.getByText(publicationDir)).toBeVisible()
+  await sandboxTurn.getByRole('button', { name: 'Publish approved draft' }).click()
 
-  await expect(sandboxTurn.getByText(/^Exported persona-draft-review-.*-approved\.json$/)).toBeVisible()
+  await expect(sandboxTurn.getByText('Published publication.json')).toBeVisible()
+  await expect(sandboxTurn.getByText('Publication history')).toBeVisible()
 
-  await expect.poll(() => fs.readdirSync(exportDir).find((fileName) => fileName.startsWith('persona-draft-review-') && fileName.endsWith('-approved.json')) ?? null).not.toBeNull()
-  const handoffFileName = fs.readdirSync(exportDir).find((fileName) => fileName.startsWith('persona-draft-review-') && fileName.endsWith('-approved.json'))
-  expect(handoffFileName).toBeTruthy()
+  await expect.poll(() => fs.readdirSync(publicationDir).find((entry) => entry.startsWith('approved-draft-publication-')) ?? null).not.toBeNull()
+  const packageDirName = fs.readdirSync(publicationDir).find((entry) => entry.startsWith('approved-draft-publication-'))
+  expect(packageDirName).toBeTruthy()
 
-  const handoffPath = path.join(exportDir, handoffFileName!)
-  const payload = JSON.parse(fs.readFileSync(handoffPath, 'utf8'))
-  expect(payload.formatVersion).toBe('phase10e1')
-  expect(payload.reviewStatus).toBe('approved')
-  expect(payload.workflowKind).toBe('persona_draft_sandbox')
-  expect(payload.approvedDraft).toContain('归档')
-  expect(payload.communicationExcerpts[0]?.fileName).toBe('chat-phase10e-handoff.json')
-  expect(payload.shareEnvelope).toEqual({
-    requestShape: 'local_json_persona_draft_handoff',
-    policyKey: 'persona_draft.local_export_approved'
-  })
+  const packageRoot = path.join(publicationDir, packageDirName!)
+  const publicationPath = path.join(packageRoot, 'publication.json')
+  const manifestPath = path.join(packageRoot, 'manifest.json')
+
+  expect(fs.existsSync(publicationPath)).toBe(true)
+  expect(fs.existsSync(manifestPath)).toBe(true)
+
+  const publicationPayload = JSON.parse(fs.readFileSync(publicationPath, 'utf8'))
+  expect(publicationPayload.formatVersion).toBe('phase10k1')
+  expect(publicationPayload.publicationKind).toBe('local_share_package')
+  expect(publicationPayload.approvedDraft).toContain('归档')
+  expect(publicationPayload).not.toHaveProperty('reviewNotes')
+
+  const manifestPayload = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+  expect(manifestPayload.sourceArtifact).toBe('approved_persona_draft_handoff')
+  expect(manifestPayload.publicArtifactFileName).toBe('publication.json')
 
   await electronApp.close()
 })
