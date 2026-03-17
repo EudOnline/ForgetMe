@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron } from '@playwright/test'
 
-test('memory workspace approved draft handoff sends an approved draft through provider boundary audit', async () => {
+test('memory workspace approved draft handoff recovers from one failed provider send with manual retry', async () => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase10f-provider-send-user-'))
   const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase10f-provider-send-fixtures-'))
   const chatFixture = path.join(fixtureDir, 'chat-phase10f-provider-send.json')
@@ -21,7 +21,8 @@ test('memory workspace approved draft handoff sends an approved draft through pr
       ...process.env,
       FORGETME_E2E_FIXTURE: chatFixture,
       FORGETME_E2E_USER_DATA_DIR: userDataDir,
-      FORGETME_E2E_APPROVED_DRAFT_PROVIDER_SEND_FIXTURE: '1'
+      FORGETME_E2E_APPROVED_DRAFT_PROVIDER_SEND_FIXTURE: '1',
+      FORGETME_E2E_APPROVED_DRAFT_PROVIDER_SEND_FAIL_ONCE: '1'
     }
   })
 
@@ -71,7 +72,15 @@ test('memory workspace approved draft handoff sends an approved draft through pr
 
   await sandboxTurn.getByRole('button', { name: 'Send approved draft' }).click()
 
+  await expect(sandboxTurn.getByText('error recorded')).toBeVisible()
+  await expect(sandboxTurn.getByText('Attempt: initial send')).toBeVisible()
+  await expect(sandboxTurn.getByText('Error: provider fixture offline')).toBeVisible()
+  await expect(sandboxTurn.getByRole('button', { name: 'Retry failed send' })).toBeVisible()
+
+  await sandboxTurn.getByRole('button', { name: 'Retry failed send' }).click()
+
   await expect(sandboxTurn.getByText('response recorded')).toBeVisible()
+  await expect(sandboxTurn.getByText('Attempt: manual retry')).toBeVisible()
   await expect(sandboxTurn.getByText('Destination: OpenRouter / qwen-2.5-72b-instruct')).toBeVisible()
   await expect(sandboxTurn.getByText('openrouter · qwen/qwen-2.5-72b-instruct')).toBeVisible()
   await expect(sandboxTurn.locator('p', { hasText: 'persona_draft.remote_send_approved' })).toBeVisible()

@@ -17,6 +17,7 @@ import {
 afterEach(() => {
   vi.useRealTimers()
   delete process.env.FORGETME_E2E_APPROVED_DRAFT_PROVIDER_SEND_FIXTURE
+  delete process.env.FORGETME_E2E_APPROVED_DRAFT_PROVIDER_SEND_FAIL_ONCE
   vi.restoreAllMocks()
 })
 

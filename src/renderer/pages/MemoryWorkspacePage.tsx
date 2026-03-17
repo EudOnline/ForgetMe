@@ -1450,15 +1450,19 @@ export function MemoryWorkspacePage(props: {
     }))
 
     try {
-      const sent = await sendApprovedPersonaDraftToProvider({
-        draftReviewId: review.draftReviewId,
-        ...(approvedDraftSendDestinationId ? { destinationId: approvedDraftSendDestinationId } : {})
-      })
-      if (!sent || scopeRequestId !== scopeRequestRef.current) {
-        return
+      try {
+        const sent = await sendApprovedPersonaDraftToProvider({
+          draftReviewId: review.draftReviewId,
+          ...(approvedDraftSendDestinationId ? { destinationId: approvedDraftSendDestinationId } : {})
+        })
+        if (!sent || scopeRequestId !== scopeRequestRef.current) {
+          return
+        }
+      } finally {
+        if (scopeRequestId === scopeRequestRef.current) {
+          await refreshApprovedDraftProviderSendsForTurn(turn, review, scopeRequestId)
+        }
       }
-
-      await refreshApprovedDraftProviderSendsForTurn(turn, review, scopeRequestId)
     } finally {
       if (scopeRequestId === scopeRequestRef.current) {
         setApprovedDraftProviderSendPendingByTurnId((previousState) => ({
@@ -1485,14 +1489,18 @@ export function MemoryWorkspacePage(props: {
     }))
 
     try {
-      const retried = await retryApprovedPersonaDraftProviderSend({
-        artifactId: latestSend.artifactId
-      })
-      if (!retried || scopeRequestId !== scopeRequestRef.current) {
-        return
+      try {
+        const retried = await retryApprovedPersonaDraftProviderSend({
+          artifactId: latestSend.artifactId
+        })
+        if (!retried || scopeRequestId !== scopeRequestRef.current) {
+          return
+        }
+      } finally {
+        if (scopeRequestId === scopeRequestRef.current) {
+          await refreshApprovedDraftProviderSendsForTurn(turn, review, scopeRequestId)
+        }
       }
-
-      await refreshApprovedDraftProviderSendsForTurn(turn, review, scopeRequestId)
     } finally {
       if (scopeRequestId === scopeRequestRef.current) {
         setApprovedDraftProviderSendPendingByTurnId((previousState) => ({

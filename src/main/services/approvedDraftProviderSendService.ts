@@ -16,6 +16,7 @@ import { buildApprovedPersonaDraftHandoffArtifact } from './personaDraftHandoffS
 const POLICY_ID = 'rp-persona-draft-remote-send-approved'
 const POLICY_KEY = 'persona_draft.remote_send_approved'
 const LOCAL_ACTOR = 'local-user'
+let approvedDraftProviderSendFixtureFailureConsumed = false
 
 type ApprovedDraftProviderSendRequest = {
   draftReviewId: string
@@ -119,7 +120,19 @@ async function defaultCallModel(input: {
   route: ModelRoute
   requestEnvelope: ApprovedDraftProviderSendRequest['requestEnvelope']
 }): Promise<ProviderSendResult> {
-  if (process.env.FORGETME_E2E_APPROVED_DRAFT_PROVIDER_SEND_FIXTURE === '1') {
+  const shouldUseFixture = process.env.FORGETME_E2E_APPROVED_DRAFT_PROVIDER_SEND_FIXTURE === '1'
+  const shouldFailOnce = process.env.FORGETME_E2E_APPROVED_DRAFT_PROVIDER_SEND_FAIL_ONCE === '1'
+
+  if (!shouldUseFixture || !shouldFailOnce) {
+    approvedDraftProviderSendFixtureFailureConsumed = false
+  }
+
+  if (shouldUseFixture) {
+    if (shouldFailOnce && !approvedDraftProviderSendFixtureFailureConsumed) {
+      approvedDraftProviderSendFixtureFailureConsumed = true
+      throw new Error('provider fixture offline')
+    }
+
     return {
       provider: input.route.provider,
       model: input.route.model,
