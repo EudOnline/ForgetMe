@@ -46,7 +46,11 @@ function readPositiveNumber(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
 }
 
-function formatDecisionLabel(entry: Pick<DecisionJournalEntry, 'decisionType' | 'targetType'>) {
+function readApprovedDraftSendAttemptKind(operationPayload: Record<string, unknown>) {
+  return operationPayload.attemptKind === 'manual_retry' ? 'manual_retry' : 'initial_send'
+}
+
+function formatDecisionLabel(entry: Pick<DecisionJournalEntry, 'decisionType' | 'targetType' | 'operationPayload'>) {
   if (entry.targetType === 'decision_batch' && entry.decisionType === 'approve_safe_review_group') {
     return 'Safe batch approve'
   }
@@ -68,7 +72,15 @@ function formatDecisionLabel(entry: Pick<DecisionJournalEntry, 'decisionType' | 
   }
 
   if (entry.decisionType === 'send_approved_persona_draft_to_provider') {
-    return 'Approved draft sent to provider'
+    return readApprovedDraftSendAttemptKind(entry.operationPayload) === 'manual_retry'
+      ? 'Approved draft resent to provider'
+      : 'Approved draft sent to provider'
+  }
+
+  if (entry.decisionType === 'send_approved_persona_draft_to_provider_failed') {
+    return readApprovedDraftSendAttemptKind(entry.operationPayload) === 'manual_retry'
+      ? 'Approved draft resend failed'
+      : 'Approved draft send failed'
   }
 
   return entry.decisionType

@@ -87,4 +87,66 @@ describe('archive search', () => {
     }))
     db.close()
   })
+
+  it('finds failed approved draft sends and retry-aware resend summaries', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-provider-send-retry-search-'))
+    const appPaths = ensureAppPaths(root)
+    const db = openDatabase(path.join(appPaths.sqliteDir, 'archive.sqlite'))
+    runMigrations(db)
+
+    appendDecisionJournal(db, {
+      decisionType: 'send_approved_persona_draft_to_provider_failed',
+      targetType: 'persona_draft_review',
+      targetId: 'review-1',
+      operationPayload: {
+        draftReviewId: 'review-1',
+        sourceTurnId: 'turn-1',
+        providerSendArtifactId: 'artifact-failed-1',
+        provider: 'openrouter',
+        model: 'qwen/qwen-2.5-72b-instruct',
+        destinationId: 'openrouter-qwen25-72b',
+        destinationLabel: 'OpenRouter / qwen-2.5-72b-instruct',
+        attemptKind: 'initial_send',
+        retryOfArtifactId: null,
+        errorMessage: 'provider offline'
+      },
+      undoPayload: {},
+      actor: 'local-user'
+    })
+
+    appendDecisionJournal(db, {
+      decisionType: 'send_approved_persona_draft_to_provider',
+      targetType: 'persona_draft_review',
+      targetId: 'review-1',
+      operationPayload: {
+        draftReviewId: 'review-1',
+        sourceTurnId: 'turn-1',
+        providerSendArtifactId: 'artifact-retry-1',
+        provider: 'openrouter',
+        model: 'qwen/qwen-2.5-72b-instruct',
+        destinationId: 'openrouter-qwen25-72b',
+        destinationLabel: 'OpenRouter / qwen-2.5-72b-instruct',
+        attemptKind: 'manual_retry',
+        retryOfArtifactId: 'artifact-failed-1',
+        requestHash: 'hash-2',
+        sentAt: '2026-03-16T08:05:00.000Z'
+      },
+      undoPayload: {},
+      actor: 'local-user'
+    })
+
+    const results = await searchDecisionJournal({ appPaths, query: 'OpenRouter / qwen-2.5-72b-instruct' })
+
+    expect(results).toContainEqual(expect.objectContaining({
+      decisionType: 'send_approved_persona_draft_to_provider_failed',
+      targetType: 'persona_draft_review',
+      replaySummary: 'Approved draft send failed · Persona draft review · turn-1 · OpenRouter / qwen-2.5-72b-instruct'
+    }))
+    expect(results).toContainEqual(expect.objectContaining({
+      decisionType: 'send_approved_persona_draft_to_provider',
+      targetType: 'persona_draft_review',
+      replaySummary: 'Approved draft resent to provider · Persona draft review · turn-1 · OpenRouter / qwen-2.5-72b-instruct'
+    }))
+    db.close()
+  })
 })

@@ -216,7 +216,7 @@ describe('ReviewQueuePage', () => {
     expect(screen.getByText('Safe batch approve · Bob Li · school_name · 2 items')).toBeInTheDocument()
   })
 
-  it('renders approved draft send history entries in replay detail', async () => {
+  it('renders retry-aware approved draft send history entries in replay detail', async () => {
     const listReviewQueue = vi.fn().mockResolvedValue([])
     const listDecisionJournal = vi.fn().mockResolvedValue([
       {
@@ -224,9 +224,9 @@ describe('ReviewQueuePage', () => {
         decisionType: 'send_approved_persona_draft_to_provider',
         targetType: 'persona_draft_review',
         targetId: 'review-send-1',
-        replaySummary: 'Approved draft sent to provider · Persona draft review · turn-1 · OpenRouter / qwen-2.5-72b-instruct',
+        replaySummary: 'Approved draft resent to provider · Persona draft review · turn-1 · OpenRouter / qwen-2.5-72b-instruct',
         targetLabel: 'Persona draft review · turn-1 · OpenRouter / qwen-2.5-72b-instruct',
-        decisionLabel: 'Approved draft sent to provider',
+        decisionLabel: 'Approved draft resent to provider',
         operationPayload: {
           draftReviewId: 'review-send-1',
           sourceTurnId: 'turn-1',
@@ -236,6 +236,8 @@ describe('ReviewQueuePage', () => {
           policyKey: 'persona_draft.remote_send_approved',
           destinationId: 'openrouter-qwen25-72b',
           destinationLabel: 'OpenRouter / qwen-2.5-72b-instruct',
+          attemptKind: 'manual_retry',
+          retryOfArtifactId: 'artifact-failed-1',
           requestHash: 'hash-1',
           sentAt: '2026-03-16T08:00:00.000Z'
         },
@@ -259,7 +261,7 @@ describe('ReviewQueuePage', () => {
 
     render(<ReviewQueuePage />)
 
-    expect(await screen.findByText('Approved draft sent to provider')).toBeInTheDocument()
+    expect(await screen.findByText('Approved draft resent to provider')).toBeInTheDocument()
     expect(screen.getByText('Persona draft review · turn-1 · OpenRouter / qwen-2.5-72b-instruct')).toBeInTheDocument()
 
     await act(async () => {
@@ -267,7 +269,7 @@ describe('ReviewQueuePage', () => {
     })
 
     expect(await screen.findByText('Replay Detail')).toBeInTheDocument()
-    expect(screen.getByText('Approved draft sent to provider · Persona draft review · turn-1 · OpenRouter / qwen-2.5-72b-instruct')).toBeInTheDocument()
+    expect(screen.getByText('Approved draft resent to provider · Persona draft review · turn-1 · OpenRouter / qwen-2.5-72b-instruct')).toBeInTheDocument()
     expect(screen.getByText(/providerSendArtifactId/i)).toBeInTheDocument()
     expect(screen.getByText((content) => content.includes('persona_draft.remote_send_approved'))).toBeInTheDocument()
   })
