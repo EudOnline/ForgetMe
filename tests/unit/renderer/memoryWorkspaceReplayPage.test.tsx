@@ -983,14 +983,16 @@ describe('MemoryWorkspacePage replay', () => {
           sourceTurnId: 'turn-sandbox-reviewed',
           provider: 'openrouter',
           model: 'qwen/qwen-2.5-72b-instruct',
-          policyKey: 'persona_draft.remote_send_approved',
-          requestHash: 'hash-replay-1',
-          destinationId: 'openrouter-qwen25-72b',
-          destinationLabel: 'OpenRouter / qwen-2.5-72b-instruct',
-          redactionSummary: {
-            requestShape: 'approved_persona_draft_handoff_artifact',
-            sourceArtifact: 'approved_persona_draft_handoff',
-            removedFields: []
+        policyKey: 'persona_draft.remote_send_approved',
+        requestHash: 'hash-replay-1',
+        destinationId: 'openrouter-qwen25-72b',
+        destinationLabel: 'OpenRouter / qwen-2.5-72b-instruct',
+        attemptKind: 'manual_retry',
+        retryOfArtifactId: 'pdpe-failed-1',
+        redactionSummary: {
+          requestShape: 'approved_persona_draft_handoff_artifact',
+          sourceArtifact: 'approved_persona_draft_handoff',
+          removedFields: []
           },
           createdAt: '2026-03-16T08:00:00.000Z',
           events: [
@@ -1044,11 +1046,159 @@ describe('MemoryWorkspacePage replay', () => {
     expect(await screen.findByRole('heading', { name: 'Approved Draft Handoff' })).toBeInTheDocument()
     expect(screen.getByText('Provider Boundary Send')).toBeInTheDocument()
     expect(screen.getByText('response recorded')).toBeInTheDocument()
+    expect(screen.getByText('Attempt: manual retry')).toBeInTheDocument()
     expect(screen.getByText('Destination: OpenRouter / qwen-2.5-72b-instruct')).toBeInTheDocument()
     expect(screen.getByText('Latest send audit')).toBeInTheDocument()
     expect(screen.getByLabelText('Draft review body')).toHaveValue('可审阅草稿：先把关键记录整理进归档，再补齐细节。')
     expect(screen.getByLabelText('Draft review body')).toBeDisabled()
     expect(screen.getByLabelText('Draft review notes')).toHaveValue('Approved for internal review.')
     expect(screen.queryByRole('button', { name: 'Start draft review' })).not.toBeInTheDocument()
+  })
+
+  it('shows the latest approved draft send failure details when replaying an approved turn', async () => {
+    const sandboxTurn = {
+      turnId: 'turn-sandbox-failed',
+      sessionId: 'session-sandbox-failed',
+      ordinal: 1,
+      question: '如果她来写这段话，会怎么写？先给我一个可审阅草稿。',
+      provider: null,
+      model: null,
+      contextHash: 'context-failed-1',
+      promptHash: 'prompt-failed-1',
+      createdAt: '2026-03-15T12:02:00.000Z',
+      response: {
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' } as const,
+        question: '如果她来写这段话，会怎么写？先给我一个可审阅草稿。',
+        expressionMode: 'grounded' as const,
+        workflowKind: 'persona_draft_sandbox' as const,
+        title: 'Memory Workspace · Alice Chen',
+        answer: {
+          summary: 'Reviewed simulation draft generated from archive-backed excerpts for this ask.',
+          displayType: 'derived_summary' as const,
+          citations: []
+        },
+        guardrail: {
+          decision: 'sandbox_review_required' as const,
+          reasonCodes: ['persona_draft_sandbox' as const, 'quote_trace_required' as const],
+          citationCount: 2,
+          sourceKinds: ['file'],
+          fallbackApplied: false
+        },
+        contextCards: [],
+        boundaryRedirect: null,
+        communicationEvidence: null,
+        personaDraft: {
+          title: 'Reviewed draft sandbox',
+          disclaimer: 'Simulation draft based on archived expressions. Not a statement from the person.',
+          draft: '可审阅草稿：先把关键记录整理进归档。',
+          reviewState: 'review_required' as const,
+          supportingExcerpts: ['ce-1'],
+          trace: [
+            {
+              traceId: 'trace-1',
+              excerptIds: ['ce-1'],
+              explanation: 'Draft segment 1 stays grounded in Alice Chen excerpt ce-1.'
+            }
+          ]
+        }
+      }
+    }
+
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([
+        {
+          sessionId: 'session-sandbox-failed',
+          scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+          title: 'Memory Workspace · Alice Chen',
+          latestQuestion: '如果她来写这段话，会怎么写？先给我一个可审阅草稿。',
+          turnCount: 1,
+          createdAt: '2026-03-15T12:01:00.000Z',
+          updatedAt: '2026-03-15T12:02:00.000Z'
+        }
+      ]),
+      getMemoryWorkspaceSession: vi.fn().mockResolvedValue({
+        sessionId: 'session-sandbox-failed',
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+        title: 'Memory Workspace · Alice Chen',
+        latestQuestion: '如果她来写这段话，会怎么写？先给我一个可审阅草稿。',
+        turnCount: 1,
+        createdAt: '2026-03-15T12:01:00.000Z',
+        updatedAt: '2026-03-15T12:02:00.000Z',
+        turns: [sandboxTurn]
+      }),
+      listMemoryWorkspaceCompareSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted: vi.fn(),
+      listApprovedPersonaDraftHandoffs: vi.fn().mockResolvedValue([]),
+      listApprovedPersonaDraftProviderSends: vi.fn().mockResolvedValue([
+        {
+          artifactId: 'pdpe-failed-replay-1',
+          draftReviewId: 'review-approved-failed-1',
+          sourceTurnId: 'turn-sandbox-failed',
+          provider: 'openrouter',
+          model: 'qwen/qwen-2.5-72b-instruct',
+          policyKey: 'persona_draft.remote_send_approved',
+          requestHash: 'hash-failed-replay-1',
+          destinationId: 'openrouter-qwen25-72b',
+          destinationLabel: 'OpenRouter / qwen-2.5-72b-instruct',
+          attemptKind: 'initial_send',
+          retryOfArtifactId: null,
+          redactionSummary: {
+            requestShape: 'approved_persona_draft_handoff_artifact',
+            sourceArtifact: 'approved_persona_draft_handoff',
+            removedFields: []
+          },
+          createdAt: '2026-03-16T08:00:00.000Z',
+          events: [
+            {
+              id: 'event-failed-replay-1',
+              eventType: 'request',
+              payload: {
+                requestShape: 'approved_persona_draft_handoff_artifact'
+              },
+              createdAt: '2026-03-16T08:00:00.000Z'
+            },
+            {
+              id: 'event-failed-replay-2',
+              eventType: 'error',
+              payload: {
+                message: 'provider offline'
+              },
+              createdAt: '2026-03-16T08:00:01.000Z'
+            }
+          ]
+        }
+      ]),
+      getPersonaDraftReviewByTurn: vi.fn().mockResolvedValue({
+        draftReviewId: 'review-approved-failed-1',
+        sourceTurnId: 'turn-sandbox-failed',
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+        workflowKind: 'persona_draft_sandbox',
+        status: 'approved',
+        baseDraft: '可审阅草稿：先把关键记录整理进归档。',
+        editedDraft: '可审阅草稿：先把关键记录整理进归档，再补齐细节。',
+        reviewNotes: 'Approved for internal review.',
+        supportingExcerpts: ['ce-1'],
+        trace: [
+          {
+            traceId: 'trace-1',
+            excerptIds: ['ce-1'],
+            explanation: 'Draft segment 1 stays grounded in Alice Chen excerpt ce-1.'
+          }
+        ],
+        approvedJournalId: 'journal-approved-failed-1',
+        rejectedJournalId: null,
+        createdAt: '2026-03-16T01:00:00.000Z',
+        updatedAt: '2026-03-16T01:07:00.000Z'
+      })
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'person', canonicalPersonId: 'cp-1' }} />)
+
+    expect(await screen.findByRole('heading', { name: 'Approved Draft Handoff' })).toBeInTheDocument()
+    expect(screen.getByText('error recorded')).toBeInTheDocument()
+    expect(screen.getByText('Attempt: initial send')).toBeInTheDocument()
+    expect(screen.getByText('Error: provider offline')).toBeInTheDocument()
   })
 })

@@ -865,6 +865,8 @@ describe('MemoryWorkspacePage', () => {
         requestHash: 'hash-1',
         destinationId: 'openrouter-qwen25-72b',
         destinationLabel: 'OpenRouter / qwen-2.5-72b-instruct',
+        attemptKind: 'initial_send',
+        retryOfArtifactId: null,
         redactionSummary: {
           requestShape: 'approved_persona_draft_handoff_artifact',
           sourceArtifact: 'approved_persona_draft_handoff',
@@ -902,6 +904,8 @@ describe('MemoryWorkspacePage', () => {
         requestHash: 'hash-1',
         destinationId: 'openrouter-qwen25-72b',
         destinationLabel: 'OpenRouter / qwen-2.5-72b-instruct',
+        attemptKind: 'initial_send',
+        retryOfArtifactId: null,
         createdAt: '2026-03-16T08:00:00.000Z'
       }
     })
@@ -949,6 +953,7 @@ describe('MemoryWorkspacePage', () => {
     })
 
     expect(await screen.findByText('response recorded')).toBeInTheDocument()
+    expect(screen.getByText('Attempt: initial send')).toBeInTheDocument()
     expect(screen.getByText('Destination: OpenRouter / qwen-2.5-72b-instruct')).toBeInTheDocument()
     expect(screen.getByText('openrouter · qwen/qwen-2.5-72b-instruct')).toBeInTheDocument()
     expect(screen.getByText('persona_draft.remote_send_approved')).toBeInTheDocument()
@@ -958,6 +963,218 @@ describe('MemoryWorkspacePage', () => {
     expect(screen.getByText(/approved_persona_draft_handoff_artifact/)).toBeInTheDocument()
     expect(screen.getByText(/acknowledgement/)).toBeInTheDocument()
     expect(window.localStorage.getItem('forgetme.memoryWorkspace.approvedDraftSendDestinationId')).toBe('openrouter-qwen25-72b')
+  })
+
+  it('shows failed send details and retries the latest failed approved draft send', async () => {
+    const sandboxTurn = {
+      turnId: 'turn-sandbox-retry-1',
+      sessionId: 'session-sandbox-retry-1',
+      ordinal: 1,
+      question: '如果她来写一段关于记录和归档的回复，会怎么写？',
+      provider: null,
+      model: null,
+      contextHash: 'context-hash-sandbox-retry-1',
+      promptHash: 'prompt-hash-sandbox-retry-1',
+      createdAt: '2026-03-15T00:35:00.000Z',
+      response: {
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' } as const,
+        question: '如果她来写一段关于记录和归档的回复，会怎么写？',
+        expressionMode: 'grounded' as const,
+        workflowKind: 'persona_draft_sandbox' as const,
+        title: 'Memory Workspace · Alice Chen',
+        answer: {
+          summary: 'Reviewed simulation draft generated from archive-backed excerpts for this ask.',
+          displayType: 'derived_summary' as const,
+          citations: []
+        },
+        guardrail: {
+          decision: 'sandbox_review_required' as const,
+          reasonCodes: ['persona_draft_sandbox' as const, 'quote_trace_required' as const],
+          citationCount: 2,
+          sourceKinds: ['file'],
+          fallbackApplied: false
+        },
+        contextCards: [],
+        boundaryRedirect: null,
+        communicationEvidence: null,
+        personaDraft: {
+          title: 'Reviewed draft sandbox',
+          disclaimer: 'Simulation draft based on archived expressions. Not a statement from the person.',
+          draft: '可审阅草稿：先把关键记录整理进归档。',
+          reviewState: 'review_required' as const,
+          supportingExcerpts: [],
+          trace: []
+        }
+      }
+    }
+
+    const approvedReview = {
+      draftReviewId: 'review-retry-1',
+      sourceTurnId: 'turn-sandbox-retry-1',
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' } as const,
+      workflowKind: 'persona_draft_sandbox' as const,
+      status: 'approved' as const,
+      baseDraft: '可审阅草稿：先把关键记录整理进归档。',
+      editedDraft: '可审阅草稿：先把关键记录整理进归档，再补齐细节。',
+      reviewNotes: 'Approved for provider send.',
+      supportingExcerpts: [],
+      trace: [],
+      approvedJournalId: 'journal-approved-retry-1',
+      rejectedJournalId: null,
+      createdAt: '2026-03-16T01:00:00.000Z',
+      updatedAt: '2026-03-16T01:07:00.000Z'
+    }
+
+    const failedSend = {
+      artifactId: 'pdpe-failed-1',
+      draftReviewId: 'review-retry-1',
+      sourceTurnId: 'turn-sandbox-retry-1',
+      provider: 'openrouter',
+      model: 'qwen/qwen-2.5-72b-instruct',
+      policyKey: 'persona_draft.remote_send_approved',
+      requestHash: 'hash-failed-1',
+      destinationId: 'openrouter-qwen25-72b',
+      destinationLabel: 'OpenRouter / qwen-2.5-72b-instruct',
+      attemptKind: 'initial_send',
+      retryOfArtifactId: null,
+      redactionSummary: {
+        requestShape: 'approved_persona_draft_handoff_artifact',
+        sourceArtifact: 'approved_persona_draft_handoff',
+        removedFields: []
+      },
+      createdAt: '2026-03-16T08:00:00.000Z',
+      events: [
+        {
+          id: 'event-failed-1',
+          eventType: 'request',
+          payload: {
+            requestShape: 'approved_persona_draft_handoff_artifact'
+          },
+          createdAt: '2026-03-16T08:00:00.000Z'
+        },
+        {
+          id: 'event-failed-2',
+          eventType: 'error',
+          payload: {
+            message: 'provider offline'
+          },
+          createdAt: '2026-03-16T08:00:01.000Z'
+        }
+      ]
+    }
+
+    const retriedSend = {
+      artifactId: 'pdpe-retry-1',
+      draftReviewId: 'review-retry-1',
+      sourceTurnId: 'turn-sandbox-retry-1',
+      provider: 'openrouter',
+      model: 'qwen/qwen-2.5-72b-instruct',
+      policyKey: 'persona_draft.remote_send_approved',
+      requestHash: 'hash-retry-1',
+      destinationId: 'openrouter-qwen25-72b',
+      destinationLabel: 'OpenRouter / qwen-2.5-72b-instruct',
+      attemptKind: 'manual_retry',
+      retryOfArtifactId: 'pdpe-failed-1',
+      redactionSummary: {
+        requestShape: 'approved_persona_draft_handoff_artifact',
+        sourceArtifact: 'approved_persona_draft_handoff',
+        removedFields: []
+      },
+      createdAt: '2026-03-16T08:05:00.000Z',
+      events: [
+        {
+          id: 'event-retry-1',
+          eventType: 'request',
+          payload: {
+            requestShape: 'approved_persona_draft_handoff_artifact'
+          },
+          createdAt: '2026-03-16T08:05:00.000Z'
+        },
+        {
+          id: 'event-retry-2',
+          eventType: 'response',
+          payload: {
+            acknowledgement: 'received'
+          },
+          createdAt: '2026-03-16T08:05:02.000Z'
+        }
+      ]
+    }
+
+    const listApprovedPersonaDraftProviderSends = vi.fn()
+      .mockResolvedValueOnce([failedSend])
+      .mockResolvedValue([retriedSend])
+    const retryApprovedPersonaDraftProviderSend = vi.fn().mockResolvedValue({
+      status: 'responded',
+      artifactId: 'pdpe-retry-1',
+      draftReviewId: 'review-retry-1',
+      sourceTurnId: 'turn-sandbox-retry-1',
+      provider: 'openrouter',
+      model: 'qwen/qwen-2.5-72b-instruct',
+      policyKey: 'persona_draft.remote_send_approved',
+      requestHash: 'hash-retry-1',
+      destinationId: 'openrouter-qwen25-72b',
+      destinationLabel: 'OpenRouter / qwen-2.5-72b-instruct',
+      attemptKind: 'manual_retry',
+      retryOfArtifactId: 'pdpe-failed-1',
+      createdAt: '2026-03-16T08:05:00.000Z'
+    })
+
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceSession: vi.fn().mockResolvedValue(null),
+      listMemoryWorkspaceCompareSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted: vi.fn().mockResolvedValue(sandboxTurn),
+      listApprovedDraftSendDestinations: vi.fn().mockResolvedValue([
+        {
+          destinationId: 'memory-dialogue-default',
+          label: 'Memory Dialogue Default',
+          resolutionMode: 'memory_dialogue_default',
+          provider: 'siliconflow',
+          model: 'Qwen/Qwen2.5-72B-Instruct',
+          isDefault: true
+        },
+        {
+          destinationId: 'openrouter-qwen25-72b',
+          label: 'OpenRouter / qwen-2.5-72b-instruct',
+          resolutionMode: 'provider_model',
+          provider: 'openrouter',
+          model: 'qwen/qwen-2.5-72b-instruct',
+          isDefault: false
+        }
+      ]),
+      getPersonaDraftReviewByTurn: vi.fn().mockResolvedValue(approvedReview),
+      listApprovedPersonaDraftHandoffs: vi.fn().mockResolvedValue([]),
+      listApprovedPersonaDraftProviderSends,
+      sendApprovedPersonaDraftToProvider: vi.fn().mockResolvedValue(null),
+      retryApprovedPersonaDraftProviderSend
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'person', canonicalPersonId: 'cp-1' }} />)
+
+    fireEvent.change(screen.getByLabelText('Ask memory workspace'), {
+      target: { value: '如果她来写一段关于记录和归档的回复，会怎么写？' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+
+    expect(await screen.findByRole('heading', { name: 'Approved Draft Handoff' })).toBeInTheDocument()
+    expect(await screen.findByText('error recorded')).toBeInTheDocument()
+    expect(screen.getByText('Attempt: initial send')).toBeInTheDocument()
+    expect(screen.getByText('Error: provider offline')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry failed send' }))
+
+    await waitFor(() => {
+      expect(retryApprovedPersonaDraftProviderSend).toHaveBeenCalledWith({
+        artifactId: 'pdpe-failed-1'
+      })
+    })
+
+    expect(await screen.findByText('response recorded')).toBeInTheDocument()
+    expect(screen.getByText('Attempt: manual retry')).toBeInTheDocument()
+    expect(screen.getByText('Destination: OpenRouter / qwen-2.5-72b-instruct')).toBeInTheDocument()
   })
 
   it('restores the last-used approved draft send destination from localStorage', async () => {

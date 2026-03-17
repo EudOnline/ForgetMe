@@ -505,6 +505,12 @@ export function MemoryWorkspacePage(props: {
       : async () => null),
     [archiveApi]
   )
+  const retryApprovedPersonaDraftProviderSend = useMemo(
+    () => (typeof archiveApi.retryApprovedPersonaDraftProviderSend === 'function'
+      ? archiveApi.retryApprovedPersonaDraftProviderSend.bind(archiveApi)
+      : async () => null),
+    [archiveApi]
+  )
   const scopeIdentity = scopeKey(props.scope)
   const scopeRequestRef = useRef(0)
   const [question, setQuestion] = useState(() => initialQuestionForScope(props.scope))
@@ -1463,6 +1469,40 @@ export function MemoryWorkspacePage(props: {
     }
   }
 
+  const handleRetryApprovedDraftSend = async (turnId: string) => {
+    const turn = turnsById.get(turnId)
+    const review = draftReviewsByTurnId[turnId]
+    const latestSend = approvedDraftProviderSendsByTurnId[turnId]?.[0] ?? null
+    const latestEvent = latestSend?.events[latestSend.events.length - 1] ?? null
+    if (!turn || !review || review.status !== 'approved' || !latestSend || latestEvent?.eventType !== 'error') {
+      return
+    }
+
+    const scopeRequestId = scopeRequestRef.current
+    setApprovedDraftProviderSendPendingByTurnId((previousState) => ({
+      ...previousState,
+      [turnId]: true
+    }))
+
+    try {
+      const retried = await retryApprovedPersonaDraftProviderSend({
+        artifactId: latestSend.artifactId
+      })
+      if (!retried || scopeRequestId !== scopeRequestRef.current) {
+        return
+      }
+
+      await refreshApprovedDraftProviderSendsForTurn(turn, review, scopeRequestId)
+    } finally {
+      if (scopeRequestId === scopeRequestRef.current) {
+        setApprovedDraftProviderSendPendingByTurnId((previousState) => ({
+          ...previousState,
+          [turnId]: false
+        }))
+      }
+    }
+  }
+
   return (
     <section>
       <form
@@ -1673,6 +1713,9 @@ export function MemoryWorkspacePage(props: {
         }}
         onSendApprovedDraft={(turnId) => {
           void handleSendApprovedDraft(turnId)
+        }}
+        onRetryApprovedDraftSend={(turnId) => {
+          void handleRetryApprovedDraftSend(turnId)
         }}
         onOpenPerson={props.onOpenPerson}
         onOpenGroup={props.onOpenGroup}

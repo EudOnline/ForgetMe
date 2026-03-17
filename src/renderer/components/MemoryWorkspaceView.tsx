@@ -400,6 +400,7 @@ export function MemoryWorkspaceView(props: {
   onApprovedDraftSendDestinationChange?: (destinationId: string) => void
   onExportApprovedDraft?: (turnId: string) => void
   onSendApprovedDraft?: (turnId: string) => void
+  onRetryApprovedDraftSend?: (turnId: string) => void
   onOpenPerson?: (canonicalPersonId: string) => void
   onOpenGroup?: (anchorPersonId: string) => void
   onOpenEvidenceFile?: (fileId: string) => void
@@ -555,6 +556,9 @@ export function MemoryWorkspaceView(props: {
                   onSendDestinationChange={props.onApprovedDraftSendDestinationChange}
                   onExportApprovedDraft={props.onExportApprovedDraft ? () => props.onExportApprovedDraft?.(turn.turnId) : undefined}
                   onSendApprovedDraft={props.onSendApprovedDraft ? () => props.onSendApprovedDraft?.(turn.turnId) : undefined}
+                  onRetryApprovedDraftSend={
+                    props.onRetryApprovedDraftSend ? () => props.onRetryApprovedDraftSend?.(turn.turnId) : undefined
+                  }
                 />
               ) : null}
             </section>

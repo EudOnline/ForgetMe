@@ -19,10 +19,15 @@ export function ApprovedPersonaDraftHandoffPanel(props: {
   onSendDestinationChange?: (destinationId: string) => void
   onExportApprovedDraft?: () => void
   onSendApprovedDraft?: () => void
+  onRetryApprovedDraftSend?: () => void
 }) {
   const latestHandoff = props.handoffs[0] ?? null
   const latestProviderSend = props.providerSends[0] ?? null
   const latestProviderEvent = latestProviderSend?.events[latestProviderSend.events.length - 1] ?? null
+  const latestAttemptLabel = latestProviderSend?.attemptKind === 'manual_retry' ? 'manual retry' : 'initial send'
+  const latestErrorMessage = latestProviderEvent?.eventType === 'error' && typeof latestProviderEvent.payload.message === 'string'
+    ? latestProviderEvent.payload.message
+    : null
 
   return (
     <section aria-label="Approved Draft Handoff">
@@ -76,13 +81,26 @@ export function ApprovedPersonaDraftHandoffPanel(props: {
         >
           Send approved draft
         </button>
+        {latestProviderEvent?.eventType === 'error' ? (
+          <button
+            type="button"
+            disabled={props.isPending || !props.onRetryApprovedDraftSend}
+            onClick={() => props.onRetryApprovedDraftSend?.()}
+          >
+            Retry failed send
+          </button>
+        ) : null}
         {latestProviderSend ? (
           <>
             <p>{latestProviderEvent ? `${latestProviderEvent.eventType} recorded` : 'request recorded'}</p>
+            <p>Attempt: {latestAttemptLabel}</p>
             <p>Destination: {latestProviderSend.destinationLabel}</p>
             <p>{latestProviderSend.provider} · {latestProviderSend.model}</p>
             <p>{latestProviderSend.policyKey}</p>
             <p>{latestProviderSend.createdAt}</p>
+            {latestErrorMessage ? (
+              <p>Error: {latestErrorMessage}</p>
+            ) : null}
             {latestProviderSend.events.length > 0 ? (
               <section aria-label="Latest send audit">
                 <h5>Latest send audit</h5>
