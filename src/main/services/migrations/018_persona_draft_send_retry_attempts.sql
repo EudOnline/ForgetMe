@@ -1,0 +1,2 @@
+alter table persona_draft_provider_egress_artifacts add column attempt_kind text;
+alter table persona_draft_provider_egress_artifacts add column retry_of_artifact_id text;

@@ -10,6 +10,7 @@ const {
   listApprovedPersonaDraftHandoffs,
   exportApprovedPersonaDraftToDirectory,
   listApprovedPersonaDraftProviderSends,
+  retryApprovedPersonaDraftProviderSend,
   sendApprovedPersonaDraftToProvider
 } = vi.hoisted(() => ({
   handlerMap: new Map<string, (event: unknown, payload?: unknown) => Promise<unknown>>(),
@@ -20,6 +21,7 @@ const {
   listApprovedPersonaDraftHandoffs: vi.fn(),
   exportApprovedPersonaDraftToDirectory: vi.fn(),
   listApprovedPersonaDraftProviderSends: vi.fn(),
+  retryApprovedPersonaDraftProviderSend: vi.fn(),
   sendApprovedPersonaDraftToProvider: vi.fn()
 }))
 
@@ -53,6 +55,7 @@ vi.mock('../../../src/main/services/approvedDraftSendDestinationService', () => 
 
 vi.mock('../../../src/main/services/approvedDraftProviderSendService', () => ({
   listApprovedPersonaDraftProviderSends,
+  retryApprovedPersonaDraftProviderSend,
   sendApprovedPersonaDraftToProvider
 }))
 
@@ -79,6 +82,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
     listApprovedPersonaDraftHandoffs.mockReset()
     exportApprovedPersonaDraftToDirectory.mockReset()
     listApprovedPersonaDraftProviderSends.mockReset()
+    retryApprovedPersonaDraftProviderSend.mockReset()
     sendApprovedPersonaDraftToProvider.mockReset()
     delete process.env.FORGETME_E2E_PERSONA_DRAFT_HANDOFF_DESTINATION_DIR
   })
@@ -175,6 +179,8 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
       requestHash: 'hash-1',
       destinationId: 'memory-dialogue-default',
       destinationLabel: 'Memory Dialogue Default',
+      attemptKind: 'initial_send',
+      retryOfArtifactId: null,
       redactionSummary: {
         requestShape: 'approved_persona_draft_handoff_artifact',
         sourceArtifact: 'approved_persona_draft_handoff',
@@ -217,6 +223,8 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
       requestHash: 'hash-1',
       destinationId: 'memory-dialogue-default',
       destinationLabel: 'Memory Dialogue Default',
+      attemptKind: 'initial_send',
+      retryOfArtifactId: null,
       createdAt: '2026-03-16T08:00:00.000Z'
     })
 
@@ -235,6 +243,42 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
     expect(result).toEqual(expect.objectContaining({
       draftReviewId: 'review-1',
       policyKey: 'persona_draft.remote_send_approved'
+    }))
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('retries approved draft provider sends through the ipc handler and closes the database', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    retryApprovedPersonaDraftProviderSend.mockResolvedValue({
+      status: 'responded',
+      artifactId: 'pdpe-2',
+      draftReviewId: 'review-1',
+      sourceTurnId: 'turn-1',
+      provider: 'openrouter',
+      model: 'qwen/qwen-2.5-72b-instruct',
+      policyKey: 'persona_draft.remote_send_approved',
+      requestHash: 'hash-2',
+      destinationId: 'openrouter-qwen25-72b',
+      destinationLabel: 'OpenRouter / qwen-2.5-72b-instruct',
+      attemptKind: 'manual_retry',
+      retryOfArtifactId: 'pdpe-failed-1',
+      createdAt: '2026-03-16T08:05:00.000Z'
+    })
+
+    registerMemoryWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:retryApprovedPersonaDraftProviderSend')
+    const result = await handler?.({}, {
+      artifactId: 'pdpe-failed-1'
+    })
+
+    expect(retryApprovedPersonaDraftProviderSend).toHaveBeenCalledWith(expect.anything(), {
+      artifactId: 'pdpe-failed-1'
+    })
+    expect(result).toEqual(expect.objectContaining({
+      attemptKind: 'manual_retry',
+      retryOfArtifactId: 'pdpe-failed-1'
     }))
     expect(close).toHaveBeenCalled()
   })

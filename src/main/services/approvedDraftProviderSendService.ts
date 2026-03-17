@@ -1,6 +1,8 @@
 import crypto from 'node:crypto'
 import type {
+  ApprovedDraftProviderSendAttemptKind,
   ApprovedPersonaDraftProviderSendArtifact,
+  RetryApprovedPersonaDraftProviderSendInput,
   SendApprovedPersonaDraftToProviderInput,
   SendApprovedPersonaDraftToProviderResult
 } from '../../shared/archiveContracts'
@@ -42,6 +44,11 @@ type ProviderSendResult = {
   payload: Record<string, unknown>
 }
 
+type ApprovedDraftProviderSendAttemptMetadata = {
+  attemptKind: ApprovedDraftProviderSendAttemptKind
+  retryOfArtifactId: string | null
+}
+
 function sha256Json(value: unknown) {
   return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex')
 }
@@ -77,6 +84,16 @@ function resolveApprovedDraftSendRoute(destinationId?: string) {
       ...route,
       model: destination.model
     }
+  }
+}
+
+function resolveAttemptMetadata(input: {
+  attemptKind?: ApprovedDraftProviderSendAttemptKind
+  retryOfArtifactId?: string | null
+}): ApprovedDraftProviderSendAttemptMetadata {
+  return {
+    attemptKind: input.attemptKind ?? 'initial_send',
+    retryOfArtifactId: input.retryOfArtifactId ?? null
   }
 }
 
@@ -144,6 +161,8 @@ function persistApprovedDraftProviderSendRequest(db: ArchiveDatabase, input: {
   model: string
   destinationId: string
   destinationLabel: string
+  attemptKind: ApprovedDraftProviderSendAttemptKind
+  retryOfArtifactId: string | null
   policyKey: typeof POLICY_KEY
   requestEnvelope: ApprovedDraftProviderSendRequest['requestEnvelope']
   redactionSummary: ApprovedDraftProviderSendRequest['redactionSummary']
@@ -156,8 +175,8 @@ function persistApprovedDraftProviderSendRequest(db: ArchiveDatabase, input: {
   const requestHash = sha256Json(input.requestEnvelope)
 
   db.prepare(`insert into persona_draft_provider_egress_artifacts (
-    id, draft_review_id, source_turn_id, provider, model, policy_key, request_hash, destination_id, destination_label, redaction_summary_json, created_at
-  ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    id, draft_review_id, source_turn_id, provider, model, policy_key, request_hash, destination_id, destination_label, attempt_kind, retry_of_artifact_id, redaction_summary_json, created_at
+  ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     artifactId,
     input.draftReviewId,
     input.sourceTurnId,
@@ -167,6 +186,8 @@ function persistApprovedDraftProviderSendRequest(db: ArchiveDatabase, input: {
     requestHash,
     input.destinationId,
     input.destinationLabel,
+    input.attemptKind,
+    input.retryOfArtifactId,
     JSON.stringify(input.redactionSummary),
     createdAt
   )
@@ -243,6 +264,8 @@ export function buildApprovedPersonaDraftProviderSendRequest(
 export async function sendApprovedPersonaDraftToProvider(
   db: ArchiveDatabase,
   input: SendApprovedPersonaDraftToProviderInput & {
+    attemptKind?: ApprovedDraftProviderSendAttemptKind
+    retryOfArtifactId?: string | null
     callModel?: (input: {
       route: ModelRoute
       requestEnvelope: ApprovedDraftProviderSendRequest['requestEnvelope']
@@ -254,6 +277,7 @@ export async function sendApprovedPersonaDraftToProvider(
     return null
   }
 
+  const attempt = resolveAttemptMetadata(input)
   const callModel = input.callModel ?? defaultCallModel
   const persisted = persistApprovedDraftProviderSendRequest(db, {
     draftReviewId: request.draftReviewId,
@@ -262,6 +286,8 @@ export async function sendApprovedPersonaDraftToProvider(
     model: request.route.model,
     destinationId: request.destinationId,
     destinationLabel: request.destinationLabel,
+    attemptKind: attempt.attemptKind,
+    retryOfArtifactId: attempt.retryOfArtifactId,
     policyKey: request.policyKey,
     requestEnvelope: request.requestEnvelope,
     redactionSummary: request.redactionSummary
@@ -293,6 +319,8 @@ export async function sendApprovedPersonaDraftToProvider(
         policyKey: request.policyKey,
         destinationId: request.destinationId,
         destinationLabel: request.destinationLabel,
+        attemptKind: attempt.attemptKind,
+        retryOfArtifactId: attempt.retryOfArtifactId,
         requestHash: persisted.requestHash,
         handoffKind: 'provider_boundary_send',
         sentAt: persisted.createdAt
@@ -312,19 +340,98 @@ export async function sendApprovedPersonaDraftToProvider(
       requestHash: persisted.requestHash,
       destinationId: request.destinationId,
       destinationLabel: request.destinationLabel,
+      attemptKind: attempt.attemptKind,
+      retryOfArtifactId: attempt.retryOfArtifactId,
       createdAt: persisted.createdAt
     }
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const failedAt = notBefore(persisted.createdAt)
+
     persistApprovedDraftProviderSendEvent(db, {
       artifactId: persisted.artifactId,
       eventType: 'error',
       payload: {
-        message: error instanceof Error ? error.message : String(error)
-      }
+        message: errorMessage
+      },
+      createdAt: failedAt
+    })
+
+    appendDecisionJournal(db, {
+      decisionType: 'send_approved_persona_draft_to_provider_failed',
+      targetType: 'persona_draft_review',
+      targetId: request.draftReviewId,
+      operationPayload: {
+        draftReviewId: request.draftReviewId,
+        sourceTurnId: request.sourceTurnId,
+        providerSendArtifactId: persisted.artifactId,
+        provider: request.route.provider,
+        model: request.route.model,
+        policyKey: request.policyKey,
+        destinationId: request.destinationId,
+        destinationLabel: request.destinationLabel,
+        attemptKind: attempt.attemptKind,
+        retryOfArtifactId: attempt.retryOfArtifactId,
+        requestHash: persisted.requestHash,
+        handoffKind: 'provider_boundary_send',
+        errorMessage,
+        failedAt
+      },
+      undoPayload: {},
+      actor: LOCAL_ACTOR
     })
 
     throw error
   }
+}
+
+export async function retryApprovedPersonaDraftProviderSend(
+  db: ArchiveDatabase,
+  input: RetryApprovedPersonaDraftProviderSendInput & {
+    callModel?: (input: {
+      route: ModelRoute
+      requestEnvelope: ApprovedDraftProviderSendRequest['requestEnvelope']
+    }) => Promise<ProviderSendResult>
+  }
+): Promise<SendApprovedPersonaDraftToProviderResult | null> {
+  const artifact = db.prepare(
+    `select
+      id as artifactId,
+      draft_review_id as draftReviewId,
+      destination_id as destinationId
+     from persona_draft_provider_egress_artifacts
+     where id = ?`
+  ).get(input.artifactId) as {
+    artifactId: string
+    draftReviewId: string
+    destinationId: string | null
+  } | undefined
+
+  if (!artifact) {
+    return null
+  }
+
+  const latestEvent = db.prepare(
+    `select event_type as eventType
+     from persona_draft_provider_egress_events
+     where artifact_id = ?
+     order by created_at desc, rowid desc
+     limit 1`
+  ).get(input.artifactId) as {
+    eventType: 'request' | 'response' | 'error'
+  } | undefined
+
+  if (latestEvent?.eventType !== 'error') {
+    return null
+  }
+
+  return sendApprovedPersonaDraftToProvider(db, {
+    draftReviewId: artifact.draftReviewId,
+    destinationId: artifact.destinationId ?? undefined,
+    attemptKind: 'manual_retry',
+    retryOfArtifactId: artifact.artifactId,
+    callModel: input.callModel
+  })
 }
 
 export function listApprovedPersonaDraftProviderSends(
@@ -342,6 +449,8 @@ export function listApprovedPersonaDraftProviderSends(
       request_hash as requestHash,
       destination_id as destinationId,
       destination_label as destinationLabel,
+      attempt_kind as attemptKind,
+      retry_of_artifact_id as retryOfArtifactId,
       redaction_summary_json as redactionSummaryJson,
       created_at as createdAt
      from persona_draft_provider_egress_artifacts
@@ -357,6 +466,8 @@ export function listApprovedPersonaDraftProviderSends(
     requestHash: string
     destinationId: string | null
     destinationLabel: string | null
+    attemptKind: ApprovedDraftProviderSendAttemptKind | null
+    retryOfArtifactId: string | null
     redactionSummaryJson: string
     createdAt: string
   }>
@@ -376,6 +487,8 @@ export function listApprovedPersonaDraftProviderSends(
       requestHash: row.requestHash,
       destinationId: row.destinationId ?? destination.destinationId,
       destinationLabel: row.destinationLabel ?? destination.label,
+      attemptKind: row.attemptKind ?? 'initial_send',
+      retryOfArtifactId: row.retryOfArtifactId ?? null,
       redactionSummary: JSON.parse(row.redactionSummaryJson) as Record<string, unknown>,
       createdAt: row.createdAt,
       events: (db.prepare(

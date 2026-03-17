@@ -5,6 +5,7 @@ import * as modelGatewayService from '../../../src/main/services/modelGatewaySer
 import {
   buildApprovedPersonaDraftProviderSendRequest,
   listApprovedPersonaDraftProviderSends,
+  retryApprovedPersonaDraftProviderSend,
   sendApprovedPersonaDraftToProvider
 } from '../../../src/main/services/approvedDraftProviderSendService'
 import { createPersonaDraftReviewFromTurn } from '../../../src/main/services/memoryWorkspaceDraftReviewService'
@@ -122,11 +123,15 @@ describe('approvedDraftProviderSendService', () => {
     expect(sent?.provider).toBe('siliconflow')
     expect(sent?.destinationId).toBe('memory-dialogue-default')
     expect(sent?.destinationLabel).toBe('Memory Dialogue Default')
+    expect(sent?.attemptKind).toBe('initial_send')
+    expect(sent?.retryOfArtifactId).toBeNull()
     expect(callModel).toHaveBeenCalledTimes(1)
     expect(history).toHaveLength(1)
     expect(history[0]?.policyKey).toBe('persona_draft.remote_send_approved')
     expect(history[0]?.destinationId).toBe('memory-dialogue-default')
     expect(history[0]?.destinationLabel).toBe('Memory Dialogue Default')
+    expect(history[0]?.attemptKind).toBe('initial_send')
+    expect(history[0]?.retryOfArtifactId).toBeNull()
     expect(history[0]?.events.map((event) => event.eventType)).toEqual(['request', 'response'])
     expect(journalEntries).toHaveLength(1)
     expect(journalEntries[0]).toMatchObject({
@@ -142,6 +147,8 @@ describe('approvedDraftProviderSendService', () => {
         policyKey: 'persona_draft.remote_send_approved',
         destinationId: 'memory-dialogue-default',
         destinationLabel: 'Memory Dialogue Default',
+        attemptKind: 'initial_send',
+        retryOfArtifactId: null,
         requestHash: sent?.requestHash,
         sentAt: '2026-03-16T08:00:00.000Z'
       }
@@ -163,12 +170,29 @@ describe('approvedDraftProviderSendService', () => {
       draftReviewId: approvedReview.draftReviewId
     })
     const journalEntries = listDecisionJournal(db, {
-      decisionType: 'send_approved_persona_draft_to_provider'
+      decisionType: 'send_approved_persona_draft_to_provider_failed'
     })
 
     expect(history).toHaveLength(1)
+    expect(history[0]?.attemptKind).toBe('initial_send')
+    expect(history[0]?.retryOfArtifactId).toBeNull()
     expect(history[0]?.events.map((event) => event.eventType)).toEqual(['request', 'error'])
-    expect(journalEntries).toHaveLength(0)
+    expect(journalEntries).toHaveLength(1)
+    expect(journalEntries[0]).toMatchObject({
+      decisionType: 'send_approved_persona_draft_to_provider_failed',
+      targetType: 'persona_draft_review',
+      targetId: approvedReview.draftReviewId,
+      operationPayload: {
+        draftReviewId: approvedReview.draftReviewId,
+        sourceTurnId: history[0]?.sourceTurnId,
+        providerSendArtifactId: history[0]?.artifactId,
+        destinationId: 'memory-dialogue-default',
+        destinationLabel: 'Memory Dialogue Default',
+        attemptKind: 'initial_send',
+        retryOfArtifactId: null,
+        errorMessage: 'provider offline'
+      }
+    })
 
     db.close()
   })
@@ -212,9 +236,115 @@ describe('approvedDraftProviderSendService', () => {
     expect(history[0]).toMatchObject({
       destinationId: 'openrouter-qwen25-72b',
       destinationLabel: 'OpenRouter / qwen-2.5-72b-instruct',
+      attemptKind: 'initial_send',
+      retryOfArtifactId: null,
       provider: 'openrouter',
       model: 'qwen/qwen-2.5-72b-instruct'
     })
+
+    db.close()
+  })
+
+  it('retries a failed approved draft send by creating a new retry artifact with the same destination', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-03-16T10:00:00.000Z'))
+
+    const { db, approvedReview } = seedApprovedPersonaDraftHandoffScenario()
+    const initialFailure = vi.fn().mockRejectedValue(new Error('provider offline'))
+
+    await expect(sendApprovedPersonaDraftToProvider(db, {
+      draftReviewId: approvedReview.draftReviewId,
+      destinationId: 'openrouter-qwen25-72b',
+      callModel: initialFailure
+    })).rejects.toThrow('provider offline')
+
+    const failedArtifact = listApprovedPersonaDraftProviderSends(db, {
+      draftReviewId: approvedReview.draftReviewId
+    })[0]
+
+    vi.setSystemTime(new Date('2026-03-16T10:05:00.000Z'))
+
+    const retryCall = vi.fn().mockResolvedValue({
+      provider: 'openrouter',
+      model: 'qwen/qwen-2.5-72b-instruct',
+      receivedAt: '2026-03-16T10:05:03.000Z',
+      usage: { total_tokens: 15 },
+      payload: {
+        acknowledgement: 'received'
+      }
+    })
+
+    const retried = await retryApprovedPersonaDraftProviderSend(db, {
+      artifactId: failedArtifact!.artifactId,
+      callModel: retryCall
+    })
+    const history = listApprovedPersonaDraftProviderSends(db, {
+      draftReviewId: approvedReview.draftReviewId
+    })
+
+    expect(retried).toMatchObject({
+      artifactId: expect.any(String),
+      destinationId: 'openrouter-qwen25-72b',
+      destinationLabel: 'OpenRouter / qwen-2.5-72b-instruct',
+      provider: 'openrouter',
+      model: 'qwen/qwen-2.5-72b-instruct',
+      attemptKind: 'manual_retry',
+      retryOfArtifactId: failedArtifact!.artifactId
+    })
+    expect(retryCall).toHaveBeenCalledTimes(1)
+    expect(history).toHaveLength(2)
+    expect(history[0]).toMatchObject({
+      artifactId: retried?.artifactId,
+      destinationId: 'openrouter-qwen25-72b',
+      attemptKind: 'manual_retry',
+      retryOfArtifactId: failedArtifact!.artifactId,
+      events: [
+        expect.objectContaining({ eventType: 'request' }),
+        expect.objectContaining({ eventType: 'response' })
+      ]
+    })
+    expect(history[1]).toMatchObject({
+      artifactId: failedArtifact!.artifactId,
+      destinationId: 'openrouter-qwen25-72b',
+      attemptKind: 'initial_send',
+      retryOfArtifactId: null,
+      events: [
+        expect.objectContaining({ eventType: 'request' }),
+        expect.objectContaining({ eventType: 'error' })
+      ]
+    })
+
+    db.close()
+  })
+
+  it('returns null when retrying a missing or non-failed approved draft send', async () => {
+    const { db, approvedReview } = seedApprovedPersonaDraftHandoffScenario()
+    const successCall = vi.fn().mockResolvedValue({
+      provider: 'siliconflow',
+      model: 'Qwen/Qwen2.5-72B-Instruct',
+      receivedAt: '2026-03-16T11:00:01.000Z',
+      usage: { total_tokens: 10 },
+      payload: {
+        acknowledgement: 'received'
+      }
+    })
+
+    const sent = await sendApprovedPersonaDraftToProvider(db, {
+      draftReviewId: approvedReview.draftReviewId,
+      callModel: successCall
+    })
+
+    await expect(retryApprovedPersonaDraftProviderSend(db, {
+      artifactId: 'missing-artifact',
+      callModel: vi.fn()
+    })).resolves.toBeNull()
+
+    const retryCall = vi.fn()
+    await expect(retryApprovedPersonaDraftProviderSend(db, {
+      artifactId: sent!.artifactId,
+      callModel: retryCall
+    })).resolves.toBeNull()
+    expect(retryCall).not.toHaveBeenCalled()
 
     db.close()
   })
@@ -237,6 +367,8 @@ describe('approvedDraftProviderSendService', () => {
     })
 
     expect(history).toHaveLength(1)
+    expect(history[0]?.attemptKind).toBe('initial_send')
+    expect(history[0]?.retryOfArtifactId).toBeNull()
     expect(history[0]?.events.map((event) => event.eventType)).toEqual(['request', 'response'])
 
     db.close()

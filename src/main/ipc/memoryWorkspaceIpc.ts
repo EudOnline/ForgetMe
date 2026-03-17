@@ -13,6 +13,7 @@ import {
   memoryWorkspaceCompareSessionIdSchema,
   memoryWorkspaceSessionFilterSchema,
   memoryWorkspaceSessionIdSchema,
+  retryApprovedPersonaDraftProviderSendInputSchema,
   runMemoryWorkspaceCompareInputSchema,
   runMemoryWorkspaceCompareMatrixInputSchema,
   sendApprovedPersonaDraftToProviderInputSchema,
@@ -49,6 +50,7 @@ import {
 } from '../services/personaDraftHandoffService'
 import {
   listApprovedPersonaDraftProviderSends,
+  retryApprovedPersonaDraftProviderSend,
   sendApprovedPersonaDraftToProvider
 } from '../services/approvedDraftProviderSendService'
 import { listApprovedDraftSendDestinations } from '../services/approvedDraftSendDestinationService'
@@ -91,6 +93,7 @@ export function registerMemoryWorkspaceIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:listApprovedDraftSendDestinations')
   ipcMain.removeHandler('archive:listApprovedPersonaDraftProviderSends')
   ipcMain.removeHandler('archive:sendApprovedPersonaDraftToProvider')
+  ipcMain.removeHandler('archive:retryApprovedPersonaDraftProviderSend')
 
   ipcMain.handle('archive:askMemoryWorkspace', async (_event, payload) => {
     const input = askMemoryWorkspaceInputSchema.parse(payload)
@@ -259,5 +262,14 @@ export function registerMemoryWorkspaceIpc(appPaths: AppPaths) {
     const sent = await sendApprovedPersonaDraftToProvider(db, input)
     db.close()
     return sent
+  })
+
+  ipcMain.handle('archive:retryApprovedPersonaDraftProviderSend', async (_event, payload) => {
+    const input = retryApprovedPersonaDraftProviderSendInputSchema.parse(payload)
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    const retried = await retryApprovedPersonaDraftProviderSend(db, input)
+    db.close()
+    return retried
   })
 }

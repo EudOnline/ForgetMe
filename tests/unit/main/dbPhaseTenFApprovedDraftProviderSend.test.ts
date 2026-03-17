@@ -27,7 +27,9 @@ describe('phase-ten-f/h migrations', () => {
 
     expect(columnNames).toEqual(expect.arrayContaining([
       'destination_id',
-      'destination_label'
+      'destination_label',
+      'attempt_kind',
+      'retry_of_artifact_id'
     ]))
 
     db.close()
