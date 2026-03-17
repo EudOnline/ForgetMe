@@ -34,9 +34,9 @@ test('memory workspace advice mode keeps grounded guardrails visible', async () 
   await page.getByLabel('Ask memory workspace').fill('如果她本人会怎么建议我？请模仿她的口吻回答。')
   await page.getByRole('button', { name: 'Ask' }).click()
 
-  await expect(page.getByText('Mode: advice')).toBeVisible()
-  await expect(page.getByText('fallback_unsupported_request')).toBeVisible()
-  await expect(page.getByText(/cannot answer as if it were the archived person/i)).toBeVisible()
+  await expect(page.getByLabel('Answer').getByText('Mode: advice')).toBeVisible()
+  await expect(page.getByLabel('Guardrails').getByText('fallback_unsupported_request')).toBeVisible()
+  await expect(page.getByLabel('Boundary Redirect').getByText(/cannot answer as if it were the archived person/i)).toBeVisible()
 
   await electronApp.close()
 })
