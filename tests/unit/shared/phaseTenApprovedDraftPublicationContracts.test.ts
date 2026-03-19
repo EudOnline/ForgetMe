@@ -4,11 +4,14 @@ import type {
   ApprovedPersonaDraftPublicationRecord,
   ArchiveApi,
   ListApprovedPersonaDraftPublicationsInput,
+  OpenApprovedDraftPublicationEntryInput,
+  OpenApprovedDraftPublicationEntryResult,
   PublishApprovedPersonaDraftInput,
   PublishApprovedPersonaDraftResult
 } from '../../../src/shared/archiveContracts'
 import {
   listApprovedPersonaDraftPublicationsInputSchema,
+  openApprovedDraftPublicationEntryInputSchema,
   publishApprovedPersonaDraftInputSchema
 } from '../../../src/shared/ipcSchemas'
 
@@ -37,6 +40,10 @@ describe('phase-ten approved draft publication contracts', () => {
       destinationRoot: '/tmp/persona-draft-publications'
     }
 
+    const openInput: OpenApprovedDraftPublicationEntryInput = {
+      entryPath: '/tmp/persona-draft-publications/approved-draft-publication-publication-1/index.html'
+    }
+
     const record: ApprovedPersonaDraftPublicationRecord = {
       journalId: 'journal-1',
       publicationId: 'publication-1',
@@ -49,6 +56,8 @@ describe('phase-ten approved draft publication contracts', () => {
       publicArtifactPath: '/tmp/persona-draft-publications/approved-draft-publication-publication-1/publication.json',
       publicArtifactFileName: 'publication.json',
       publicArtifactSha256: 'hash-1',
+      displayEntryPath: '/tmp/persona-draft-publications/approved-draft-publication-publication-1/index.html',
+      displayEntryFileName: 'index.html',
       publishedAt: '2026-03-17T05:00:00.000Z'
     }
 
@@ -64,17 +73,29 @@ describe('phase-ten approved draft publication contracts', () => {
       publicArtifactPath: '/tmp/persona-draft-publications/approved-draft-publication-publication-1/publication.json',
       publicArtifactFileName: 'publication.json',
       publicArtifactSha256: 'hash-1',
+      displayEntryPath: '/tmp/persona-draft-publications/approved-draft-publication-publication-1/index.html',
+      displayEntryFileName: 'index.html',
       publishedAt: '2026-03-17T05:00:00.000Z'
+    }
+
+    const openResult: OpenApprovedDraftPublicationEntryResult = {
+      status: 'opened',
+      entryPath: '/tmp/persona-draft-publications/approved-draft-publication-publication-1/index.html',
+      errorMessage: null
     }
 
     expect(artifact.publicationKind).toBe('local_share_package')
     expect(artifact.shareEnvelope.requestShape).toBe('local_share_persona_draft_publication')
     expect(listInput.draftReviewId).toBe('review-1')
     expect(publishInput.destinationRoot).toBe('/tmp/persona-draft-publications')
+    expect(openInput.entryPath).toContain('/index.html')
     expect(record.status).toBe('published')
     expect(record.publicArtifactFileName).toBe('publication.json')
+    expect(record.displayEntryFileName).toBe('index.html')
     expect(result.status).toBe('published')
     expect(result.publicationId).toBe('publication-1')
+    expect(result.displayEntryPath).toContain('/index.html')
+    expect(openResult.status).toBe('opened')
 
     expectTypeOf<ArchiveApi['selectApprovedDraftPublicationDestination']>().toEqualTypeOf<
       () => Promise<string | null>
@@ -84,6 +105,9 @@ describe('phase-ten approved draft publication contracts', () => {
     >()
     expectTypeOf<ArchiveApi['publishApprovedPersonaDraft']>().toEqualTypeOf<
       (input: PublishApprovedPersonaDraftInput) => Promise<PublishApprovedPersonaDraftResult | null>
+    >()
+    expectTypeOf<ArchiveApi['openApprovedDraftPublicationEntry']>().toEqualTypeOf<
+      (input: OpenApprovedDraftPublicationEntryInput) => Promise<OpenApprovedDraftPublicationEntryResult>
     >()
   })
 
@@ -100,6 +124,12 @@ describe('phase-ten approved draft publication contracts', () => {
     })).toEqual({
       draftReviewId: 'review-1',
       destinationRoot: '/tmp/persona-draft-publications'
+    })
+
+    expect(openApprovedDraftPublicationEntryInputSchema.parse({
+      entryPath: '/tmp/persona-draft-publications/approved-draft-publication-publication-1/index.html'
+    })).toEqual({
+      entryPath: '/tmp/persona-draft-publications/approved-draft-publication-publication-1/index.html'
     })
   })
 })

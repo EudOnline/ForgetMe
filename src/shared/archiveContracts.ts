@@ -749,6 +749,8 @@ export type ApprovedPersonaDraftPublicationRecord = {
   publicArtifactPath: string
   publicArtifactFileName: string
   publicArtifactSha256: string
+  displayEntryPath: string
+  displayEntryFileName: 'index.html'
   publishedAt: string
 }
 
@@ -759,6 +761,16 @@ export type ListApprovedPersonaDraftPublicationsInput = {
 export type PublishApprovedPersonaDraftInput = {
   draftReviewId: string
   destinationRoot: string
+}
+
+export type OpenApprovedDraftPublicationEntryInput = {
+  entryPath: string
+}
+
+export type OpenApprovedDraftPublicationEntryResult = {
+  status: 'opened' | 'failed'
+  entryPath: string
+  errorMessage: string | null
 }
 
 export type PublishApprovedPersonaDraftResult = {
@@ -773,6 +785,8 @@ export type PublishApprovedPersonaDraftResult = {
   publicArtifactPath: string
   publicArtifactFileName: string
   publicArtifactSha256: string
+  displayEntryPath: string
+  displayEntryFileName: 'index.html'
   publishedAt: string
 }
 
@@ -1373,6 +1387,7 @@ export interface ArchiveApi {
   selectApprovedDraftPublicationDestination: () => Promise<string | null>
   listApprovedPersonaDraftPublications: (input: ListApprovedPersonaDraftPublicationsInput) => Promise<ApprovedPersonaDraftPublicationRecord[]>
   publishApprovedPersonaDraft: (input: PublishApprovedPersonaDraftInput) => Promise<PublishApprovedPersonaDraftResult | null>
+  openApprovedDraftPublicationEntry: (input: OpenApprovedDraftPublicationEntryInput) => Promise<OpenApprovedDraftPublicationEntryResult>
   listApprovedDraftSendDestinations: () => Promise<ApprovedDraftSendDestination[]>
   listApprovedPersonaDraftProviderSends: (input: ListApprovedPersonaDraftProviderSendsInput) => Promise<ApprovedPersonaDraftProviderSendArtifact[]>
   sendApprovedPersonaDraftToProvider: (input: SendApprovedPersonaDraftToProviderInput) => Promise<SendApprovedPersonaDraftToProviderResult | null>

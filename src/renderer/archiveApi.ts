@@ -77,6 +77,11 @@ const fallbackApi: ArchiveApi = {
   selectApprovedDraftPublicationDestination: async () => null,
   listApprovedPersonaDraftPublications: async () => [],
   publishApprovedPersonaDraft: async (_input: { draftReviewId: string; destinationRoot: string }) => null,
+  openApprovedDraftPublicationEntry: async (input: { entryPath: string }) => ({
+    status: 'failed' as const,
+    entryPath: input.entryPath,
+    errorMessage: 'archive api unavailable'
+  }),
   listApprovedDraftSendDestinations: async () => [] as ApprovedDraftSendDestination[],
   listApprovedPersonaDraftProviderSends: async () => [] as ApprovedPersonaDraftProviderSendArtifact[],
   sendApprovedPersonaDraftToProvider: async (_input: { draftReviewId: string; destinationId?: string }) => null,
@@ -161,6 +166,7 @@ function createIpcArchiveApi(): ArchiveApi | null {
     selectApprovedDraftPublicationDestination: () => ipcRenderer.invoke('archive:selectApprovedDraftPublicationDestination'),
     listApprovedPersonaDraftPublications: (input) => ipcRenderer.invoke('archive:listApprovedPersonaDraftPublications', input),
     publishApprovedPersonaDraft: (input) => ipcRenderer.invoke('archive:publishApprovedPersonaDraft', input),
+    openApprovedDraftPublicationEntry: (input) => ipcRenderer.invoke('archive:openApprovedDraftPublicationEntry', input),
     listApprovedDraftSendDestinations: () => ipcRenderer.invoke('archive:listApprovedDraftSendDestinations'),
     listApprovedPersonaDraftProviderSends: (input) => ipcRenderer.invoke('archive:listApprovedPersonaDraftProviderSends', input),
     sendApprovedPersonaDraftToProvider: (input) => ipcRenderer.invoke('archive:sendApprovedPersonaDraftToProvider', input),

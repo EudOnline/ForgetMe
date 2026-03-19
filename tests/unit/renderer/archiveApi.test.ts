@@ -114,6 +114,13 @@ describe('archiveApi dossier methods', () => {
       draftReviewId: 'review-1',
       destinationRoot: '/tmp/persona-draft-publications'
     })).resolves.toBeNull()
+    await expect(archiveApi.openApprovedDraftPublicationEntry({
+      entryPath: '/tmp/persona-draft-publications/approved-draft-publication-publication-1/index.html'
+    })).resolves.toEqual({
+      status: 'failed',
+      entryPath: '/tmp/persona-draft-publications/approved-draft-publication-publication-1/index.html',
+      errorMessage: 'archive api unavailable'
+    })
     await expect(archiveApi.listApprovedPersonaDraftProviderSends({
       draftReviewId: 'review-1'
     })).resolves.toEqual([])

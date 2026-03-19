@@ -159,6 +159,10 @@ export const publishApprovedPersonaDraftInputSchema = approvedPersonaDraftReview
   destinationRoot: z.string().min(1)
 })
 
+export const openApprovedDraftPublicationEntryInputSchema = z.object({
+  entryPath: z.string().min(1)
+})
+
 export const approvedDraftSendDestinationIdSchema = z.string().min(1)
 export const approvedDraftProviderSendArtifactIdSchema = z.string().min(1)
 
