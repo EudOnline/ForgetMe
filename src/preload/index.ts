@@ -39,6 +39,7 @@ const archiveApi: ArchiveApi = {
   selectApprovedDraftPublicationDestination: () => ipcRenderer.invoke('archive:selectApprovedDraftPublicationDestination'),
   listApprovedPersonaDraftPublications: (input) => ipcRenderer.invoke('archive:listApprovedPersonaDraftPublications', input),
   publishApprovedPersonaDraft: (input) => ipcRenderer.invoke('archive:publishApprovedPersonaDraft', input),
+  openApprovedDraftPublicationEntry: (input) => ipcRenderer.invoke('archive:openApprovedDraftPublicationEntry', input),
   listApprovedDraftSendDestinations: () => ipcRenderer.invoke('archive:listApprovedDraftSendDestinations'),
   listApprovedPersonaDraftProviderSends: (input) => ipcRenderer.invoke('archive:listApprovedPersonaDraftProviderSends', input),
   sendApprovedPersonaDraftToProvider: (input) => ipcRenderer.invoke('archive:sendApprovedPersonaDraftToProvider', input),

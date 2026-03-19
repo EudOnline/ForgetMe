@@ -1,9 +1,13 @@
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppPaths } from '../../../src/main/services/appPaths'
 
 const {
   handlerMap,
   showOpenDialog,
+  shellOpenPath,
   openDatabase,
   runMigrations,
   listApprovedDraftSendDestinations,
@@ -17,6 +21,7 @@ const {
 } = vi.hoisted(() => ({
   handlerMap: new Map<string, (event: unknown, payload?: unknown) => Promise<unknown>>(),
   showOpenDialog: vi.fn(),
+  shellOpenPath: vi.fn(),
   openDatabase: vi.fn(),
   runMigrations: vi.fn(),
   listApprovedDraftSendDestinations: vi.fn(),
@@ -32,6 +37,9 @@ const {
 vi.mock('electron', () => ({
   dialog: {
     showOpenDialog
+  },
+  shell: {
+    openPath: shellOpenPath
   },
   ipcMain: {
     removeHandler: vi.fn((channel: string) => {
@@ -87,6 +95,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
     showOpenDialog.mockReset()
     openDatabase.mockReset()
     runMigrations.mockReset()
+    shellOpenPath.mockReset()
     listApprovedDraftSendDestinations.mockReset()
     listApprovedPersonaDraftHandoffs.mockReset()
     exportApprovedPersonaDraftToDirectory.mockReset()
@@ -205,6 +214,8 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
       publicArtifactPath: '/tmp/approved-draft-publication-publication-1/publication.json',
       publicArtifactFileName: 'publication.json',
       publicArtifactSha256: 'hash-1',
+      displayEntryPath: '/tmp/approved-draft-publication-publication-1/index.html',
+      displayEntryFileName: 'index.html',
       publishedAt: '2026-03-16T09:00:00.000Z'
     }])
 
@@ -248,6 +259,8 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
       publicArtifactPath: '/tmp/approved-draft-publication-publication-1/publication.json',
       publicArtifactFileName: 'publication.json',
       publicArtifactSha256: 'hash-1',
+      displayEntryPath: '/tmp/approved-draft-publication-publication-1/index.html',
+      displayEntryFileName: 'index.html',
       publishedAt: '2026-03-16T09:00:00.000Z'
     })
 
@@ -275,6 +288,80 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
       publicArtifactFileName: 'publication.json'
     }))
     expect(close).toHaveBeenCalled()
+  })
+
+  it('rejects invalid open publication entry payloads', async () => {
+    registerMemoryWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:openApprovedDraftPublicationEntry')
+
+    await expect(handler?.({}, {
+      entryPath: '/tmp/approved-draft-publication-publication-1/not-index.html'
+    })).rejects.toThrow()
+    expect(shellOpenPath).not.toHaveBeenCalled()
+  })
+
+  it('opens a normalized publication entry path when shell open succeeds', async () => {
+    shellOpenPath.mockResolvedValue('')
+    const packageRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-approved-draft-publication-'))
+    const entryPath = path.join(packageRoot, 'index.html')
+    fs.writeFileSync(entryPath, '<html><body>share page</body></html>', 'utf8')
+
+    registerMemoryWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:openApprovedDraftPublicationEntry')
+    const result = await handler?.({}, {
+      entryPath: path.join(packageRoot, '.', 'index.html')
+    })
+
+    expect(shellOpenPath).toHaveBeenCalledWith(entryPath)
+    expect(result).toEqual({
+      status: 'opened',
+      entryPath,
+      errorMessage: null
+    })
+  })
+
+  it('returns structured failed status when publication entry is missing', async () => {
+    registerMemoryWorkspaceIpc(appPathsFixture())
+
+    const missingEntryPath = path.join(
+      os.tmpdir(),
+      'forgetme-approved-draft-publication-missing',
+      'index.html'
+    )
+    const handler = handlerMap.get('archive:openApprovedDraftPublicationEntry')
+    const result = await handler?.({}, {
+      entryPath: missingEntryPath
+    })
+
+    expect(shellOpenPath).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      status: 'failed',
+      entryPath: missingEntryPath,
+      errorMessage: `Publication entry file not found: ${missingEntryPath}`
+    })
+  })
+
+  it('returns structured failed status when shell open returns an error string', async () => {
+    shellOpenPath.mockResolvedValue('No application knows how to open this file.')
+    const packageRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-approved-draft-publication-'))
+    const entryPath = path.join(packageRoot, 'index.html')
+    fs.writeFileSync(entryPath, '<html><body>share page</body></html>', 'utf8')
+
+    registerMemoryWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:openApprovedDraftPublicationEntry')
+    const result = await handler?.({}, {
+      entryPath
+    })
+
+    expect(shellOpenPath).toHaveBeenCalledWith(entryPath)
+    expect(result).toEqual({
+      status: 'failed',
+      entryPath,
+      errorMessage: 'No application knows how to open this file.'
+    })
   })
 
   it('lists approved draft provider sends through the ipc handler and closes the database', async () => {

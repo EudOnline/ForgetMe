@@ -159,8 +159,16 @@ export const publishApprovedPersonaDraftInputSchema = approvedPersonaDraftReview
   destinationRoot: z.string().min(1)
 })
 
+const absolutePathLikeSchema = z.string().min(1).refine(
+  (value) => /^(?:[A-Za-z]:[\\/]|\/)/.test(value),
+  { message: 'entryPath must be an absolute path' }
+)
+
 export const openApprovedDraftPublicationEntryInputSchema = z.object({
-  entryPath: z.string().min(1)
+  entryPath: absolutePathLikeSchema.refine(
+    (value) => /[\\/]index\.html$/.test(value),
+    { message: 'entryPath must target index.html' }
+  )
 })
 
 export const approvedDraftSendDestinationIdSchema = z.string().min(1)

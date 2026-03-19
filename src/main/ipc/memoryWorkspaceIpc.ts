@@ -1,5 +1,6 @@
+import fs from 'node:fs'
 import path from 'node:path'
-import { dialog, ipcMain } from 'electron'
+import { dialog, ipcMain, shell } from 'electron'
 import {
   askMemoryWorkspaceInputSchema,
   askMemoryWorkspacePersistedInputSchema,
@@ -17,6 +18,7 @@ import {
   retryApprovedPersonaDraftProviderSendInputSchema,
   runMemoryWorkspaceCompareInputSchema,
   runMemoryWorkspaceCompareMatrixInputSchema,
+  openApprovedDraftPublicationEntryInputSchema,
   publishApprovedPersonaDraftInputSchema,
   sendApprovedPersonaDraftToProviderInputSchema,
   transitionPersonaDraftReviewInputSchema,
@@ -99,6 +101,7 @@ export function registerMemoryWorkspaceIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:selectApprovedDraftPublicationDestination')
   ipcMain.removeHandler('archive:listApprovedPersonaDraftPublications')
   ipcMain.removeHandler('archive:publishApprovedPersonaDraft')
+  ipcMain.removeHandler('archive:openApprovedDraftPublicationEntry')
   ipcMain.removeHandler('archive:listApprovedDraftSendDestinations')
   ipcMain.removeHandler('archive:listApprovedPersonaDraftProviderSends')
   ipcMain.removeHandler('archive:sendApprovedPersonaDraftToProvider')
@@ -271,6 +274,41 @@ export function registerMemoryWorkspaceIpc(appPaths: AppPaths) {
     const published = publishApprovedPersonaDraftToDirectory(db, input)
     db.close()
     return published
+  })
+
+  ipcMain.handle('archive:openApprovedDraftPublicationEntry', async (_event, payload) => {
+    const input = openApprovedDraftPublicationEntryInputSchema.parse(payload)
+    const entryPath = path.normalize(input.entryPath)
+
+    if (path.basename(entryPath) !== 'index.html') {
+      return {
+        status: 'failed' as const,
+        entryPath,
+        errorMessage: `Publication entry must be index.html: ${entryPath}`
+      }
+    }
+
+    if (!fs.existsSync(entryPath)) {
+      return {
+        status: 'failed' as const,
+        entryPath,
+        errorMessage: `Publication entry file not found: ${entryPath}`
+      }
+    }
+
+    try {
+      const errorMessage = await shell.openPath(entryPath)
+      return errorMessage
+        ? { status: 'failed' as const, entryPath, errorMessage }
+        : { status: 'opened' as const, entryPath, errorMessage: null }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      return {
+        status: 'failed' as const,
+        entryPath,
+        errorMessage
+      }
+    }
   })
 
   ipcMain.handle('archive:listApprovedDraftSendDestinations', async () => {
