@@ -773,6 +773,53 @@ export type OpenApprovedDraftPublicationEntryResult = {
   errorMessage: string | null
 }
 
+export type ApprovedDraftHostedShareHostStatus = {
+  availability: 'configured' | 'unconfigured'
+  hostKind: 'configured_remote_host' | null
+  hostLabel: string | null
+}
+
+export type ApprovedPersonaDraftHostedShareLinkRecord = {
+  shareLinkId: string
+  publicationId: string
+  draftReviewId: string
+  sourceTurnId: string
+  hostKind: 'configured_remote_host'
+  hostLabel: string
+  remoteShareId: string
+  shareUrl: string
+  publicArtifactSha256: string
+  status: 'active' | 'revoked'
+  createdAt: string
+  revokedAt: string | null
+}
+
+export type ListApprovedPersonaDraftHostedShareLinksInput = {
+  draftReviewId: string
+}
+
+export type CreateApprovedPersonaDraftHostedShareLinkInput = {
+  draftReviewId: string
+}
+
+export type CreateApprovedPersonaDraftHostedShareLinkResult = ApprovedPersonaDraftHostedShareLinkRecord
+
+export type RevokeApprovedPersonaDraftHostedShareLinkInput = {
+  shareLinkId: string
+}
+
+export type RevokeApprovedPersonaDraftHostedShareLinkResult = ApprovedPersonaDraftHostedShareLinkRecord
+
+export type OpenApprovedDraftHostedShareLinkInput = {
+  shareUrl: string
+}
+
+export type OpenApprovedDraftHostedShareLinkResult = {
+  status: 'opened' | 'failed'
+  shareUrl: string
+  errorMessage: string | null
+}
+
 export type PublishApprovedPersonaDraftResult = {
   status: 'published'
   journalId: string
@@ -1388,6 +1435,11 @@ export interface ArchiveApi {
   listApprovedPersonaDraftPublications: (input: ListApprovedPersonaDraftPublicationsInput) => Promise<ApprovedPersonaDraftPublicationRecord[]>
   publishApprovedPersonaDraft: (input: PublishApprovedPersonaDraftInput) => Promise<PublishApprovedPersonaDraftResult | null>
   openApprovedDraftPublicationEntry: (input: OpenApprovedDraftPublicationEntryInput) => Promise<OpenApprovedDraftPublicationEntryResult>
+  getApprovedDraftHostedShareHostStatus: () => Promise<ApprovedDraftHostedShareHostStatus>
+  listApprovedPersonaDraftHostedShareLinks: (input: ListApprovedPersonaDraftHostedShareLinksInput) => Promise<ApprovedPersonaDraftHostedShareLinkRecord[]>
+  createApprovedPersonaDraftHostedShareLink: (input: CreateApprovedPersonaDraftHostedShareLinkInput) => Promise<CreateApprovedPersonaDraftHostedShareLinkResult | null>
+  revokeApprovedPersonaDraftHostedShareLink: (input: RevokeApprovedPersonaDraftHostedShareLinkInput) => Promise<RevokeApprovedPersonaDraftHostedShareLinkResult | null>
+  openApprovedDraftHostedShareLink: (input: OpenApprovedDraftHostedShareLinkInput) => Promise<OpenApprovedDraftHostedShareLinkResult>
   listApprovedDraftSendDestinations: () => Promise<ApprovedDraftSendDestination[]>
   listApprovedPersonaDraftProviderSends: (input: ListApprovedPersonaDraftProviderSendsInput) => Promise<ApprovedPersonaDraftProviderSendArtifact[]>
   sendApprovedPersonaDraftToProvider: (input: SendApprovedPersonaDraftToProviderInput) => Promise<SendApprovedPersonaDraftToProviderResult | null>

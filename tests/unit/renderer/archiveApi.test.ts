@@ -121,6 +121,18 @@ describe('archiveApi dossier methods', () => {
       entryPath: '/tmp/persona-draft-publications/approved-draft-publication-publication-1/index.html',
       errorMessage: 'archive api unavailable'
     })
+    await expect(archiveApi.getApprovedDraftHostedShareHostStatus()).resolves.toEqual({
+      availability: 'unconfigured',
+      hostKind: null,
+      hostLabel: null
+    })
+    await expect(archiveApi.openApprovedDraftHostedShareLink({
+      shareUrl: 'https://share.example.test/s/abc123'
+    })).resolves.toEqual({
+      status: 'failed',
+      shareUrl: 'https://share.example.test/s/abc123',
+      errorMessage: 'archive api unavailable'
+    })
     await expect(archiveApi.listApprovedPersonaDraftProviderSends({
       draftReviewId: 'review-1'
     })).resolves.toEqual([])

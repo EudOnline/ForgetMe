@@ -159,6 +159,16 @@ export const publishApprovedPersonaDraftInputSchema = approvedPersonaDraftReview
   destinationRoot: z.string().min(1)
 })
 
+export const listApprovedPersonaDraftHostedShareLinksInputSchema = approvedPersonaDraftReviewIdSchema
+
+export const revokeApprovedPersonaDraftHostedShareLinkInputSchema = z.object({
+  shareLinkId: z.string().min(1)
+})
+
+export const openApprovedDraftHostedShareLinkInputSchema = z.object({
+  shareUrl: z.string().url().refine((value) => /^https?:\/\//.test(value))
+})
+
 const absolutePathLikeSchema = z.string().min(1).refine(
   (value) => /^(?:[A-Za-z]:[\\/]|\/|\\\\[^\\/]+[\\/][^\\/]+)/.test(value),
   { message: 'entryPath must be an absolute path' }
