@@ -23,12 +23,99 @@ const DISPLAY_ENTRY_FILE_NAME = 'index.html' as const
 const DISPLAY_STYLES_FILE_NAME = 'styles.css' as const
 const EXCLUDED_FIELDS = ['reviewNotes', 'supportingExcerptIds', 'trace'] as const
 
+type ApprovedDraftPublicationPackagePaths = {
+  manifestPath: string
+  publicArtifactPath: string
+  displayEntryPath: string
+  displayStylesPath: string
+}
+
+type ApprovedDraftPublicationPackageData = {
+  manifest: Record<string, unknown>
+  publication: Record<string, unknown>
+  displayEntryHtml: string
+  displayStylesCss: string
+  publicArtifactSha256: string
+}
+
 function sha256Text(value: string) {
   return crypto.createHash('sha256').update(value).digest('hex')
 }
 
 function publicationTitle(question: string) {
   return question
+}
+
+function packagePathsFromEntryPath(entryPath: string): ApprovedDraftPublicationPackagePaths {
+  const packageRoot = path.dirname(entryPath)
+  return {
+    manifestPath: path.join(packageRoot, MANIFEST_FILE_NAME),
+    publicArtifactPath: path.join(packageRoot, PUBLIC_ARTIFACT_FILE_NAME),
+    displayEntryPath: entryPath,
+    displayStylesPath: path.join(packageRoot, DISPLAY_STYLES_FILE_NAME)
+  }
+}
+
+function packagePathsFromRecord(record: ApprovedPersonaDraftPublicationRecord): ApprovedDraftPublicationPackagePaths {
+  return {
+    manifestPath: record.manifestPath,
+    publicArtifactPath: record.publicArtifactPath,
+    displayEntryPath: record.displayEntryPath,
+    displayStylesPath: path.join(path.dirname(record.displayEntryPath), DISPLAY_STYLES_FILE_NAME)
+  }
+}
+
+function validateApprovedDraftPublicationPackageBoundary(
+  packagePaths: ApprovedDraftPublicationPackagePaths
+) {
+  if (!fs.existsSync(packagePaths.manifestPath)) {
+    return `Publication package file not found: ${packagePaths.manifestPath}`
+  }
+
+  if (!fs.existsSync(packagePaths.publicArtifactPath)) {
+    return `Publication package file not found: ${packagePaths.publicArtifactPath}`
+  }
+
+  if (!fs.existsSync(packagePaths.displayStylesPath)) {
+    return `Publication package file not found: ${packagePaths.displayStylesPath}`
+  }
+
+  try {
+    const manifest = JSON.parse(fs.readFileSync(packagePaths.manifestPath, 'utf8')) as Record<string, unknown>
+    const isValidManifest = manifest.formatVersion === 'phase10k1'
+      && manifest.sourceArtifact === 'approved_persona_draft_handoff'
+      && manifest.publicArtifactFileName === PUBLIC_ARTIFACT_FILE_NAME
+      && manifest.displayEntryFileName === DISPLAY_ENTRY_FILE_NAME
+      && manifest.displayStylesFileName === DISPLAY_STYLES_FILE_NAME
+
+    return isValidManifest ? null : `Publication package manifest is invalid: ${packagePaths.manifestPath}`
+  } catch {
+    return `Publication package manifest is invalid: ${packagePaths.manifestPath}`
+  }
+}
+
+function readApprovedDraftPublicationPackageFromPaths(
+  packagePaths: ApprovedDraftPublicationPackagePaths
+): ApprovedDraftPublicationPackageData | null {
+  const validationError = validateApprovedDraftPublicationPackageBoundary(packagePaths)
+  if (validationError) {
+    return null
+  }
+
+  const manifestText = fs.readFileSync(packagePaths.manifestPath, 'utf8')
+  const publicationText = fs.readFileSync(packagePaths.publicArtifactPath, 'utf8')
+  const manifest = JSON.parse(manifestText) as Record<string, unknown>
+  const publication = JSON.parse(publicationText) as Record<string, unknown>
+  const displayEntryHtml = fs.readFileSync(packagePaths.displayEntryPath, 'utf8')
+  const displayStylesCss = fs.readFileSync(packagePaths.displayStylesPath, 'utf8')
+
+  return {
+    manifest,
+    publication,
+    displayEntryHtml,
+    displayStylesCss,
+    publicArtifactSha256: sha256Text(publicationText)
+  }
 }
 
 function mapPublicationRecord(entry: ReturnType<typeof listDecisionJournal>[number]): ApprovedPersonaDraftPublicationRecord | null {
@@ -253,41 +340,27 @@ export function listApprovedPersonaDraftPublications(
     .filter((record): record is ApprovedPersonaDraftPublicationRecord => record !== null)
 }
 
+export function validateApprovedDraftPublicationEntryPath(entryPath: string) {
+  return validateApprovedDraftPublicationPackageBoundary(packagePathsFromEntryPath(entryPath))
+}
+
 export function readApprovedDraftPublicationPackage(record: ApprovedPersonaDraftPublicationRecord) {
-  if (
-    !fs.existsSync(record.publicArtifactPath)
-    || !fs.existsSync(record.manifestPath)
-    || !fs.existsSync(record.displayEntryPath)
-  ) {
+  if (!fs.existsSync(record.displayEntryPath)) {
     return null
   }
 
-  const displayStylesPath = path.join(path.dirname(record.displayEntryPath), DISPLAY_STYLES_FILE_NAME)
-  if (!fs.existsSync(displayStylesPath)) {
+  const packageData = readApprovedDraftPublicationPackageFromPaths(packagePathsFromRecord(record))
+  if (!packageData) {
     return null
   }
 
-  const manifestText = fs.readFileSync(record.manifestPath, 'utf8')
-  const publicationText = fs.readFileSync(record.publicArtifactPath, 'utf8')
-  const manifest = JSON.parse(manifestText) as Record<string, unknown>
-  const publication = JSON.parse(publicationText) as Record<string, unknown>
-  const displayEntryHtml = fs.readFileSync(record.displayEntryPath, 'utf8')
-  const displayStylesCss = fs.readFileSync(displayStylesPath, 'utf8')
-  const publicArtifactSha256 = sha256Text(publicationText)
-
-  if (publicArtifactSha256 !== record.publicArtifactSha256) {
+  if (packageData.publicArtifactSha256 !== record.publicArtifactSha256) {
     return null
   }
 
-  if (typeof manifest === 'object' && manifest !== null && (manifest as { publicArtifactSha256?: string }).publicArtifactSha256 !== record.publicArtifactSha256) {
+  if (packageData.manifest.publicArtifactSha256 !== record.publicArtifactSha256) {
     return null
   }
 
-  return {
-    manifest,
-    publication,
-    displayEntryHtml,
-    displayStylesCss,
-    publicArtifactSha256
-  }
+  return packageData
 }

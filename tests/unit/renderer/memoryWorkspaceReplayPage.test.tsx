@@ -1093,6 +1093,173 @@ describe('MemoryWorkspacePage replay', () => {
     expect(screen.queryByRole('button', { name: 'Start draft review' })).not.toBeInTheDocument()
   })
 
+  it('shows hosted share link history in replay mode, allows opening, and hides create and revoke actions', async () => {
+    const sandboxTurn = {
+      turnId: 'turn-sandbox-hosted-replay',
+      sessionId: 'session-sandbox-hosted-replay',
+      ordinal: 1,
+      question: '如果她来写这段话，会怎么写？先给我一个可审阅草稿。',
+      provider: null,
+      model: null,
+      contextHash: 'context-hosted-replay-1',
+      promptHash: 'prompt-hosted-replay-1',
+      createdAt: '2026-03-15T12:02:00.000Z',
+      response: {
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' } as const,
+        question: '如果她来写这段话，会怎么写？先给我一个可审阅草稿。',
+        expressionMode: 'grounded' as const,
+        workflowKind: 'persona_draft_sandbox' as const,
+        title: 'Memory Workspace · Alice Chen',
+        answer: {
+          summary: 'Reviewed simulation draft generated from archive-backed excerpts for this ask.',
+          displayType: 'derived_summary' as const,
+          citations: []
+        },
+        contextCards: [],
+        guardrail: {
+          decision: 'sandbox_review_required' as const,
+          reasonCodes: ['persona_draft_sandbox' as const, 'quote_trace_required' as const],
+          citationCount: 2,
+          sourceKinds: ['file'],
+          fallbackApplied: false
+        },
+        boundaryRedirect: null,
+        communicationEvidence: null,
+        personaDraft: {
+          title: 'Reviewed draft sandbox',
+          disclaimer: 'Simulation draft based on archived expressions. Not a statement from the person.',
+          draft: '可审阅草稿：先把关键记录整理进归档。',
+          reviewState: 'review_required' as const,
+          supportingExcerpts: ['ce-1'],
+          trace: [
+            {
+              traceId: 'trace-1',
+              excerptIds: ['ce-1'],
+              explanation: 'Draft segment 1 stays grounded in Alice Chen excerpt ce-1.'
+            }
+          ]
+        }
+      }
+    }
+
+    const openApprovedDraftHostedShareLink = vi.fn().mockResolvedValue({
+      status: 'opened',
+      shareUrl: 'https://share.example.test/s/remote-share-1',
+      errorMessage: null
+    })
+
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([
+        {
+          sessionId: 'session-sandbox-hosted-replay',
+          scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+          title: 'Memory Workspace · Alice Chen',
+          latestQuestion: '如果她来写这段话，会怎么写？先给我一个可审阅草稿。',
+          turnCount: 1,
+          createdAt: '2026-03-15T12:01:00.000Z',
+          updatedAt: '2026-03-15T12:02:00.000Z'
+        }
+      ]),
+      getMemoryWorkspaceSession: vi.fn().mockResolvedValue({
+        sessionId: 'session-sandbox-hosted-replay',
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+        title: 'Memory Workspace · Alice Chen',
+        latestQuestion: '如果她来写这段话，会怎么写？先给我一个可审阅草稿。',
+        turnCount: 1,
+        createdAt: '2026-03-15T12:01:00.000Z',
+        updatedAt: '2026-03-15T12:02:00.000Z',
+        turns: [sandboxTurn]
+      }),
+      listMemoryWorkspaceCompareSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted: vi.fn(),
+      listApprovedPersonaDraftHandoffs: vi.fn().mockResolvedValue([]),
+      listApprovedPersonaDraftPublications: vi.fn().mockResolvedValue([
+        {
+          journalId: 'journal-publication-hosted-replay-1',
+          publicationId: 'publication-hosted-replay-1',
+          draftReviewId: 'review-hosted-replay-1',
+          sourceTurnId: 'turn-sandbox-hosted-replay',
+          publicationKind: 'local_share_package',
+          status: 'published',
+          packageRoot: '/tmp/approved-draft-publication-publication-hosted-replay-1',
+          manifestPath: '/tmp/approved-draft-publication-publication-hosted-replay-1/manifest.json',
+          publicArtifactPath: '/tmp/approved-draft-publication-publication-hosted-replay-1/publication.json',
+          publicArtifactFileName: 'publication.json',
+          publicArtifactSha256: 'hash-publication-hosted-replay-1',
+          displayEntryPath: '/tmp/approved-draft-publication-publication-hosted-replay-1/index.html',
+          displayEntryFileName: 'index.html',
+          publishedAt: '2026-03-16T09:30:00.000Z'
+        }
+      ]),
+      getApprovedDraftHostedShareHostStatus: vi.fn().mockResolvedValue({
+        availability: 'configured',
+        hostKind: 'configured_remote_host',
+        hostLabel: 'https://share.example.test'
+      }),
+      listApprovedPersonaDraftHostedShareLinks: vi.fn().mockResolvedValue([
+        {
+          shareLinkId: 'share-link-replay-1',
+          publicationId: 'publication-hosted-replay-1',
+          draftReviewId: 'review-hosted-replay-1',
+          sourceTurnId: 'turn-sandbox-hosted-replay',
+          hostKind: 'configured_remote_host',
+          hostLabel: 'https://share.example.test',
+          remoteShareId: 'remote-share-1',
+          shareUrl: 'https://share.example.test/s/remote-share-1',
+          publicArtifactSha256: 'hash-publication-hosted-replay-1',
+          status: 'active',
+          createdAt: '2026-03-16T10:00:00.000Z',
+          revokedAt: null
+        }
+      ]),
+      openApprovedDraftHostedShareLink,
+      getPersonaDraftReviewByTurn: vi.fn().mockResolvedValue({
+        draftReviewId: 'review-hosted-replay-1',
+        sourceTurnId: 'turn-sandbox-hosted-replay',
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+        workflowKind: 'persona_draft_sandbox',
+        status: 'approved',
+        baseDraft: '可审阅草稿：先把关键记录整理进归档。',
+        editedDraft: '可审阅草稿：先把关键记录整理进归档，再补齐细节。',
+        reviewNotes: 'Approved for replay.',
+        supportingExcerpts: ['ce-1'],
+        trace: [
+          {
+            traceId: 'trace-1',
+            excerptIds: ['ce-1'],
+            explanation: 'Draft segment 1 stays grounded in Alice Chen excerpt ce-1.'
+          }
+        ],
+        approvedJournalId: 'journal-approved-hosted-replay-1',
+        rejectedJournalId: null,
+        createdAt: '2026-03-16T01:00:00.000Z',
+        updatedAt: '2026-03-16T01:07:00.000Z'
+      })
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'person', canonicalPersonId: 'cp-1' }} />)
+
+    expect(await screen.findByRole('heading', { name: 'Approved Draft Handoff' })).toBeInTheDocument()
+    expect(await screen.findByText('Hosted Share Link')).toBeInTheDocument()
+    expect(screen.getByText('https://share.example.test/s/remote-share-1')).toBeInTheDocument()
+    expect(screen.getByText('Status: active')).toBeInTheDocument()
+    expect(screen.getByText('active · 2026-03-16T10:00:00.000Z')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open hosted share link' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create hosted share link' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Revoke hosted share link' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open hosted share link' }))
+
+    await waitFor(() => {
+      expect(openApprovedDraftHostedShareLink).toHaveBeenCalledWith({
+        shareUrl: 'https://share.example.test/s/remote-share-1'
+      })
+    })
+    expect(await screen.findByText('Hosted share link opened.')).toBeInTheDocument()
+  })
+
   it('shows the latest approved draft send failure details when replaying an approved turn', async () => {
     const sandboxTurn = {
       turnId: 'turn-sandbox-failed',

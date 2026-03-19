@@ -273,4 +273,84 @@ describe('ReviewQueuePage', () => {
     expect(screen.getByText(/providerSendArtifactId/i)).toBeInTheDocument()
     expect(screen.getByText((content) => content.includes('persona_draft.remote_send_approved'))).toBeInTheDocument()
   })
+
+  it('renders hosted share create and revoke history entries in the undo history list and replay detail', async () => {
+    const listReviewQueue = vi.fn().mockResolvedValue([])
+    const listDecisionJournal = vi.fn().mockResolvedValue([
+      {
+        id: 'journal-hosted-create-1',
+        decisionType: 'create_approved_persona_draft_share_link',
+        targetType: 'persona_draft_review',
+        targetId: 'review-hosted-1',
+        replaySummary: 'Hosted share link created for approved draft · Persona draft review · turn-1 · hosted share link',
+        targetLabel: 'Persona draft review · turn-1 · hosted share link',
+        decisionLabel: 'Hosted share link created for approved draft',
+        operationPayload: {
+          shareLinkId: 'share-link-1',
+          draftReviewId: 'review-hosted-1',
+          publicationId: 'publication-hosted-1',
+          sourceTurnId: 'turn-1',
+          hostKind: 'configured_remote_host',
+          hostLabel: 'https://share.example.test',
+          remoteShareId: 'remote-share-1',
+          shareUrl: 'https://share.example.test/s/remote-share-1',
+          publicArtifactSha256: 'hash-publication-hosted-1'
+        },
+        undoPayload: {},
+        actor: 'local-user',
+        createdAt: '2026-03-16T09:00:00.000Z',
+        undoneAt: null,
+        undoneBy: null
+      },
+      {
+        id: 'journal-hosted-revoke-1',
+        decisionType: 'revoke_approved_persona_draft_share_link',
+        targetType: 'persona_draft_review',
+        targetId: 'review-hosted-1',
+        replaySummary: 'Hosted share link revoked · Persona draft review · turn-1 · hosted share link',
+        targetLabel: 'Persona draft review · turn-1 · hosted share link',
+        decisionLabel: 'Hosted share link revoked',
+        operationPayload: {
+          shareLinkId: 'share-link-1',
+          draftReviewId: 'review-hosted-1',
+          publicationId: 'publication-hosted-1',
+          sourceTurnId: 'turn-1',
+          hostKind: 'configured_remote_host',
+          hostLabel: 'https://share.example.test',
+          remoteShareId: 'remote-share-1',
+          shareUrl: 'https://share.example.test/s/remote-share-1',
+          publicArtifactSha256: 'hash-publication-hosted-1'
+        },
+        undoPayload: {},
+        actor: 'local-user',
+        createdAt: '2026-03-16T09:05:00.000Z',
+        undoneAt: null,
+        undoneBy: null
+      }
+    ])
+
+    vi.stubGlobal('window', {
+      archiveApi: {
+        listReviewQueue,
+        listDecisionJournal,
+        approveReviewItem: vi.fn(),
+        rejectReviewItem: vi.fn(),
+        undoDecision: vi.fn()
+      }
+    })
+
+    render(<ReviewQueuePage />)
+
+    expect(await screen.findByText('Hosted share link created for approved draft')).toBeInTheDocument()
+    expect(screen.getAllByText('Persona draft review · turn-1 · hosted share link')).toHaveLength(2)
+    expect(screen.getByText('Hosted share link revoked')).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole('button', { name: 'Replay' })[1]!)
+    })
+
+    expect(await screen.findByText('Replay Detail')).toBeInTheDocument()
+    expect(screen.getByText('Hosted share link revoked · Persona draft review · turn-1 · hosted share link')).toBeInTheDocument()
+    expect(screen.getByText(/publicArtifactSha256/i)).toBeInTheDocument()
+  })
 })

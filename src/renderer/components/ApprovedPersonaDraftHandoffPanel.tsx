@@ -1,6 +1,8 @@
 import type {
+  ApprovedDraftHostedShareHostStatus,
   ApprovedDraftSendDestination,
   ApprovedPersonaDraftHandoffRecord,
+  ApprovedPersonaDraftHostedShareLinkRecord,
   ApprovedPersonaDraftPublicationRecord,
   ApprovedPersonaDraftProviderSendArtifact
 } from '../../shared/archiveContracts'
@@ -48,10 +50,16 @@ export function ApprovedPersonaDraftHandoffPanel(props: {
     kind: 'success' | 'error'
     message: string
   } | null
+  hostedShareHostStatus?: ApprovedDraftHostedShareHostStatus | null
+  hostedShareStatus?: {
+    kind: 'success' | 'error'
+    message: string
+  } | null
   sendDestinations: ApprovedDraftSendDestination[]
   selectedSendDestinationId: string | null
   handoffs: ApprovedPersonaDraftHandoffRecord[]
   publications: ApprovedPersonaDraftPublicationRecord[]
+  hostedShareLinks: ApprovedPersonaDraftHostedShareLinkRecord[]
   providerSends: ApprovedPersonaDraftProviderSendArtifact[]
   isPending?: boolean
   onChooseExportDestination?: () => void
@@ -60,12 +68,17 @@ export function ApprovedPersonaDraftHandoffPanel(props: {
   onExportApprovedDraft?: () => void
   onPublishApprovedDraft?: () => void
   onOpenApprovedDraftPublication?: () => void
+  onCreateApprovedDraftHostedShareLink?: () => void
+  onOpenApprovedDraftHostedShareLink?: () => void
+  onRevokeApprovedDraftHostedShareLink?: () => void
   onSendApprovedDraft?: () => void
   onRetryApprovedDraftSend?: () => void
 }) {
   const latestHandoff = props.handoffs[0] ?? null
   const publicationHistory = [...props.publications].sort((left, right) => right.publishedAt.localeCompare(left.publishedAt))
   const latestPublication = publicationHistory[0] ?? null
+  const hostedShareHistory = [...props.hostedShareLinks].sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+  const latestHostedShareLink = hostedShareHistory[0] ?? null
   const latestProviderSend = props.providerSends[0] ?? null
   const latestProviderEvent = latestProviderSend?.events[latestProviderSend.events.length - 1] ?? null
   const latestAttemptLabel = latestProviderSend ? attemptLabel(latestProviderSend.attemptKind) : 'initial send'
@@ -158,6 +171,64 @@ export function ApprovedPersonaDraftHandoffPanel(props: {
         ) : (
           <p>No approved draft publications yet.</p>
         )}
+        <section aria-label="Hosted Share Link">
+          <h5>Hosted Share Link</h5>
+          {!latestPublication ? (
+            <p>Publish approved draft to create a local package before hosting</p>
+          ) : props.hostedShareHostStatus?.availability === 'unconfigured' ? (
+            <p>Hosted share link is unavailable until a share host is configured</p>
+          ) : null}
+          {latestPublication && props.hostedShareHostStatus?.availability === 'configured' && !latestHostedShareLink && props.onCreateApprovedDraftHostedShareLink ? (
+            <button
+              type="button"
+              disabled={props.isPending}
+              onClick={() => props.onCreateApprovedDraftHostedShareLink?.()}
+            >
+              Create hosted share link
+            </button>
+          ) : null}
+          {latestHostedShareLink ? (
+            <>
+              <p>{latestHostedShareLink.shareUrl}</p>
+              <p>Status: {latestHostedShareLink.status}</p>
+              <p>Created: {latestHostedShareLink.createdAt}</p>
+              <p>Host: {latestHostedShareLink.hostLabel}</p>
+              {props.onOpenApprovedDraftHostedShareLink ? (
+                <button
+                  type="button"
+                  disabled={props.isPending}
+                  onClick={() => props.onOpenApprovedDraftHostedShareLink?.()}
+                >
+                  Open hosted share link
+                </button>
+              ) : null}
+              {latestHostedShareLink.status === 'active' && props.onRevokeApprovedDraftHostedShareLink ? (
+                <button
+                  type="button"
+                  disabled={props.isPending}
+                  onClick={() => props.onRevokeApprovedDraftHostedShareLink?.()}
+                >
+                  Revoke hosted share link
+                </button>
+              ) : null}
+              <section aria-label="Hosted share link history">
+                <h6>History</h6>
+                <ul>
+                  {hostedShareHistory.map((link) => (
+                    <li key={link.shareLinkId}>
+                      <p>{link.status} · {link.revokedAt ?? link.createdAt}</p>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            </>
+          ) : null}
+          {props.hostedShareStatus ? (
+            <p role={props.hostedShareStatus.kind === 'error' ? 'alert' : 'status'}>
+              {props.hostedShareStatus.message}
+            </p>
+          ) : null}
+        </section>
       </section>
       <section aria-label="Provider Boundary Send">
         <h4>Provider Boundary Send</h4>

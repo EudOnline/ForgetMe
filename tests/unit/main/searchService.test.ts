@@ -263,7 +263,7 @@ describe('archive search', () => {
       expect.arrayContaining([
         expect.objectContaining({
           decisionType: 'create_approved_persona_draft_share_link',
-          replaySummary: expect.stringContaining('Hosted share link created')
+          replaySummary: 'Hosted share link created for approved draft · Persona draft review · turn-1 · hosted share link'
         })
       ])
     )
@@ -271,7 +271,7 @@ describe('archive search', () => {
       expect.arrayContaining([
         expect.objectContaining({
           decisionType: 'revoke_approved_persona_draft_share_link',
-          replaySummary: expect.stringContaining('Hosted share link revoked')
+          replaySummary: 'Hosted share link revoked · Persona draft review · turn-1 · hosted share link'
         })
       ])
     )

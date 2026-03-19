@@ -30,6 +30,141 @@ function stubArchiveWindow(archiveApi: Record<string, unknown>) {
   Object.assign(window, { archiveApi })
 }
 
+function buildSandboxTurn(overrides?: Partial<Record<string, unknown>>) {
+  return {
+    turnId: 'turn-hosted-1',
+    sessionId: 'session-hosted-1',
+    ordinal: 1,
+    question: '如果她来写一段关于记录和归档的回复，会怎么写？',
+    provider: null,
+    model: null,
+    contextHash: 'context-hash-hosted-1',
+    promptHash: 'prompt-hash-hosted-1',
+    createdAt: '2026-03-15T00:40:00.000Z',
+    response: {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' } as const,
+      question: '如果她来写一段关于记录和归档的回复，会怎么写？',
+      expressionMode: 'grounded' as const,
+      workflowKind: 'persona_draft_sandbox' as const,
+      title: 'Memory Workspace · Alice Chen',
+      answer: {
+        summary: 'Reviewed simulation draft generated from archive-backed excerpts for this ask.',
+        displayType: 'derived_summary' as const,
+        citations: []
+      },
+      guardrail: {
+        decision: 'sandbox_review_required' as const,
+        reasonCodes: ['persona_draft_sandbox' as const, 'quote_trace_required' as const],
+        citationCount: 2,
+        sourceKinds: ['file'],
+        fallbackApplied: false
+      },
+      contextCards: [],
+      boundaryRedirect: null,
+      communicationEvidence: {
+        title: 'Communication Evidence',
+        summary: 'Direct archive-backed excerpts related to this ask.',
+        excerpts: [
+          {
+            excerptId: 'ce-1',
+            fileId: 'f-1',
+            fileName: 'chat-1.json',
+            ordinal: 1,
+            speakerDisplayName: 'Alice Chen',
+            text: '我们还是把这些记录留在归档里，后面查起来更稳妥。'
+          }
+        ]
+      },
+      personaDraft: {
+        title: 'Reviewed draft sandbox',
+        disclaimer: 'Simulation draft based on archived expressions. Not a statement from the person.',
+        draft: '可审阅草稿：先把关键记录整理进归档。',
+        reviewState: 'review_required' as const,
+        supportingExcerpts: ['ce-1'],
+        trace: [
+          {
+            traceId: 'trace-1',
+            excerptIds: ['ce-1'],
+            explanation: 'Draft segment 1 stays grounded in Alice Chen excerpt ce-1.'
+          }
+        ]
+      }
+    },
+    ...overrides
+  }
+}
+
+function buildApprovedReview(overrides?: Partial<Record<string, unknown>>) {
+  return {
+    draftReviewId: 'review-hosted-1',
+    sourceTurnId: 'turn-hosted-1',
+    scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+    workflowKind: 'persona_draft_sandbox' as const,
+    status: 'approved' as const,
+    baseDraft: '可审阅草稿：先把关键记录整理进归档。',
+    editedDraft: '可审阅草稿：先把关键记录整理进归档，再补齐细节。',
+    reviewNotes: 'Approved for hosting.',
+    supportingExcerpts: ['ce-1'],
+    trace: [
+      {
+        traceId: 'trace-1',
+        excerptIds: ['ce-1'],
+        explanation: 'Draft segment 1 stays grounded in Alice Chen excerpt ce-1.'
+      }
+    ],
+    approvedJournalId: 'journal-approved-hosted-1',
+    rejectedJournalId: null,
+    createdAt: '2026-03-16T01:00:00.000Z',
+    updatedAt: '2026-03-16T01:07:00.000Z',
+    ...overrides
+  }
+}
+
+function buildPublication(overrides?: Partial<Record<string, unknown>>) {
+  return {
+    journalId: 'journal-publication-hosted-1',
+    publicationId: 'publication-hosted-1',
+    draftReviewId: 'review-hosted-1',
+    sourceTurnId: 'turn-hosted-1',
+    publicationKind: 'local_share_package',
+    status: 'published',
+    packageRoot: '/tmp/approved-draft-publication-publication-hosted-1',
+    manifestPath: '/tmp/approved-draft-publication-publication-hosted-1/manifest.json',
+    publicArtifactPath: '/tmp/approved-draft-publication-publication-hosted-1/publication.json',
+    publicArtifactFileName: 'publication.json',
+    publicArtifactSha256: 'hash-publication-hosted-1',
+    displayEntryPath: '/tmp/approved-draft-publication-publication-hosted-1/index.html',
+    displayEntryFileName: 'index.html',
+    publishedAt: '2026-03-16T09:30:00.000Z',
+    ...overrides
+  }
+}
+
+function buildHostedShareLink(
+  overrides?: Partial<Record<string, unknown>> & { status?: 'active' | 'revoked' }
+) {
+  const status = overrides?.status ?? 'active'
+  const revokedAt = status === 'revoked'
+    ? (overrides?.revokedAt as string | undefined) ?? '2026-03-16T10:05:00.000Z'
+    : null
+
+  return {
+    shareLinkId: 'share-link-1',
+    publicationId: 'publication-hosted-1',
+    draftReviewId: 'review-hosted-1',
+    sourceTurnId: 'turn-hosted-1',
+    hostKind: 'configured_remote_host' as const,
+    hostLabel: 'https://share.example.test',
+    remoteShareId: 'remote-share-1',
+    shareUrl: 'https://share.example.test/s/remote-share-1',
+    publicArtifactSha256: 'hash-publication-hosted-1',
+    status,
+    createdAt: '2026-03-16T10:00:00.000Z',
+    revokedAt,
+    ...overrides
+  }
+}
+
 afterEach(() => {
   vi.useRealTimers()
   cleanup()
@@ -3447,5 +3582,233 @@ describe('MemoryWorkspacePage', () => {
 
     expect(await screen.findByText('Invalid matrix line 1. Use "scope | question" or "label | scope | question".')).toBeInTheDocument()
     expect(runMemoryWorkspaceCompareMatrix).not.toHaveBeenCalled()
+  })
+
+  it('shows hosted share actions for approved drafts and refreshes hosted link history after create', async () => {
+    const sandboxTurn = buildSandboxTurn()
+    const approvedReview = buildApprovedReview()
+    const publication = buildPublication()
+    let currentHostedLinks: Array<Record<string, unknown>> = []
+    const listApprovedPersonaDraftHostedShareLinks = vi.fn().mockImplementation(async () => currentHostedLinks)
+    const createApprovedPersonaDraftHostedShareLink = vi.fn().mockImplementation(async () => {
+      currentHostedLinks = [buildHostedShareLink()]
+      return currentHostedLinks[0]
+    })
+    const openApprovedDraftHostedShareLink = vi.fn().mockResolvedValue({
+      status: 'opened',
+      shareUrl: 'https://share.example.test/s/remote-share-1',
+      errorMessage: null
+    })
+
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceSession: vi.fn().mockResolvedValue(null),
+      listMemoryWorkspaceCompareSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted: vi.fn().mockResolvedValue(sandboxTurn),
+      getPersonaDraftReviewByTurn: vi.fn().mockResolvedValue(approvedReview),
+      listApprovedPersonaDraftHandoffs: vi.fn().mockResolvedValue([]),
+      listApprovedPersonaDraftPublications: vi.fn().mockResolvedValue([publication]),
+      getApprovedDraftHostedShareHostStatus: vi.fn().mockResolvedValue({
+        availability: 'configured',
+        hostKind: 'configured_remote_host',
+        hostLabel: 'https://share.example.test'
+      }),
+      listApprovedPersonaDraftHostedShareLinks,
+      createApprovedPersonaDraftHostedShareLink,
+      openApprovedDraftHostedShareLink
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'person', canonicalPersonId: 'cp-1' }} />)
+
+    fireEvent.change(screen.getByLabelText('Ask memory workspace'), {
+      target: { value: '如果她来写一段关于记录和归档的回复，会怎么写？' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+
+    expect(await screen.findByRole('heading', { name: 'Approved Draft Handoff' })).toBeInTheDocument()
+    expect(await screen.findByText('Hosted Share Link')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create hosted share link' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create hosted share link' }))
+
+    await waitFor(() => {
+      expect(createApprovedPersonaDraftHostedShareLink).toHaveBeenCalledWith({
+        draftReviewId: 'review-hosted-1'
+      })
+    })
+
+    expect(await screen.findByText('https://share.example.test/s/remote-share-1')).toBeInTheDocument()
+    expect(screen.getByText('Status: active')).toBeInTheDocument()
+    expect(screen.getByText('Created: 2026-03-16T10:00:00.000Z')).toBeInTheDocument()
+    expect(screen.getByText('Host: https://share.example.test')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open hosted share link' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Revoke hosted share link' })).toBeInTheDocument()
+    expect(screen.getByText('active · 2026-03-16T10:00:00.000Z')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open hosted share link' }))
+
+    await waitFor(() => {
+      expect(openApprovedDraftHostedShareLink).toHaveBeenCalledWith({
+        shareUrl: 'https://share.example.test/s/remote-share-1'
+      })
+    })
+    expect(await screen.findByText('Hosted share link opened.')).toBeInTheDocument()
+  })
+
+  it('shows an inline hosted share error when create fails', async () => {
+    const sandboxTurn = buildSandboxTurn()
+    const approvedReview = buildApprovedReview()
+    const publication = buildPublication()
+
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceSession: vi.fn().mockResolvedValue(null),
+      listMemoryWorkspaceCompareSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted: vi.fn().mockResolvedValue(sandboxTurn),
+      getPersonaDraftReviewByTurn: vi.fn().mockResolvedValue(approvedReview),
+      listApprovedPersonaDraftHandoffs: vi.fn().mockResolvedValue([]),
+      listApprovedPersonaDraftPublications: vi.fn().mockResolvedValue([publication]),
+      getApprovedDraftHostedShareHostStatus: vi.fn().mockResolvedValue({
+        availability: 'configured',
+        hostKind: 'configured_remote_host',
+        hostLabel: 'https://share.example.test'
+      }),
+      listApprovedPersonaDraftHostedShareLinks: vi.fn().mockResolvedValue([]),
+      createApprovedPersonaDraftHostedShareLink: vi.fn().mockRejectedValue(new Error('host unavailable'))
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'person', canonicalPersonId: 'cp-1' }} />)
+
+    fireEvent.change(screen.getByLabelText('Ask memory workspace'), {
+      target: { value: '如果她来写一段关于记录和归档的回复，会怎么写？' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create hosted share link' }))
+
+    expect(await screen.findByText('Unable to create hosted share link: host unavailable')).toBeInTheDocument()
+  })
+
+  it('hides hosted share creation when the share host is unconfigured', async () => {
+    const sandboxTurn = buildSandboxTurn()
+    const approvedReview = buildApprovedReview()
+    const publication = buildPublication()
+
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceSession: vi.fn().mockResolvedValue(null),
+      listMemoryWorkspaceCompareSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted: vi.fn().mockResolvedValue(sandboxTurn),
+      getPersonaDraftReviewByTurn: vi.fn().mockResolvedValue(approvedReview),
+      listApprovedPersonaDraftHandoffs: vi.fn().mockResolvedValue([]),
+      listApprovedPersonaDraftPublications: vi.fn().mockResolvedValue([publication]),
+      getApprovedDraftHostedShareHostStatus: vi.fn().mockResolvedValue({
+        availability: 'unconfigured',
+        hostKind: null,
+        hostLabel: null
+      }),
+      listApprovedPersonaDraftHostedShareLinks: vi.fn().mockResolvedValue([])
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'person', canonicalPersonId: 'cp-1' }} />)
+
+    fireEvent.change(screen.getByLabelText('Ask memory workspace'), {
+      target: { value: '如果她来写一段关于记录和归档的回复，会怎么写？' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+
+    expect(await screen.findByText('Hosted share link is unavailable until a share host is configured')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create hosted share link' })).not.toBeInTheDocument()
+  })
+
+  it('shows a publish-first hosted share message when there is no publication history', async () => {
+    const sandboxTurn = buildSandboxTurn()
+    const approvedReview = buildApprovedReview()
+
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceSession: vi.fn().mockResolvedValue(null),
+      listMemoryWorkspaceCompareSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted: vi.fn().mockResolvedValue(sandboxTurn),
+      getPersonaDraftReviewByTurn: vi.fn().mockResolvedValue(approvedReview),
+      listApprovedPersonaDraftHandoffs: vi.fn().mockResolvedValue([]),
+      listApprovedPersonaDraftPublications: vi.fn().mockResolvedValue([]),
+      getApprovedDraftHostedShareHostStatus: vi.fn().mockResolvedValue({
+        availability: 'configured',
+        hostKind: 'configured_remote_host',
+        hostLabel: 'https://share.example.test'
+      }),
+      listApprovedPersonaDraftHostedShareLinks: vi.fn().mockResolvedValue([])
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'person', canonicalPersonId: 'cp-1' }} />)
+
+    fireEvent.change(screen.getByLabelText('Ask memory workspace'), {
+      target: { value: '如果她来写一段关于记录和归档的回复，会怎么写？' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+
+    expect(await screen.findByText('Publish approved draft to create a local package before hosting')).toBeInTheDocument()
+  })
+
+  it('refreshes hosted share status after revoke and marks the latest link revoked', async () => {
+    const sandboxTurn = buildSandboxTurn()
+    const approvedReview = buildApprovedReview()
+    const publication = buildPublication()
+    let currentHostedLinks: Array<Record<string, unknown>> = [buildHostedShareLink()]
+    const listApprovedPersonaDraftHostedShareLinks = vi.fn().mockImplementation(async () => currentHostedLinks)
+    const revokeApprovedPersonaDraftHostedShareLink = vi.fn().mockImplementation(async () => {
+      currentHostedLinks = [buildHostedShareLink({
+        status: 'revoked',
+        revokedAt: '2026-03-16T10:05:00.000Z'
+      })]
+      return currentHostedLinks[0]
+    })
+
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceSession: vi.fn().mockResolvedValue(null),
+      listMemoryWorkspaceCompareSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted: vi.fn().mockResolvedValue(sandboxTurn),
+      getPersonaDraftReviewByTurn: vi.fn().mockResolvedValue(approvedReview),
+      listApprovedPersonaDraftHandoffs: vi.fn().mockResolvedValue([]),
+      listApprovedPersonaDraftPublications: vi.fn().mockResolvedValue([publication]),
+      getApprovedDraftHostedShareHostStatus: vi.fn().mockResolvedValue({
+        availability: 'configured',
+        hostKind: 'configured_remote_host',
+        hostLabel: 'https://share.example.test'
+      }),
+      listApprovedPersonaDraftHostedShareLinks,
+      revokeApprovedPersonaDraftHostedShareLink
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'person', canonicalPersonId: 'cp-1' }} />)
+
+    fireEvent.change(screen.getByLabelText('Ask memory workspace'), {
+      target: { value: '如果她来写一段关于记录和归档的回复，会怎么写？' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Revoke hosted share link' }))
+
+    await waitFor(() => {
+      expect(revokeApprovedPersonaDraftHostedShareLink).toHaveBeenCalledWith({
+        shareLinkId: 'share-link-1'
+      })
+    })
+
+    expect(await screen.findByText('Status: revoked')).toBeInTheDocument()
+    expect(screen.getByText('revoked · 2026-03-16T10:05:00.000Z')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Revoke hosted share link' })).not.toBeInTheDocument()
   })
 })

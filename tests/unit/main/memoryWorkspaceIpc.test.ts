@@ -8,6 +8,7 @@ const {
   handlerMap,
   showOpenDialog,
   shellOpenPath,
+  shellOpenExternal,
   openDatabase,
   runMigrations,
   listApprovedDraftSendDestinations,
@@ -15,6 +16,10 @@ const {
   exportApprovedPersonaDraftToDirectory,
   listApprovedPersonaDraftPublications,
   publishApprovedPersonaDraftToDirectory,
+  getApprovedDraftHostedShareHostStatus,
+  listApprovedPersonaDraftHostedShareLinks,
+  createApprovedPersonaDraftHostedShareLink,
+  revokeApprovedPersonaDraftHostedShareLink,
   listApprovedPersonaDraftProviderSends,
   retryApprovedPersonaDraftProviderSend,
   sendApprovedPersonaDraftToProvider
@@ -22,6 +27,7 @@ const {
   handlerMap: new Map<string, (event: unknown, payload?: unknown) => Promise<unknown>>(),
   showOpenDialog: vi.fn(),
   shellOpenPath: vi.fn(),
+  shellOpenExternal: vi.fn(),
   openDatabase: vi.fn(),
   runMigrations: vi.fn(),
   listApprovedDraftSendDestinations: vi.fn(),
@@ -29,6 +35,10 @@ const {
   exportApprovedPersonaDraftToDirectory: vi.fn(),
   listApprovedPersonaDraftPublications: vi.fn(),
   publishApprovedPersonaDraftToDirectory: vi.fn(),
+  getApprovedDraftHostedShareHostStatus: vi.fn(),
+  listApprovedPersonaDraftHostedShareLinks: vi.fn(),
+  createApprovedPersonaDraftHostedShareLink: vi.fn(),
+  revokeApprovedPersonaDraftHostedShareLink: vi.fn(),
   listApprovedPersonaDraftProviderSends: vi.fn(),
   retryApprovedPersonaDraftProviderSend: vi.fn(),
   sendApprovedPersonaDraftToProvider: vi.fn()
@@ -39,7 +49,8 @@ vi.mock('electron', () => ({
     showOpenDialog
   },
   shell: {
-    openPath: shellOpenPath
+    openPath: shellOpenPath,
+    openExternal: shellOpenExternal
   },
   ipcMain: {
     removeHandler: vi.fn((channel: string) => {
@@ -61,9 +72,20 @@ vi.mock('../../../src/main/services/personaDraftHandoffService', () => ({
   exportApprovedPersonaDraftToDirectory
 }))
 
-vi.mock('../../../src/main/services/approvedDraftPublicationService', () => ({
-  listApprovedPersonaDraftPublications,
-  publishApprovedPersonaDraftToDirectory
+vi.mock('../../../src/main/services/approvedDraftPublicationService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/main/services/approvedDraftPublicationService')>()
+  return {
+    ...actual,
+    listApprovedPersonaDraftPublications,
+    publishApprovedPersonaDraftToDirectory
+  }
+})
+
+vi.mock('../../../src/main/services/approvedDraftHostedShareLinkService', () => ({
+  getApprovedDraftHostedShareHostStatus,
+  listApprovedPersonaDraftHostedShareLinks,
+  createApprovedPersonaDraftHostedShareLink,
+  revokeApprovedPersonaDraftHostedShareLink
 }))
 
 vi.mock('../../../src/main/services/approvedDraftSendDestinationService', () => ({
@@ -128,11 +150,16 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
     openDatabase.mockReset()
     runMigrations.mockReset()
     shellOpenPath.mockReset()
+    shellOpenExternal.mockReset()
     listApprovedDraftSendDestinations.mockReset()
     listApprovedPersonaDraftHandoffs.mockReset()
     exportApprovedPersonaDraftToDirectory.mockReset()
     listApprovedPersonaDraftPublications.mockReset()
     publishApprovedPersonaDraftToDirectory.mockReset()
+    getApprovedDraftHostedShareHostStatus.mockReset()
+    listApprovedPersonaDraftHostedShareLinks.mockReset()
+    createApprovedPersonaDraftHostedShareLink.mockReset()
+    revokeApprovedPersonaDraftHostedShareLink.mockReset()
     listApprovedPersonaDraftProviderSends.mockReset()
     retryApprovedPersonaDraftProviderSend.mockReset()
     sendApprovedPersonaDraftToProvider.mockReset()
@@ -443,6 +470,204 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
       status: 'failed',
       entryPath,
       errorMessage: 'No application knows how to open this file.'
+    })
+  })
+
+  it('returns hosted share host status through the ipc handler', async () => {
+    getApprovedDraftHostedShareHostStatus.mockReturnValue({
+      availability: 'configured',
+      hostKind: 'configured_remote_host',
+      hostLabel: 'https://share.example.test'
+    })
+
+    registerMemoryWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:getApprovedDraftHostedShareHostStatus')
+    const result = await handler?.({}, undefined)
+
+    expect(getApprovedDraftHostedShareHostStatus).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({
+      availability: 'configured',
+      hostKind: 'configured_remote_host',
+      hostLabel: 'https://share.example.test'
+    })
+  })
+
+  it('lists hosted share links through the ipc handler and closes the database', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    listApprovedPersonaDraftHostedShareLinks.mockReturnValue([{
+      shareLinkId: 'share-1',
+      publicationId: 'publication-1',
+      draftReviewId: 'review-1',
+      sourceTurnId: 'turn-1',
+      hostKind: 'configured_remote_host',
+      hostLabel: 'https://share.example.test',
+      remoteShareId: 'remote-1',
+      shareUrl: 'https://share.example.test/s/abc123',
+      publicArtifactSha256: 'hash-1',
+      status: 'active',
+      createdAt: '2026-03-19T09:00:00.000Z',
+      revokedAt: null
+    }])
+
+    registerMemoryWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:listApprovedPersonaDraftHostedShareLinks')
+
+    await expect(handler?.({}, {
+      draftReviewId: ''
+    })).rejects.toThrow()
+    expect(listApprovedPersonaDraftHostedShareLinks).not.toHaveBeenCalled()
+
+    const result = await handler?.({}, {
+      draftReviewId: 'review-1'
+    })
+
+    expect(openDatabase).toHaveBeenCalledWith('/tmp/forgetme/sqlite/archive.sqlite')
+    expect(runMigrations).toHaveBeenCalled()
+    expect(listApprovedPersonaDraftHostedShareLinks).toHaveBeenCalledWith(expect.anything(), {
+      draftReviewId: 'review-1'
+    })
+    expect(result).toEqual([
+      expect.objectContaining({
+        shareLinkId: 'share-1',
+        status: 'active'
+      })
+    ])
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('creates hosted share links through the ipc handler and closes the database', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    createApprovedPersonaDraftHostedShareLink.mockResolvedValue({
+      shareLinkId: 'share-1',
+      publicationId: 'publication-1',
+      draftReviewId: 'review-1',
+      sourceTurnId: 'turn-1',
+      hostKind: 'configured_remote_host',
+      hostLabel: 'https://share.example.test',
+      remoteShareId: 'remote-1',
+      shareUrl: 'https://share.example.test/s/abc123',
+      publicArtifactSha256: 'hash-1',
+      status: 'active',
+      createdAt: '2026-03-19T09:00:00.000Z',
+      revokedAt: null
+    })
+
+    registerMemoryWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:createApprovedPersonaDraftHostedShareLink')
+
+    await expect(handler?.({}, {
+      draftReviewId: ''
+    })).rejects.toThrow()
+    expect(createApprovedPersonaDraftHostedShareLink).not.toHaveBeenCalled()
+
+    const result = await handler?.({}, {
+      draftReviewId: 'review-1'
+    })
+
+    expect(openDatabase).toHaveBeenCalledWith('/tmp/forgetme/sqlite/archive.sqlite')
+    expect(runMigrations).toHaveBeenCalled()
+    expect(createApprovedPersonaDraftHostedShareLink).toHaveBeenCalledWith(expect.anything(), {
+      draftReviewId: 'review-1'
+    })
+    expect(result).toEqual(expect.objectContaining({
+      shareLinkId: 'share-1',
+      status: 'active'
+    }))
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('revokes hosted share links through the ipc handler and closes the database', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    revokeApprovedPersonaDraftHostedShareLink.mockResolvedValue({
+      shareLinkId: 'share-1',
+      publicationId: 'publication-1',
+      draftReviewId: 'review-1',
+      sourceTurnId: 'turn-1',
+      hostKind: 'configured_remote_host',
+      hostLabel: 'https://share.example.test',
+      remoteShareId: 'remote-1',
+      shareUrl: 'https://share.example.test/s/abc123',
+      publicArtifactSha256: 'hash-1',
+      status: 'revoked',
+      createdAt: '2026-03-19T09:00:00.000Z',
+      revokedAt: '2026-03-19T09:05:00.000Z'
+    })
+
+    registerMemoryWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:revokeApprovedPersonaDraftHostedShareLink')
+
+    await expect(handler?.({}, {
+      shareLinkId: ''
+    })).rejects.toThrow()
+    expect(revokeApprovedPersonaDraftHostedShareLink).not.toHaveBeenCalled()
+
+    const result = await handler?.({}, {
+      shareLinkId: 'share-1'
+    })
+
+    expect(openDatabase).toHaveBeenCalledWith('/tmp/forgetme/sqlite/archive.sqlite')
+    expect(runMigrations).toHaveBeenCalled()
+    expect(revokeApprovedPersonaDraftHostedShareLink).toHaveBeenCalledWith(expect.anything(), {
+      shareLinkId: 'share-1'
+    })
+    expect(result).toEqual(expect.objectContaining({
+      shareLinkId: 'share-1',
+      status: 'revoked'
+    }))
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('opens hosted share links externally with a structured success result', async () => {
+    shellOpenExternal.mockResolvedValue(undefined)
+
+    registerMemoryWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:openApprovedDraftHostedShareLink')
+    const result = await handler?.({}, {
+      shareUrl: 'https://share.example.test/s/abc123'
+    })
+
+    expect(shellOpenExternal).toHaveBeenCalledWith('https://share.example.test/s/abc123')
+    expect(result).toEqual({
+      status: 'opened',
+      shareUrl: 'https://share.example.test/s/abc123',
+      errorMessage: null
+    })
+  })
+
+  it('rejects invalid hosted share urls before shell.openExternal', async () => {
+    registerMemoryWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:openApprovedDraftHostedShareLink')
+
+    await expect(handler?.({}, {
+      shareUrl: 'ftp://share.example.test/s/abc123'
+    })).rejects.toThrow()
+    expect(shellOpenExternal).not.toHaveBeenCalled()
+  })
+
+  it('returns structured failed status when shell.openExternal throws', async () => {
+    shellOpenExternal.mockRejectedValue(new Error('host unavailable'))
+
+    registerMemoryWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:openApprovedDraftHostedShareLink')
+    const result = await handler?.({}, {
+      shareUrl: 'https://share.example.test/s/abc123'
+    })
+
+    expect(shellOpenExternal).toHaveBeenCalledWith('https://share.example.test/s/abc123')
+    expect(result).toEqual({
+      status: 'failed',
+      shareUrl: 'https://share.example.test/s/abc123',
+      errorMessage: 'host unavailable'
     })
   })
 

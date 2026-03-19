@@ -1,5 +1,11 @@
 import crypto from 'node:crypto'
 import { URL } from 'node:url'
+import type {
+  ApprovedDraftHostedShareHostStatus,
+  ApprovedPersonaDraftHostedShareLinkRecord,
+  CreateApprovedPersonaDraftHostedShareLinkResult,
+  RevokeApprovedPersonaDraftHostedShareLinkResult
+} from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
 import { appendDecisionJournal, listDecisionJournal } from './journalService'
 import {
@@ -8,34 +14,80 @@ import {
 } from './approvedDraftPublicationService'
 
 const LOCAL_ACTOR = 'local-user'
-const HOST_KIND = 'configured_remote_host'
+const HOST_KIND = 'configured_remote_host' as const
 
-type HostConfig =
-  | { status: 'configured'; baseUrl: string; token: string; hostLabel: string }
-  | { status: 'unconfigured' }
-
-function getHostConfig(): HostConfig {
-  const baseUrl = process.env.FORGETME_APPROVED_DRAFT_SHARE_HOST_BASE_URL
-  const token = process.env.FORGETME_APPROVED_DRAFT_SHARE_HOST_TOKEN
-
-  if (!baseUrl || !token) {
-    return { status: 'unconfigured' }
-  }
-
-  const hostLabel = new URL(baseUrl).origin
-  return { status: 'configured', baseUrl: baseUrl.replace(/\/$/, ''), token, hostLabel }
+type ConfiguredHostConfig = {
+  availability: 'configured'
+  hostKind: typeof HOST_KIND
+  hostLabel: string
+  baseUrl: string
+  token: string
 }
 
-export function getApprovedDraftHostedShareHostStatus() {
-  const config = getHostConfig()
-  if (config.status === 'unconfigured') {
-    return { status: 'unconfigured' as const }
+type UnconfiguredHostConfig = {
+  availability: 'unconfigured'
+  hostKind: null
+  hostLabel: null
+}
+
+type HostConfig = ConfiguredHostConfig | UnconfiguredHostConfig
+
+type HostedShareLinkJournalPayload = {
+  shareLinkId: string
+  publicationId: string
+  draftReviewId: string
+  sourceTurnId: string
+  hostKind: typeof HOST_KIND
+  hostLabel: string
+  remoteShareId: string
+  shareUrl: string
+  publicArtifactSha256: string
+}
+
+type HostedShareLinkReadModel = HostedShareLinkJournalPayload & {
+  createdAt: string
+  revokedAt: string | null
+}
+
+function readNonEmptyString(value: unknown) {
+  return typeof value === 'string' && value.length > 0 ? value : null
+}
+
+function currentHostedShareHostConfig(): HostConfig {
+  const baseUrl = process.env.FORGETME_APPROVED_DRAFT_SHARE_HOST_BASE_URL?.trim() ?? ''
+  const token = process.env.FORGETME_APPROVED_DRAFT_SHARE_HOST_TOKEN?.trim() ?? ''
+  if (!baseUrl || !token) {
+    return {
+      availability: 'unconfigured',
+      hostKind: null,
+      hostLabel: null
+    }
+  }
+
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, '')
+  return {
+    availability: 'configured',
+    hostKind: HOST_KIND,
+    hostLabel: new URL(normalizedBaseUrl).origin,
+    baseUrl: normalizedBaseUrl,
+    token
+  }
+}
+
+export function getApprovedDraftHostedShareHostStatus(): ApprovedDraftHostedShareHostStatus {
+  const config = currentHostedShareHostConfig()
+  if (config.availability === 'configured') {
+    return {
+      availability: 'configured',
+      hostKind: config.hostKind,
+      hostLabel: config.hostLabel
+    }
   }
 
   return {
-    status: 'configured' as const,
-    hostKind: HOST_KIND,
-    hostLabel: config.hostLabel
+    availability: 'unconfigured',
+    hostKind: null,
+    hostLabel: null
   }
 }
 
@@ -49,7 +101,7 @@ function persistShareHostArtifact(db: ArchiveDatabase, input: {
   publicationId: string
   sourceTurnId: string
   operationKind: 'create' | 'revoke'
-  hostKind: string
+  hostKind: typeof HOST_KIND
   hostLabel: string
   requestHash: string
   createdAt?: string
@@ -82,19 +134,16 @@ function persistShareHostEvent(db: ArchiveDatabase, input: {
   createdAt?: string
 }) {
   const createdAt = input.createdAt ?? new Date().toISOString()
-  const eventId = crypto.randomUUID()
 
   db.prepare(`insert into persona_draft_share_host_events (
     id, artifact_id, event_type, payload_json, created_at
   ) values (?, ?, ?, ?, ?)`).run(
-    eventId,
+    crypto.randomUUID(),
     input.artifactId,
     input.eventType,
     JSON.stringify(input.payload),
     createdAt
   )
-
-  return { eventId, createdAt }
 }
 
 async function callHost(input: {
@@ -119,78 +168,117 @@ async function callHost(input: {
   return response.json() as Promise<Record<string, unknown>>
 }
 
+function readHostedShareLinkPayload(payload: Record<string, unknown>): HostedShareLinkJournalPayload | null {
+  const shareLinkId = readNonEmptyString(payload.shareLinkId)
+  const publicationId = readNonEmptyString(payload.publicationId)
+  const draftReviewId = readNonEmptyString(payload.draftReviewId)
+  const sourceTurnId = readNonEmptyString(payload.sourceTurnId)
+  const hostLabel = readNonEmptyString(payload.hostLabel)
+  const remoteShareId = readNonEmptyString(payload.remoteShareId)
+  const shareUrl = readNonEmptyString(payload.shareUrl)
+  const publicArtifactSha256 = readNonEmptyString(payload.publicArtifactSha256)
+
+  if (
+    !shareLinkId
+    || !publicationId
+    || !draftReviewId
+    || !sourceTurnId
+    || payload.hostKind !== HOST_KIND
+    || !hostLabel
+    || !remoteShareId
+    || !shareUrl
+    || !publicArtifactSha256
+  ) {
+    return null
+  }
+
+  return {
+    shareLinkId,
+    publicationId,
+    draftReviewId,
+    sourceTurnId,
+    hostKind: HOST_KIND,
+    hostLabel,
+    remoteShareId,
+    shareUrl,
+    publicArtifactSha256
+  }
+}
+
+function toHostedShareLinkRecord(readModel: HostedShareLinkReadModel): ApprovedPersonaDraftHostedShareLinkRecord {
+  if (readModel.revokedAt) {
+    return {
+      ...readModel,
+      status: 'revoked',
+      revokedAt: readModel.revokedAt
+    }
+  }
+
+  return {
+    ...readModel,
+    status: 'active',
+    revokedAt: null
+  }
+}
+
+function findHostedShareLinkRecord(
+  db: ArchiveDatabase,
+  shareLinkId: string
+): ApprovedPersonaDraftHostedShareLinkRecord | null {
+  return listApprovedPersonaDraftHostedShareLinks(db, {}).find((link) => link.shareLinkId === shareLinkId) ?? null
+}
+
 export function listApprovedPersonaDraftHostedShareLinks(
   db: ArchiveDatabase,
   input: { draftReviewId?: string }
-) {
+): ApprovedPersonaDraftHostedShareLinkRecord[] {
   const entries = listDecisionJournal(db, { targetType: 'persona_draft_review' })
     .filter((entry) =>
-      (entry.decisionType === 'create_approved_persona_draft_share_link' || entry.decisionType === 'revoke_approved_persona_draft_share_link')
+      (entry.decisionType === 'create_approved_persona_draft_share_link'
+        || entry.decisionType === 'revoke_approved_persona_draft_share_link')
       && (!input.draftReviewId || entry.targetId === input.draftReviewId)
     )
-  const links = new Map<string, {
-    shareLinkId: string
-    publicationId: string
-    draftReviewId: string
-    sourceTurnId: string
-    remoteShareId: string
-    shareUrl: string
-    hostKind: string | null
-    hostLabel: string | null
-    status: 'active' | 'revoked'
-    createdAt: string
-  }>()
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+
+  const links = new Map<string, HostedShareLinkReadModel>()
 
   for (const entry of entries) {
-    const shareLinkId = typeof entry.operationPayload.shareLinkId === 'string'
-      ? entry.operationPayload.shareLinkId
-      : null
-    if (!shareLinkId || links.has(shareLinkId)) {
+    const payload = readHostedShareLinkPayload(entry.operationPayload)
+    if (!payload) {
       continue
     }
 
-    const publicationId = typeof entry.operationPayload.publicationId === 'string'
-      ? entry.operationPayload.publicationId
-      : ''
-    const draftReviewId = typeof entry.operationPayload.draftReviewId === 'string'
-      ? entry.operationPayload.draftReviewId
-      : (input.draftReviewId ?? '')
-    const sourceTurnId = typeof entry.operationPayload.sourceTurnId === 'string'
-      ? entry.operationPayload.sourceTurnId
-      : ''
-    const remoteShareId = typeof entry.operationPayload.remoteShareId === 'string'
-      ? entry.operationPayload.remoteShareId
-      : ''
-    const shareUrl = typeof entry.operationPayload.shareUrl === 'string'
-      ? entry.operationPayload.shareUrl
-      : ''
-    const hostKind = typeof entry.operationPayload.hostKind === 'string' ? entry.operationPayload.hostKind : null
-    const hostLabel = typeof entry.operationPayload.hostLabel === 'string' ? entry.operationPayload.hostLabel : null
-    const status = entry.decisionType === 'revoke_approved_persona_draft_share_link' ? 'revoked' : 'active'
+    if (entry.decisionType === 'create_approved_persona_draft_share_link') {
+      links.set(payload.shareLinkId, {
+        ...payload,
+        createdAt: entry.createdAt,
+        revokedAt: null
+      })
+      continue
+    }
 
-    links.set(shareLinkId, {
-      shareLinkId,
-      publicationId,
-      draftReviewId,
-      sourceTurnId,
-      remoteShareId,
-      shareUrl,
-      hostKind,
-      hostLabel,
-      status,
-      createdAt: entry.createdAt
+    const existing = links.get(payload.shareLinkId)
+    if (!existing) {
+      continue
+    }
+
+    links.set(payload.shareLinkId, {
+      ...existing,
+      revokedAt: entry.createdAt
     })
   }
 
-  return Array.from(links.values()).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  return Array.from(links.values())
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .map(toHostedShareLinkRecord)
 }
 
 export async function createApprovedPersonaDraftHostedShareLink(
   db: ArchiveDatabase,
   input: { draftReviewId: string }
-) {
-  const config = getHostConfig()
-  if (config.status === 'unconfigured') {
+): Promise<CreateApprovedPersonaDraftHostedShareLinkResult | null> {
+  const config = currentHostedShareHostConfig()
+  if (config.availability === 'unconfigured') {
     return null
   }
 
@@ -246,7 +334,7 @@ export async function createApprovedPersonaDraftHostedShareLink(
   persistShareHostEvent(db, {
     artifactId,
     eventType: 'request',
-    payload: { requestEnvelope }
+    payload: requestEnvelope
   })
 
   let responseBody: Record<string, unknown>
@@ -254,7 +342,7 @@ export async function createApprovedPersonaDraftHostedShareLink(
     responseBody = await callHost({
       url: new URL('/api/approved-draft-share-links', config.baseUrl).toString(),
       token: config.token,
-      payload: { requestEnvelope }
+      payload: requestEnvelope
     })
   } catch (error) {
     persistShareHostEvent(db, {
@@ -271,8 +359,17 @@ export async function createApprovedPersonaDraftHostedShareLink(
     payload: responseBody
   })
 
-  const remoteShareId = typeof responseBody.remoteShareId === 'string' ? responseBody.remoteShareId : ''
-  const shareUrl = typeof responseBody.shareUrl === 'string' ? responseBody.shareUrl : ''
+  const remoteShareId = readNonEmptyString(responseBody.remoteShareId)
+  const shareUrl = readNonEmptyString(responseBody.shareUrl)
+  if (!remoteShareId || !shareUrl) {
+    const error = new Error('host returned invalid create response')
+    persistShareHostEvent(db, {
+      artifactId,
+      eventType: 'error',
+      payload: { message: error.message }
+    })
+    throw error
+  }
 
   appendDecisionJournal(db, {
     decisionType: 'create_approved_persona_draft_share_link',
@@ -287,49 +384,27 @@ export async function createApprovedPersonaDraftHostedShareLink(
       hostLabel: config.hostLabel,
       requestHash,
       remoteShareId,
-      shareUrl
+      shareUrl,
+      publicArtifactSha256: publication.publicArtifactSha256
     },
     undoPayload: {},
     actor: LOCAL_ACTOR
   })
 
-  const events = db.prepare(
-    `select event_type as eventType, payload_json as payloadJson
-     from persona_draft_share_host_events
-     where artifact_id = ?
-     order by created_at asc`
-  ).all(artifactId) as Array<{ eventType: string; payloadJson: string }>
-
-  return {
-    status: 'created' as const,
-    artifactId,
-    shareLinkId,
-    remoteShareId,
-    shareUrl,
-    publicationId: publication.publicationId,
-    draftReviewId: publication.draftReviewId,
-    sourceTurnId: publication.sourceTurnId,
-    hostKind: HOST_KIND,
-    hostLabel: config.hostLabel,
-    requestHash,
-    events: events.map((event) => ({
-      eventType: event.eventType,
-      payload: JSON.parse(event.payloadJson)
-    }))
-  }
+  return findHostedShareLinkRecord(db, shareLinkId)
 }
 
 export async function revokeApprovedPersonaDraftHostedShareLink(
   db: ArchiveDatabase,
   input: { shareLinkId: string }
-) {
-  const config = getHostConfig()
-  if (config.status === 'unconfigured') {
+): Promise<RevokeApprovedPersonaDraftHostedShareLinkResult | null> {
+  const config = currentHostedShareHostConfig()
+  if (config.availability === 'unconfigured') {
     return null
   }
 
-  const links = listApprovedPersonaDraftHostedShareLinks(db, {})
-  const target = links.find((link) => link.shareLinkId === input.shareLinkId && link.status === 'active')
+  const target = listApprovedPersonaDraftHostedShareLinks(db, {})
+    .find((link) => link.shareLinkId === input.shareLinkId && link.status === 'active')
 
   if (!target) {
     return null
@@ -352,20 +427,23 @@ export async function revokeApprovedPersonaDraftHostedShareLink(
     sourceTurnId: target.sourceTurnId,
     operationKind: 'revoke',
     hostKind: HOST_KIND,
-    hostLabel: config.hostLabel ?? '',
+    hostLabel: config.hostLabel,
     requestHash
   })
 
   persistShareHostEvent(db, {
     artifactId,
     eventType: 'request',
-    payload: { requestEnvelope }
+    payload: requestEnvelope
   })
 
   let responseBody: Record<string, unknown>
   try {
     responseBody = await callHost({
-      url: new URL(`/api/approved-draft-share-links/${encodeURIComponent(target.remoteShareId)}/revoke`, config.baseUrl).toString(),
+      url: new URL(
+        `/api/approved-draft-share-links/${encodeURIComponent(target.remoteShareId)}/revoke`,
+        config.baseUrl
+      ).toString(),
       token: config.token,
       payload: requestEnvelope
     })
@@ -384,6 +462,16 @@ export async function revokeApprovedPersonaDraftHostedShareLink(
     payload: responseBody
   })
 
+  if (responseBody.status !== 'revoked') {
+    const error = new Error('host returned invalid revoke response')
+    persistShareHostEvent(db, {
+      artifactId,
+      eventType: 'error',
+      payload: { message: error.message }
+    })
+    throw error
+  }
+
   appendDecisionJournal(db, {
     decisionType: 'revoke_approved_persona_draft_share_link',
     targetType: 'persona_draft_review',
@@ -397,34 +485,13 @@ export async function revokeApprovedPersonaDraftHostedShareLink(
       hostLabel: config.hostLabel,
       requestHash,
       remoteShareId: target.remoteShareId,
-      shareUrl: target.shareUrl
+      shareUrl: target.shareUrl,
+      publicArtifactSha256: target.publicArtifactSha256
     },
     undoPayload: {},
     actor: LOCAL_ACTOR
   })
 
-  const events = db.prepare(
-    `select event_type as eventType, payload_json as payloadJson
-     from persona_draft_share_host_events
-     where artifact_id = ?
-     order by created_at asc`
-  ).all(artifactId) as Array<{ eventType: string; payloadJson: string }>
-
-  return {
-    status: 'revoked' as const,
-    artifactId,
-    shareLinkId: target.shareLinkId,
-    remoteShareId: target.remoteShareId,
-    shareUrl: target.shareUrl,
-    publicationId: target.publicationId,
-    draftReviewId: target.draftReviewId,
-    sourceTurnId: target.sourceTurnId,
-    hostKind: HOST_KIND,
-    hostLabel: config.hostLabel,
-    requestHash,
-    events: events.map((event) => ({
-      eventType: event.eventType,
-      payload: JSON.parse(event.payloadJson)
-    }))
-  }
+  const revoked = findHostedShareLinkRecord(db, target.shareLinkId)
+  return revoked?.status === 'revoked' ? revoked : null
 }

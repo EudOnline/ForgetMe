@@ -4,8 +4,10 @@ import { dialog, ipcMain, shell } from 'electron'
 import {
   askMemoryWorkspaceInputSchema,
   askMemoryWorkspacePersistedInputSchema,
+  approvedPersonaDraftReviewIdSchema,
   exportApprovedPersonaDraftInputSchema,
   listApprovedPersonaDraftHandoffsInputSchema,
+  listApprovedPersonaDraftHostedShareLinksInputSchema,
   listApprovedPersonaDraftPublicationsInputSchema,
   listApprovedPersonaDraftProviderSendsInputSchema,
   createPersonaDraftReviewFromTurnInputSchema,
@@ -15,7 +17,9 @@ import {
   memoryWorkspaceCompareSessionIdSchema,
   memoryWorkspaceSessionFilterSchema,
   memoryWorkspaceSessionIdSchema,
+  openApprovedDraftHostedShareLinkInputSchema,
   retryApprovedPersonaDraftProviderSendInputSchema,
+  revokeApprovedPersonaDraftHostedShareLinkInputSchema,
   runMemoryWorkspaceCompareInputSchema,
   runMemoryWorkspaceCompareMatrixInputSchema,
   openApprovedDraftPublicationEntryInputSchema,
@@ -54,8 +58,15 @@ import {
 } from '../services/personaDraftHandoffService'
 import {
   listApprovedPersonaDraftPublications,
-  publishApprovedPersonaDraftToDirectory
+  publishApprovedPersonaDraftToDirectory,
+  validateApprovedDraftPublicationEntryPath
 } from '../services/approvedDraftPublicationService'
+import {
+  createApprovedPersonaDraftHostedShareLink,
+  getApprovedDraftHostedShareHostStatus,
+  listApprovedPersonaDraftHostedShareLinks,
+  revokeApprovedPersonaDraftHostedShareLink
+} from '../services/approvedDraftHostedShareLinkService'
 import {
   listApprovedPersonaDraftProviderSends,
   retryApprovedPersonaDraftProviderSend,
@@ -80,33 +91,6 @@ async function selectDirectory(envKey: string) {
   return result.canceled ? null : result.filePaths[0] ?? null
 }
 
-function validateApprovedDraftPublicationPackage(entryPath: string) {
-  const packageRoot = path.dirname(entryPath)
-  const manifestPath = path.join(packageRoot, 'manifest.json')
-  const publicationPath = path.join(packageRoot, 'publication.json')
-
-  if (!fs.existsSync(manifestPath)) {
-    return `Publication package file not found: ${manifestPath}`
-  }
-
-  if (!fs.existsSync(publicationPath)) {
-    return `Publication package file not found: ${publicationPath}`
-  }
-
-  try {
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as Record<string, unknown>
-    const isValidManifest = manifest.formatVersion === 'phase10k1'
-      && manifest.sourceArtifact === 'approved_persona_draft_handoff'
-      && manifest.publicArtifactFileName === 'publication.json'
-      && manifest.displayEntryFileName === 'index.html'
-      && manifest.displayStylesFileName === 'styles.css'
-
-    return isValidManifest ? null : `Publication package manifest is invalid: ${manifestPath}`
-  } catch {
-    return `Publication package manifest is invalid: ${manifestPath}`
-  }
-}
-
 export function registerMemoryWorkspaceIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:askMemoryWorkspace')
   ipcMain.removeHandler('archive:listMemoryWorkspaceSessions')
@@ -129,6 +113,11 @@ export function registerMemoryWorkspaceIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:listApprovedPersonaDraftPublications')
   ipcMain.removeHandler('archive:publishApprovedPersonaDraft')
   ipcMain.removeHandler('archive:openApprovedDraftPublicationEntry')
+  ipcMain.removeHandler('archive:getApprovedDraftHostedShareHostStatus')
+  ipcMain.removeHandler('archive:listApprovedPersonaDraftHostedShareLinks')
+  ipcMain.removeHandler('archive:createApprovedPersonaDraftHostedShareLink')
+  ipcMain.removeHandler('archive:revokeApprovedPersonaDraftHostedShareLink')
+  ipcMain.removeHandler('archive:openApprovedDraftHostedShareLink')
   ipcMain.removeHandler('archive:listApprovedDraftSendDestinations')
   ipcMain.removeHandler('archive:listApprovedPersonaDraftProviderSends')
   ipcMain.removeHandler('archive:sendApprovedPersonaDraftToProvider')
@@ -323,7 +312,7 @@ export function registerMemoryWorkspaceIpc(appPaths: AppPaths) {
       }
     }
 
-    const packageValidationError = validateApprovedDraftPublicationPackage(entryPath)
+    const packageValidationError = validateApprovedDraftPublicationEntryPath(entryPath)
     if (packageValidationError) {
       return {
         status: 'failed' as const,
@@ -343,6 +332,60 @@ export function registerMemoryWorkspaceIpc(appPaths: AppPaths) {
         status: 'failed' as const,
         entryPath,
         errorMessage
+      }
+    }
+  })
+
+  ipcMain.handle('archive:getApprovedDraftHostedShareHostStatus', async () => {
+    return getApprovedDraftHostedShareHostStatus()
+  })
+
+  ipcMain.handle('archive:listApprovedPersonaDraftHostedShareLinks', async (_event, payload) => {
+    const input = listApprovedPersonaDraftHostedShareLinksInputSchema.parse(payload)
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    const links = listApprovedPersonaDraftHostedShareLinks(db, input)
+    db.close()
+    return links
+  })
+
+  ipcMain.handle('archive:createApprovedPersonaDraftHostedShareLink', async (_event, payload) => {
+    const input = approvedPersonaDraftReviewIdSchema.parse(payload)
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    try {
+      return await createApprovedPersonaDraftHostedShareLink(db, input)
+    } finally {
+      db.close()
+    }
+  })
+
+  ipcMain.handle('archive:revokeApprovedPersonaDraftHostedShareLink', async (_event, payload) => {
+    const input = revokeApprovedPersonaDraftHostedShareLinkInputSchema.parse(payload)
+    const db = openDatabase(databasePath(appPaths))
+    runMigrations(db)
+    try {
+      return await revokeApprovedPersonaDraftHostedShareLink(db, input)
+    } finally {
+      db.close()
+    }
+  })
+
+  ipcMain.handle('archive:openApprovedDraftHostedShareLink', async (_event, payload) => {
+    const input = openApprovedDraftHostedShareLinkInputSchema.parse(payload)
+
+    try {
+      await shell.openExternal(input.shareUrl)
+      return {
+        status: 'opened' as const,
+        shareUrl: input.shareUrl,
+        errorMessage: null
+      }
+    } catch (error) {
+      return {
+        status: 'failed' as const,
+        shareUrl: input.shareUrl,
+        errorMessage: error instanceof Error ? error.message : String(error)
       }
     }
   })

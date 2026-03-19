@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
+  ApprovedDraftHostedShareHostStatus,
   ApprovedDraftSendDestination,
   ApprovedPersonaDraftHandoffRecord,
+  ApprovedPersonaDraftHostedShareLinkRecord,
   ApprovedPersonaDraftPublicationRecord,
   ApprovedPersonaDraftProviderSendArtifact,
   ExportApprovedPersonaDraftResult,
@@ -56,6 +58,11 @@ type DraftReviewEditorState = {
 }
 
 type ApprovedDraftPublicationOpenStatus = {
+  kind: 'success' | 'error'
+  message: string
+}
+
+type ApprovedDraftHostedShareStatus = {
   kind: 'success' | 'error'
   message: string
 }
@@ -566,6 +573,44 @@ export function MemoryWorkspacePage(props: {
         })),
     [archiveApi]
   )
+  const getApprovedDraftHostedShareHostStatus = useMemo(
+    () => (typeof archiveApi.getApprovedDraftHostedShareHostStatus === 'function'
+      ? archiveApi.getApprovedDraftHostedShareHostStatus.bind(archiveApi)
+      : async () => ({
+          availability: 'unconfigured' as const,
+          hostKind: null,
+          hostLabel: null
+        })),
+    [archiveApi]
+  )
+  const listApprovedPersonaDraftHostedShareLinks = useMemo(
+    () => (typeof archiveApi.listApprovedPersonaDraftHostedShareLinks === 'function'
+      ? archiveApi.listApprovedPersonaDraftHostedShareLinks.bind(archiveApi)
+      : async () => [] as ApprovedPersonaDraftHostedShareLinkRecord[]),
+    [archiveApi]
+  )
+  const createApprovedPersonaDraftHostedShareLink = useMemo(
+    () => (typeof archiveApi.createApprovedPersonaDraftHostedShareLink === 'function'
+      ? archiveApi.createApprovedPersonaDraftHostedShareLink.bind(archiveApi)
+      : async () => null),
+    [archiveApi]
+  )
+  const revokeApprovedPersonaDraftHostedShareLink = useMemo(
+    () => (typeof archiveApi.revokeApprovedPersonaDraftHostedShareLink === 'function'
+      ? archiveApi.revokeApprovedPersonaDraftHostedShareLink.bind(archiveApi)
+      : async () => null),
+    [archiveApi]
+  )
+  const openApprovedDraftHostedShareLink = useMemo(
+    () => (typeof archiveApi.openApprovedDraftHostedShareLink === 'function'
+      ? archiveApi.openApprovedDraftHostedShareLink.bind(archiveApi)
+      : async (input: { shareUrl: string }) => ({
+          status: 'failed' as const,
+          shareUrl: input.shareUrl,
+          errorMessage: 'archive api unavailable'
+        })),
+    [archiveApi]
+  )
   const listApprovedDraftSendDestinations = useMemo(
     () => (typeof archiveApi.listApprovedDraftSendDestinations === 'function'
       ? archiveApi.listApprovedDraftSendDestinations.bind(archiveApi)
@@ -629,17 +674,25 @@ export function MemoryWorkspacePage(props: {
   const [approvedDraftSendDestinationId, setApprovedDraftSendDestinationId] = useState<string | null>(
     () => readStoredApprovedDraftSendDestinationId()
   )
+  const [approvedDraftHostedShareHostStatus, setApprovedDraftHostedShareHostStatus] = useState<ApprovedDraftHostedShareHostStatus | null>(null)
   const [approvedDraftHandoffsByTurnId, setApprovedDraftHandoffsByTurnId] = useState<Record<string, ApprovedPersonaDraftHandoffRecord[]>>({})
   const [approvedDraftPublicationsByTurnId, setApprovedDraftPublicationsByTurnId] = useState<
     Record<string, ApprovedPersonaDraftPublicationRecord[]>
   >({})
+  const [approvedDraftHostedShareLinksByTurnId, setApprovedDraftHostedShareLinksByTurnId] = useState<
+    Record<string, ApprovedPersonaDraftHostedShareLinkRecord[]>
+  >({})
   const [approvedDraftPublicationOpenStatusByTurnId, setApprovedDraftPublicationOpenStatusByTurnId] = useState<
     Record<string, ApprovedDraftPublicationOpenStatus | null>
+  >({})
+  const [approvedDraftHostedShareStatusByTurnId, setApprovedDraftHostedShareStatusByTurnId] = useState<
+    Record<string, ApprovedDraftHostedShareStatus | null>
   >({})
   const [approvedDraftHandoffPendingByTurnId, setApprovedDraftHandoffPendingByTurnId] = useState<Record<string, boolean>>({})
   const [approvedDraftPublicationPendingByTurnId, setApprovedDraftPublicationPendingByTurnId] = useState<
     Record<string, boolean>
   >({})
+  const [approvedDraftHostedSharePendingByTurnId, setApprovedDraftHostedSharePendingByTurnId] = useState<Record<string, boolean>>({})
   const [approvedDraftProviderSendsByTurnId, setApprovedDraftProviderSendsByTurnId] = useState<Record<string, ApprovedPersonaDraftProviderSendArtifact[]>>({})
   const [approvedDraftProviderSendPendingByTurnId, setApprovedDraftProviderSendPendingByTurnId] = useState<Record<string, boolean>>({})
   const [compareTargetControls, setCompareTargetControls] = useState<CompareTargetControls>(() => readStoredCompareTargetDefaults())
@@ -688,6 +741,16 @@ export function MemoryWorkspacePage(props: {
     setApprovedDraftPublicationOpenStatusByTurnId((previousState) => ({
       ...previousState,
       [turnId]: null
+    }))
+  }
+
+  const syncApprovedDraftHostedShareState = (
+    turnId: string,
+    links: ApprovedPersonaDraftHostedShareLinkRecord[]
+  ) => {
+    setApprovedDraftHostedShareLinksByTurnId((previousState) => ({
+      ...previousState,
+      [turnId]: links
     }))
   }
 
@@ -764,6 +827,27 @@ export function MemoryWorkspacePage(props: {
     return sends
   }
 
+  const refreshApprovedDraftHostedShareLinksForTurn = async (
+    turn: MemoryWorkspaceTurnRecord,
+    review: MemoryWorkspacePersonaDraftReviewRecord | null,
+    scopeRequestId: number
+  ) => {
+    if (!review || review.status !== 'approved') {
+      syncApprovedDraftHostedShareState(turn.turnId, [])
+      return []
+    }
+
+    const links = await listApprovedPersonaDraftHostedShareLinks({
+      draftReviewId: review.draftReviewId
+    })
+    if (scopeRequestId !== scopeRequestRef.current) {
+      return []
+    }
+
+    syncApprovedDraftHostedShareState(turn.turnId, links)
+    return links
+  }
+
   const refreshDraftReviewForTurn = async (
     turn: MemoryWorkspaceTurnRecord,
     scopeRequestId: number
@@ -776,6 +860,7 @@ export function MemoryWorkspacePage(props: {
     syncDraftReviewState(turn, review)
     await refreshApprovedDraftHandoffsForTurn(turn, review, scopeRequestId)
     await refreshApprovedDraftPublicationsForTurn(turn, review, scopeRequestId)
+    await refreshApprovedDraftHostedShareLinksForTurn(turn, review, scopeRequestId)
     await refreshApprovedDraftProviderSendsForTurn(turn, review, scopeRequestId)
     return review
   }
@@ -959,11 +1044,15 @@ export function MemoryWorkspacePage(props: {
     setApprovedDraftPublicationDestination(readStoredApprovedDraftPublicationDestination())
     setApprovedDraftSendDestinations([])
     setApprovedDraftSendDestinationId(readStoredApprovedDraftSendDestinationId())
+    setApprovedDraftHostedShareHostStatus(null)
     setApprovedDraftHandoffsByTurnId({})
     setApprovedDraftPublicationsByTurnId({})
+    setApprovedDraftHostedShareLinksByTurnId({})
     setApprovedDraftPublicationOpenStatusByTurnId({})
+    setApprovedDraftHostedShareStatusByTurnId({})
     setApprovedDraftHandoffPendingByTurnId({})
     setApprovedDraftPublicationPendingByTurnId({})
+    setApprovedDraftHostedSharePendingByTurnId({})
     setApprovedDraftProviderSendsByTurnId({})
     setApprovedDraftProviderSendPendingByTurnId({})
     setCompareTargetControls(storedCompareTargetDefaults)
@@ -989,6 +1078,15 @@ export function MemoryWorkspacePage(props: {
 
         setApprovedDraftSendDestinations(destinations)
         setApprovedDraftSendDestinationId(resolveApprovedDraftSendDestinationId(destinations))
+      })
+
+    void getApprovedDraftHostedShareHostStatus()
+      .then((status) => {
+        if (scopeRequestId !== scopeRequestRef.current) {
+          return
+        }
+
+        setApprovedDraftHostedShareHostStatus(status)
       })
 
     void refreshSessions({ scopeRequestId })
@@ -1144,6 +1242,56 @@ export function MemoryWorkspacePage(props: {
       })
     })
   }, [draftReviewsByTurnId, listApprovedPersonaDraftPublications, turns])
+
+  useEffect(() => {
+    const sandboxTurns = turns.filter(isSandboxDraftTurn)
+    if (sandboxTurns.length === 0) {
+      setApprovedDraftHostedShareLinksByTurnId({})
+      setApprovedDraftHostedShareStatusByTurnId({})
+      setApprovedDraftHostedSharePendingByTurnId({})
+      return
+    }
+
+    const scopeRequestId = scopeRequestRef.current
+
+    void Promise.all(
+      sandboxTurns.map(async (turn) => {
+        const review = draftReviewsByTurnId[turn.turnId]
+        if (!review || review.status !== 'approved') {
+          return [turn.turnId, []] as const
+        }
+
+        return [
+          turn.turnId,
+          await listApprovedPersonaDraftHostedShareLinks({
+            draftReviewId: review.draftReviewId
+          })
+        ] as const
+      })
+    ).then((entries) => {
+      if (scopeRequestId !== scopeRequestRef.current) {
+        return
+      }
+
+      setApprovedDraftHostedShareLinksByTurnId(
+        Object.fromEntries(entries) as Record<string, ApprovedPersonaDraftHostedShareLinkRecord[]>
+      )
+      setApprovedDraftHostedSharePendingByTurnId((previousState) => {
+        const nextPending: Record<string, boolean> = {}
+        for (const turn of sandboxTurns) {
+          nextPending[turn.turnId] = previousState[turn.turnId] ?? false
+        }
+        return nextPending
+      })
+      setApprovedDraftHostedShareStatusByTurnId((previousState) => {
+        const nextStatus: Record<string, ApprovedDraftHostedShareStatus | null> = {}
+        for (const turn of sandboxTurns) {
+          nextStatus[turn.turnId] = previousState[turn.turnId] ?? null
+        }
+        return nextStatus
+      })
+    })
+  }, [draftReviewsByTurnId, listApprovedPersonaDraftHostedShareLinks, turns])
 
   useEffect(() => {
     const sandboxTurns = turns.filter(isSandboxDraftTurn)
@@ -1823,6 +1971,144 @@ export function MemoryWorkspacePage(props: {
     }
   }
 
+  const handleCreateApprovedDraftHostedShareLink = async (turnId: string) => {
+    const turn = turnsById.get(turnId)
+    const review = draftReviewsByTurnId[turnId]
+    if (!turn || !review || review.status !== 'approved') {
+      return
+    }
+
+    const scopeRequestId = scopeRequestRef.current
+    setApprovedDraftHostedShareStatusByTurnId((previousState) => ({
+      ...previousState,
+      [turnId]: null
+    }))
+    setApprovedDraftHostedSharePendingByTurnId((previousState) => ({
+      ...previousState,
+      [turnId]: true
+    }))
+
+    try {
+      const created = await createApprovedPersonaDraftHostedShareLink({
+        draftReviewId: review.draftReviewId
+      })
+      if (!created || scopeRequestId !== scopeRequestRef.current) {
+        return
+      }
+
+      await refreshApprovedDraftHostedShareLinksForTurn(turn, review, scopeRequestId)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      if (scopeRequestId === scopeRequestRef.current) {
+        setApprovedDraftHostedShareStatusByTurnId((previousState) => ({
+          ...previousState,
+          [turnId]: {
+            kind: 'error',
+            message: `Unable to create hosted share link: ${errorMessage}`
+          }
+        }))
+      }
+    } finally {
+      if (scopeRequestId === scopeRequestRef.current) {
+        setApprovedDraftHostedSharePendingByTurnId((previousState) => ({
+          ...previousState,
+          [turnId]: false
+        }))
+      }
+    }
+  }
+
+  const handleOpenApprovedDraftHostedShareLink = async (turnId: string) => {
+    const latestLink = [...(approvedDraftHostedShareLinksByTurnId[turnId] ?? [])]
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null
+    if (!latestLink) {
+      return
+    }
+
+    setApprovedDraftHostedShareStatusByTurnId((previousState) => ({
+      ...previousState,
+      [turnId]: null
+    }))
+
+    try {
+      const result = await openApprovedDraftHostedShareLink({
+        shareUrl: latestLink.shareUrl
+      })
+      const nextStatus: ApprovedDraftHostedShareStatus = result.status === 'opened'
+        ? {
+            kind: 'success',
+            message: 'Hosted share link opened.'
+          }
+        : {
+            kind: 'error',
+            message: `Unable to open hosted share link: ${result.errorMessage ?? 'Unknown error.'}`
+          }
+
+      setApprovedDraftHostedShareStatusByTurnId((previousState) => ({
+        ...previousState,
+        [turnId]: nextStatus
+      }))
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      setApprovedDraftHostedShareStatusByTurnId((previousState) => ({
+        ...previousState,
+        [turnId]: {
+          kind: 'error',
+          message: `Unable to open hosted share link: ${errorMessage}`
+        }
+      }))
+    }
+  }
+
+  const handleRevokeApprovedDraftHostedShareLink = async (turnId: string) => {
+    const turn = turnsById.get(turnId)
+    const review = draftReviewsByTurnId[turnId]
+    const latestLink = [...(approvedDraftHostedShareLinksByTurnId[turnId] ?? [])]
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null
+    if (!turn || !review || review.status !== 'approved' || !latestLink || latestLink.status !== 'active') {
+      return
+    }
+
+    const scopeRequestId = scopeRequestRef.current
+    setApprovedDraftHostedShareStatusByTurnId((previousState) => ({
+      ...previousState,
+      [turnId]: null
+    }))
+    setApprovedDraftHostedSharePendingByTurnId((previousState) => ({
+      ...previousState,
+      [turnId]: true
+    }))
+
+    try {
+      const revoked = await revokeApprovedPersonaDraftHostedShareLink({
+        shareLinkId: latestLink.shareLinkId
+      })
+      if (!revoked || scopeRequestId !== scopeRequestRef.current) {
+        return
+      }
+
+      await refreshApprovedDraftHostedShareLinksForTurn(turn, review, scopeRequestId)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      if (scopeRequestId === scopeRequestRef.current) {
+        setApprovedDraftHostedShareStatusByTurnId((previousState) => ({
+          ...previousState,
+          [turnId]: {
+            kind: 'error',
+            message: `Unable to revoke hosted share link: ${errorMessage}`
+          }
+        }))
+      }
+    } finally {
+      if (scopeRequestId === scopeRequestRef.current) {
+        setApprovedDraftHostedSharePendingByTurnId((previousState) => ({
+          ...previousState,
+          [turnId]: false
+        }))
+      }
+    }
+  }
+
   return (
     <section>
       <form
@@ -2004,11 +2290,15 @@ export function MemoryWorkspacePage(props: {
         approvedDraftPublicationDestination={approvedDraftPublicationDestination}
         approvedDraftSendDestinations={approvedDraftSendDestinations}
         approvedDraftSendDestinationId={approvedDraftSendDestinationId}
+        approvedDraftHostedShareHostStatus={approvedDraftHostedShareHostStatus}
         approvedDraftPublicationOpenStatusByTurnId={approvedDraftPublicationOpenStatusByTurnId}
+        approvedDraftHostedShareStatusByTurnId={approvedDraftHostedShareStatusByTurnId}
         approvedDraftHandoffsByTurnId={approvedDraftHandoffsByTurnId}
         approvedDraftPublicationsByTurnId={approvedDraftPublicationsByTurnId}
+        approvedDraftHostedShareLinksByTurnId={approvedDraftHostedShareLinksByTurnId}
         approvedDraftHandoffPendingByTurnId={approvedDraftHandoffPendingByTurnId}
         approvedDraftPublicationPendingByTurnId={approvedDraftPublicationPendingByTurnId}
+        approvedDraftHostedSharePendingByTurnId={approvedDraftHostedSharePendingByTurnId}
         approvedDraftProviderSendsByTurnId={approvedDraftProviderSendsByTurnId}
         approvedDraftProviderSendPendingByTurnId={approvedDraftProviderSendPendingByTurnId}
         onSelectMatrixSession={handleSelectCompareMatrix}
@@ -2044,6 +2334,15 @@ export function MemoryWorkspacePage(props: {
         }}
         onOpenApprovedDraftPublication={(turnId) => {
           void handleOpenApprovedDraftPublication(turnId)
+        }}
+        onCreateApprovedDraftHostedShareLink={(turnId) => {
+          void handleCreateApprovedDraftHostedShareLink(turnId)
+        }}
+        onOpenApprovedDraftHostedShareLink={(turnId) => {
+          void handleOpenApprovedDraftHostedShareLink(turnId)
+        }}
+        onRevokeApprovedDraftHostedShareLink={(turnId) => {
+          void handleRevokeApprovedDraftHostedShareLink(turnId)
         }}
         onSendApprovedDraft={(turnId) => {
           void handleSendApprovedDraft(turnId)

@@ -228,7 +228,7 @@ npm run build
 
 ### Phase Ten Approved-Draft Outbound & Share
 
-Phase 10 now carries the approved-draft outbound stack through local publication and a human-readable share surface:
+Phase 10 now carries the approved-draft outbound stack through local publication, hosted share links, and a human-readable share surface:
 
 - reviewed persona drafts can be approved, exported as internal handoff JSON, sent through provider-boundary destinations, retried manually or automatically, and recovered after app restart
 - approved drafts can also be published as local share packages that contain:
@@ -236,20 +236,22 @@ Phase 10 now carries the approved-draft outbound stack through local publication
   - `manifest.json`
   - `index.html`
   - `styles.css`
-- publication history is journal-backed and visible in `Memory Workspace`, replay, and search
+- approved drafts can create hosted share links from those local share packages and revoke hosted share links when access should be removed
+- publication and hosted-share history are journal-backed and visible in `Memory Workspace`, replay, search, and review history
 - replay stays non-mutating, but already-generated share pages can still be opened as a read-only action
 - opening a share page now validates the package boundary before calling the OS open handler
 
 ### Phase Ten Verification
 
 ```bash
-npm run test:unit -- tests/unit/shared/phaseTenApprovedDraftPublicationContracts.test.ts tests/unit/main/approvedDraftPublicationHtmlService.test.ts tests/unit/main/approvedDraftPublicationService.test.ts tests/unit/main/memoryWorkspaceIpc.test.ts tests/unit/renderer/archiveApi.test.ts tests/unit/renderer/memoryWorkspacePage.test.tsx tests/unit/renderer/memoryWorkspaceReplayPage.test.tsx
+npm run test:unit -- tests/unit/shared/phaseTenApprovedDraftHostedShareLinkContracts.test.ts tests/unit/main/dbPhaseTenMApprovedDraftHostedShareLink.test.ts tests/unit/main/approvedDraftHostedShareLinkService.test.ts tests/unit/main/memoryWorkspaceIpc.test.ts tests/unit/main/searchService.test.ts tests/unit/renderer/archiveApi.test.ts tests/unit/renderer/memoryWorkspacePage.test.tsx tests/unit/renderer/memoryWorkspaceReplayPage.test.tsx tests/unit/renderer/searchPage.test.tsx tests/unit/renderer/reviewQueuePage.test.tsx
 npm run test:e2e -- tests/e2e/memory-workspace-approved-draft-publication-flow.spec.ts
+npm run test:e2e -- tests/e2e/memory-workspace-approved-draft-hosted-share-link-flow.spec.ts
 npm run build
 ```
 
 ### Current Operational Note
 
 The local-first runner, shared review queue, formal approved profile read model, and phase-five single-item review workbench are now wired end-to-end.
-The archive now also carries the approved-draft workflow through review, internal handoff, provider-boundary send, retry recovery, local publication/share packaging, and human-readable share-page replay.
-The latest approved-draft share slice is documented in `docs/plans/2026-03-19-phase-ten-l-approved-draft-human-readable-share-package-implementation-plan.md`.
+The archive now also carries the approved-draft workflow through review, internal handoff, provider-boundary send, retry recovery, local publication/share packaging, hosted share-link creation and revocation, and human-readable share-page replay.
+The latest approved-draft share slice is documented in `docs/plans/2026-03-19-phase-ten-m-approved-draft-hosted-share-link-implementation-plan.md`.

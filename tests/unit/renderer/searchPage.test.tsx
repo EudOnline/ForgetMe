@@ -53,6 +53,28 @@ describe('SearchPage', () => {
         actor: 'local-user',
         createdAt: '2026-03-16T08:05:00.000Z',
         undoneAt: null
+      },
+      {
+        journalId: 'journal-hosted-create-1',
+        decisionType: 'create_approved_persona_draft_share_link',
+        targetType: 'persona_draft_review',
+        decisionLabel: 'Hosted share link created for approved draft',
+        targetLabel: 'Persona draft review · turn-1 · hosted share link',
+        replaySummary: 'Hosted share link created for approved draft · Persona draft review · turn-1 · hosted share link',
+        actor: 'local-user',
+        createdAt: '2026-03-16T09:00:00.000Z',
+        undoneAt: null
+      },
+      {
+        journalId: 'journal-hosted-revoke-1',
+        decisionType: 'revoke_approved_persona_draft_share_link',
+        targetType: 'persona_draft_review',
+        decisionLabel: 'Hosted share link revoked',
+        targetLabel: 'Persona draft review · turn-1 · hosted share link',
+        replaySummary: 'Hosted share link revoked · Persona draft review · turn-1 · hosted share link',
+        actor: 'local-user',
+        createdAt: '2026-03-16T09:05:00.000Z',
+        undoneAt: null
       }
     ])
 
@@ -76,5 +98,7 @@ describe('SearchPage', () => {
     expect(screen.getByText('Safe batch approve · Alice Chen · school_name · 2 items')).toBeInTheDocument()
     expect(screen.getByText('Approved draft send failed · Persona draft review · turn-1 · OpenRouter / qwen-2.5-72b-instruct')).toBeInTheDocument()
     expect(screen.getByText('Approved draft auto-retried to provider · Persona draft review · turn-1 · OpenRouter / qwen-2.5-72b-instruct')).toBeInTheDocument()
+    expect(screen.getByText('Hosted share link created for approved draft · Persona draft review · turn-1 · hosted share link')).toBeInTheDocument()
+    expect(screen.getByText('Hosted share link revoked · Persona draft review · turn-1 · hosted share link')).toBeInTheDocument()
   })
 })

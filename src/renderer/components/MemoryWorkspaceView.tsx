@@ -1,6 +1,8 @@
 import type {
+  ApprovedDraftHostedShareHostStatus,
   ApprovedDraftSendDestination,
   ApprovedPersonaDraftHandoffRecord,
+  ApprovedPersonaDraftHostedShareLinkRecord,
   ApprovedPersonaDraftPublicationRecord,
   ApprovedPersonaDraftProviderSendArtifact,
   MemoryWorkspaceBoundaryRedirect,
@@ -382,14 +384,21 @@ export function MemoryWorkspaceView(props: {
   approvedDraftPublicationDestination?: string | null
   approvedDraftSendDestinations?: ApprovedDraftSendDestination[]
   approvedDraftSendDestinationId?: string | null
+  approvedDraftHostedShareHostStatus?: ApprovedDraftHostedShareHostStatus | null
   approvedDraftPublicationOpenStatusByTurnId?: Record<string, {
+    kind: 'success' | 'error'
+    message: string
+  } | null>
+  approvedDraftHostedShareStatusByTurnId?: Record<string, {
     kind: 'success' | 'error'
     message: string
   } | null>
   approvedDraftHandoffsByTurnId?: Record<string, ApprovedPersonaDraftHandoffRecord[]>
   approvedDraftPublicationsByTurnId?: Record<string, ApprovedPersonaDraftPublicationRecord[]>
+  approvedDraftHostedShareLinksByTurnId?: Record<string, ApprovedPersonaDraftHostedShareLinkRecord[]>
   approvedDraftHandoffPendingByTurnId?: Record<string, boolean>
   approvedDraftPublicationPendingByTurnId?: Record<string, boolean>
+  approvedDraftHostedSharePendingByTurnId?: Record<string, boolean>
   approvedDraftProviderSendsByTurnId?: Record<string, ApprovedPersonaDraftProviderSendArtifact[]>
   approvedDraftProviderSendPendingByTurnId?: Record<string, boolean>
   isSessionReplayMode?: boolean
@@ -411,6 +420,9 @@ export function MemoryWorkspaceView(props: {
   onExportApprovedDraft?: (turnId: string) => void
   onPublishApprovedDraft?: (turnId: string) => void
   onOpenApprovedDraftPublication?: (turnId: string) => void
+  onCreateApprovedDraftHostedShareLink?: (turnId: string) => void
+  onOpenApprovedDraftHostedShareLink?: (turnId: string) => void
+  onRevokeApprovedDraftHostedShareLink?: (turnId: string) => void
   onSendApprovedDraft?: (turnId: string) => void
   onRetryApprovedDraftSend?: (turnId: string) => void
   onOpenPerson?: (canonicalPersonId: string) => void
@@ -558,14 +570,18 @@ export function MemoryWorkspaceView(props: {
                   destination={props.approvedDraftHandoffDestination ?? null}
                   publicationDestination={props.approvedDraftPublicationDestination ?? null}
                   publicationOpenStatus={props.approvedDraftPublicationOpenStatusByTurnId?.[turn.turnId] ?? null}
+                  hostedShareHostStatus={props.approvedDraftHostedShareHostStatus ?? null}
+                  hostedShareStatus={props.approvedDraftHostedShareStatusByTurnId?.[turn.turnId] ?? null}
                   sendDestinations={props.approvedDraftSendDestinations ?? []}
                   selectedSendDestinationId={props.approvedDraftSendDestinationId ?? null}
                   handoffs={props.approvedDraftHandoffsByTurnId?.[turn.turnId] ?? []}
                   publications={props.approvedDraftPublicationsByTurnId?.[turn.turnId] ?? []}
+                  hostedShareLinks={props.approvedDraftHostedShareLinksByTurnId?.[turn.turnId] ?? []}
                   providerSends={props.approvedDraftProviderSendsByTurnId?.[turn.turnId] ?? []}
                   isPending={
                     (props.approvedDraftHandoffPendingByTurnId?.[turn.turnId] ?? false)
                     || (props.approvedDraftPublicationPendingByTurnId?.[turn.turnId] ?? false)
+                    || (props.approvedDraftHostedSharePendingByTurnId?.[turn.turnId] ?? false)
                     || (props.approvedDraftProviderSendPendingByTurnId?.[turn.turnId] ?? false)
                   }
                   onChooseExportDestination={props.onChooseApprovedDraftHandoffDestination}
@@ -582,6 +598,21 @@ export function MemoryWorkspaceView(props: {
                   onOpenApprovedDraftPublication={
                     props.onOpenApprovedDraftPublication
                       ? () => props.onOpenApprovedDraftPublication?.(turn.turnId)
+                      : undefined
+                  }
+                  onCreateApprovedDraftHostedShareLink={
+                    !props.isSessionReplayMode && props.onCreateApprovedDraftHostedShareLink
+                      ? () => props.onCreateApprovedDraftHostedShareLink?.(turn.turnId)
+                      : undefined
+                  }
+                  onOpenApprovedDraftHostedShareLink={
+                    props.onOpenApprovedDraftHostedShareLink
+                      ? () => props.onOpenApprovedDraftHostedShareLink?.(turn.turnId)
+                      : undefined
+                  }
+                  onRevokeApprovedDraftHostedShareLink={
+                    !props.isSessionReplayMode && props.onRevokeApprovedDraftHostedShareLink
+                      ? () => props.onRevokeApprovedDraftHostedShareLink?.(turn.turnId)
                       : undefined
                   }
                   onSendApprovedDraft={props.onSendApprovedDraft ? () => props.onSendApprovedDraft?.(turn.turnId) : undefined}
