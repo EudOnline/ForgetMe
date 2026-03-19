@@ -80,6 +80,33 @@ async function selectDirectory(envKey: string) {
   return result.canceled ? null : result.filePaths[0] ?? null
 }
 
+function validateApprovedDraftPublicationPackage(entryPath: string) {
+  const packageRoot = path.dirname(entryPath)
+  const manifestPath = path.join(packageRoot, 'manifest.json')
+  const publicationPath = path.join(packageRoot, 'publication.json')
+
+  if (!fs.existsSync(manifestPath)) {
+    return `Publication package file not found: ${manifestPath}`
+  }
+
+  if (!fs.existsSync(publicationPath)) {
+    return `Publication package file not found: ${publicationPath}`
+  }
+
+  try {
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as Record<string, unknown>
+    const isValidManifest = manifest.formatVersion === 'phase10k1'
+      && manifest.sourceArtifact === 'approved_persona_draft_handoff'
+      && manifest.publicArtifactFileName === 'publication.json'
+      && manifest.displayEntryFileName === 'index.html'
+      && manifest.displayStylesFileName === 'styles.css'
+
+    return isValidManifest ? null : `Publication package manifest is invalid: ${manifestPath}`
+  } catch {
+    return `Publication package manifest is invalid: ${manifestPath}`
+  }
+}
+
 export function registerMemoryWorkspaceIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:askMemoryWorkspace')
   ipcMain.removeHandler('archive:listMemoryWorkspaceSessions')
@@ -293,6 +320,15 @@ export function registerMemoryWorkspaceIpc(appPaths: AppPaths) {
         status: 'failed' as const,
         entryPath,
         errorMessage: `Publication entry file not found: ${entryPath}`
+      }
+    }
+
+    const packageValidationError = validateApprovedDraftPublicationPackage(entryPath)
+    if (packageValidationError) {
+      return {
+        status: 'failed' as const,
+        entryPath,
+        errorMessage: packageValidationError
       }
     }
 

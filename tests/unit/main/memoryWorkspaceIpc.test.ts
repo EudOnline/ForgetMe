@@ -89,6 +89,38 @@ function appPathsFixture(): AppPaths {
   }
 }
 
+function writeApprovedDraftPublicationPackage(
+  packageRoot: string,
+  options?: {
+    includeManifest?: boolean
+    includePublication?: boolean
+    manifestPayload?: Record<string, unknown> | string
+  }
+) {
+  fs.mkdirSync(packageRoot, { recursive: true })
+  fs.writeFileSync(path.join(packageRoot, 'index.html'), '<html><body>share page</body></html>', 'utf8')
+  fs.writeFileSync(path.join(packageRoot, 'styles.css'), 'body { color: black; }', 'utf8')
+
+  if (options?.includePublication !== false) {
+    fs.writeFileSync(path.join(packageRoot, 'publication.json'), '{"publicationId":"publication-1"}', 'utf8')
+  }
+
+  if (options?.includeManifest !== false) {
+    const manifestPayload = options?.manifestPayload ?? {
+      formatVersion: 'phase10k1',
+      sourceArtifact: 'approved_persona_draft_handoff',
+      publicArtifactFileName: 'publication.json',
+      displayEntryFileName: 'index.html',
+      displayStylesFileName: 'styles.css'
+    }
+    fs.writeFileSync(
+      path.join(packageRoot, 'manifest.json'),
+      typeof manifestPayload === 'string' ? manifestPayload : JSON.stringify(manifestPayload),
+      'utf8'
+    )
+  }
+}
+
 describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
   beforeEach(() => {
     handlerMap.clear()
@@ -305,7 +337,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
     shellOpenPath.mockResolvedValue('')
     const packageRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-approved-draft-publication-'))
     const entryPath = path.join(packageRoot, 'index.html')
-    fs.writeFileSync(entryPath, '<html><body>share page</body></html>', 'utf8')
+    writeApprovedDraftPublicationPackage(packageRoot)
 
     registerMemoryWorkspaceIpc(appPathsFixture())
 
@@ -343,11 +375,61 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
     })
   })
 
+  it('returns structured failed status when publication package files are missing', async () => {
+    registerMemoryWorkspaceIpc(appPathsFixture())
+
+    const packageRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-approved-draft-publication-'))
+    const entryPath = path.join(packageRoot, 'index.html')
+    writeApprovedDraftPublicationPackage(packageRoot, {
+      includePublication: false
+    })
+
+    const handler = handlerMap.get('archive:openApprovedDraftPublicationEntry')
+    const result = await handler?.({}, {
+      entryPath
+    })
+
+    expect(shellOpenPath).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      status: 'failed',
+      entryPath,
+      errorMessage: `Publication package file not found: ${path.join(packageRoot, 'publication.json')}`
+    })
+  })
+
+  it('returns structured failed status when publication manifest is not a valid ForgetMe package', async () => {
+    registerMemoryWorkspaceIpc(appPathsFixture())
+
+    const packageRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-approved-draft-publication-'))
+    const entryPath = path.join(packageRoot, 'index.html')
+    writeApprovedDraftPublicationPackage(packageRoot, {
+      manifestPayload: {
+        formatVersion: 'phase10k1',
+        sourceArtifact: 'approved_persona_draft_handoff',
+        publicArtifactFileName: 'publication.json',
+        displayEntryFileName: 'wrong.html',
+        displayStylesFileName: 'styles.css'
+      }
+    })
+
+    const handler = handlerMap.get('archive:openApprovedDraftPublicationEntry')
+    const result = await handler?.({}, {
+      entryPath
+    })
+
+    expect(shellOpenPath).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      status: 'failed',
+      entryPath,
+      errorMessage: `Publication package manifest is invalid: ${path.join(packageRoot, 'manifest.json')}`
+    })
+  })
+
   it('returns structured failed status when shell open returns an error string', async () => {
     shellOpenPath.mockResolvedValue('No application knows how to open this file.')
     const packageRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-approved-draft-publication-'))
     const entryPath = path.join(packageRoot, 'index.html')
-    fs.writeFileSync(entryPath, '<html><body>share page</body></html>', 'utf8')
+    writeApprovedDraftPublicationPackage(packageRoot)
 
     registerMemoryWorkspaceIpc(appPathsFixture())
 
