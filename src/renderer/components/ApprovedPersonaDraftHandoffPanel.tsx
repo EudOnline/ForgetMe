@@ -55,6 +55,7 @@ export function ApprovedPersonaDraftHandoffPanel(props: {
   onSendDestinationChange?: (destinationId: string) => void
   onExportApprovedDraft?: () => void
   onPublishApprovedDraft?: () => void
+  onOpenApprovedDraftPublication?: () => void
   onSendApprovedDraft?: () => void
   onRetryApprovedDraftSend?: () => void
 }) {
@@ -120,14 +121,25 @@ export function ApprovedPersonaDraftHandoffPanel(props: {
         {latestPublication ? (
           <>
             <p>Published {latestPublication.publicArtifactFileName}</p>
+            <p>Entry page: {latestPublication.displayEntryFileName}</p>
+            <p>Data payload: {latestPublication.publicArtifactFileName}</p>
             <p>{latestPublication.publishedAt}</p>
             <p>SHA256: {latestPublication.publicArtifactSha256}</p>
+            {props.onOpenApprovedDraftPublication ? (
+              <button
+                type="button"
+                disabled={props.isPending}
+                onClick={() => props.onOpenApprovedDraftPublication?.()}
+              >
+                Open share page
+              </button>
+            ) : null}
             <section aria-label="Publication history">
               <h5>Publication history</h5>
               <ul>
                 {props.publications.map((publication) => (
                   <li key={publication.journalId}>
-                    <p>{publication.publicArtifactFileName} · {publication.publicationKind}</p>
+                    <p>{publication.displayEntryFileName} · {publication.publicationKind}</p>
                   </li>
                 ))}
               </ul>

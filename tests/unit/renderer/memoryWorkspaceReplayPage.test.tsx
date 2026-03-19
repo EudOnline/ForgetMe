@@ -1028,9 +1028,16 @@ describe('MemoryWorkspacePage replay', () => {
           publicArtifactPath: '/tmp/approved-draft-publication-publication-replay-1/publication.json',
           publicArtifactFileName: 'publication.json',
           publicArtifactSha256: 'hash-publication-replay-1',
+          displayEntryPath: '/tmp/approved-draft-publication-publication-replay-1/index.html',
+          displayEntryFileName: 'index.html',
           publishedAt: '2026-03-16T09:30:00.000Z'
         }
       ]),
+      openApprovedDraftPublicationEntry: vi.fn().mockResolvedValue({
+        status: 'opened',
+        entryPath: '/tmp/approved-draft-publication-publication-replay-1/index.html',
+        errorMessage: null
+      }),
       getPersonaDraftReviewByTurn: vi.fn().mockResolvedValue({
         draftReviewId: 'review-approved-1',
         sourceTurnId: 'turn-sandbox-reviewed',
@@ -1062,12 +1069,15 @@ describe('MemoryWorkspacePage replay', () => {
     expect(await screen.findByRole('heading', { name: 'Approved Draft Handoff' })).toBeInTheDocument()
     expect(screen.getByText('Publish / Share')).toBeInTheDocument()
     expect(await screen.findByText('Published publication.json')).toBeInTheDocument()
+    expect(screen.getByText('Entry page: index.html')).toBeInTheDocument()
+    expect(screen.getByText('Data payload: publication.json')).toBeInTheDocument()
     expect(await screen.findByText('SHA256: hash-publication-replay-1')).toBeInTheDocument()
     expect(screen.getByText('Provider Boundary Send')).toBeInTheDocument()
     expect(await screen.findByText('response recorded')).toBeInTheDocument()
     expect(await screen.findByText('Attempt: manual retry')).toBeInTheDocument()
     expect(await screen.findByText('Destination: OpenRouter / qwen-2.5-72b-instruct')).toBeInTheDocument()
     expect(await screen.findByText('Latest send audit')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open share page' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Choose publish destination' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Publish approved draft' })).not.toBeInTheDocument()
     expect(screen.getByLabelText('Draft review body')).toHaveValue('可审阅草稿：先把关键记录整理进归档，再补齐细节。')

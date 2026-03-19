@@ -406,6 +406,7 @@ export function MemoryWorkspaceView(props: {
   onApprovedDraftSendDestinationChange?: (destinationId: string) => void
   onExportApprovedDraft?: (turnId: string) => void
   onPublishApprovedDraft?: (turnId: string) => void
+  onOpenApprovedDraftPublication?: (turnId: string) => void
   onSendApprovedDraft?: (turnId: string) => void
   onRetryApprovedDraftSend?: (turnId: string) => void
   onOpenPerson?: (canonicalPersonId: string) => void
@@ -571,6 +572,11 @@ export function MemoryWorkspaceView(props: {
                   onPublishApprovedDraft={
                     !props.isSessionReplayMode && props.onPublishApprovedDraft
                       ? () => props.onPublishApprovedDraft?.(turn.turnId)
+                      : undefined
+                  }
+                  onOpenApprovedDraftPublication={
+                    props.onOpenApprovedDraftPublication
+                      ? () => props.onOpenApprovedDraftPublication?.(turn.turnId)
                       : undefined
                   }
                   onSendApprovedDraft={props.onSendApprovedDraft ? () => props.onSendApprovedDraft?.(turn.turnId) : undefined}

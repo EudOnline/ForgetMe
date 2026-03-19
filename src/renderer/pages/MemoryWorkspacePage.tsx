@@ -551,6 +551,16 @@ export function MemoryWorkspacePage(props: {
       : async () => null as PublishApprovedPersonaDraftResult | null),
     [archiveApi]
   )
+  const openApprovedDraftPublicationEntry = useMemo(
+    () => (typeof archiveApi.openApprovedDraftPublicationEntry === 'function'
+      ? archiveApi.openApprovedDraftPublicationEntry.bind(archiveApi)
+      : async (input: { entryPath: string }) => ({
+          status: 'failed' as const,
+          entryPath: input.entryPath,
+          errorMessage: 'archive api unavailable'
+        })),
+    [archiveApi]
+  )
   const listApprovedDraftSendDestinations = useMemo(
     () => (typeof archiveApi.listApprovedDraftSendDestinations === 'function'
       ? archiveApi.listApprovedDraftSendDestinations.bind(archiveApi)
@@ -1720,6 +1730,17 @@ export function MemoryWorkspacePage(props: {
     }
   }
 
+  const handleOpenApprovedDraftPublication = async (turnId: string) => {
+    const latestPublication = approvedDraftPublicationsByTurnId[turnId]?.[0] ?? null
+    if (!latestPublication) {
+      return
+    }
+
+    await openApprovedDraftPublicationEntry({
+      entryPath: latestPublication.displayEntryPath
+    })
+  }
+
   const handleRetryApprovedDraftSend = async (turnId: string) => {
     const turn = turnsById.get(turnId)
     const review = draftReviewsByTurnId[turnId]
@@ -1975,6 +1996,9 @@ export function MemoryWorkspacePage(props: {
         }}
         onPublishApprovedDraft={(turnId) => {
           void handlePublishApprovedDraft(turnId)
+        }}
+        onOpenApprovedDraftPublication={(turnId) => {
+          void handleOpenApprovedDraftPublication(turnId)
         }}
         onSendApprovedDraft={(turnId) => {
           void handleSendApprovedDraft(turnId)

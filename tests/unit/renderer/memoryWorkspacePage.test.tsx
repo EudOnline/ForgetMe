@@ -850,6 +850,8 @@ describe('MemoryWorkspacePage', () => {
         publicArtifactPath: '/tmp/new-approved-draft-publications/approved-draft-publication-publication-1/publication.json',
         publicArtifactFileName: 'publication.json',
         publicArtifactSha256: 'hash-publication-1',
+        displayEntryPath: '/tmp/new-approved-draft-publications/approved-draft-publication-publication-1/index.html',
+        displayEntryFileName: 'index.html',
         publishedAt: '2026-03-16T09:30:00.000Z'
       }]
 
@@ -865,8 +867,15 @@ describe('MemoryWorkspacePage', () => {
         publicArtifactPath: '/tmp/new-approved-draft-publications/approved-draft-publication-publication-1/publication.json',
         publicArtifactFileName: 'publication.json',
         publicArtifactSha256: 'hash-publication-1',
+        displayEntryPath: '/tmp/new-approved-draft-publications/approved-draft-publication-publication-1/index.html',
+        displayEntryFileName: 'index.html',
         publishedAt: '2026-03-16T09:30:00.000Z'
       }
+    })
+    const openApprovedDraftPublicationEntry = vi.fn().mockResolvedValue({
+      status: 'opened',
+      entryPath: '/tmp/new-approved-draft-publications/approved-draft-publication-publication-1/index.html',
+      errorMessage: null
     })
 
     stubArchiveWindow({
@@ -879,7 +888,8 @@ describe('MemoryWorkspacePage', () => {
       getPersonaDraftReviewByTurn: vi.fn().mockResolvedValue(approvedReview),
       listApprovedPersonaDraftPublications,
       selectApprovedDraftPublicationDestination,
-      publishApprovedPersonaDraft
+      publishApprovedPersonaDraft,
+      openApprovedDraftPublicationEntry
     })
 
     render(<MemoryWorkspacePage scope={{ kind: 'person', canonicalPersonId: 'cp-1' }} />)
@@ -909,9 +919,19 @@ describe('MemoryWorkspacePage', () => {
     })
 
     expect(await screen.findByText('Published publication.json')).toBeInTheDocument()
+    expect(screen.getByText('Entry page: index.html')).toBeInTheDocument()
+    expect(screen.getByText('Data payload: publication.json')).toBeInTheDocument()
     expect(screen.getByText('2026-03-16T09:30:00.000Z')).toBeInTheDocument()
     expect(screen.getByText('SHA256: hash-publication-1')).toBeInTheDocument()
     expect(screen.getByText('Publication history')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open share page' }))
+
+    await waitFor(() => {
+      expect(openApprovedDraftPublicationEntry).toHaveBeenCalledWith({
+        entryPath: '/tmp/new-approved-draft-publications/approved-draft-publication-publication-1/index.html'
+      })
+    })
   })
 
   it('sends an approved draft through the provider boundary and renders the latest send audit detail', async () => {
