@@ -226,8 +226,30 @@ npx playwright test tests/e2e/review-workbench-single-item-flow.spec.ts tests/e2
 npm run build
 ```
 
+### Phase Ten Approved-Draft Outbound & Share
+
+Phase 10 now carries the approved-draft outbound stack through local publication and a human-readable share surface:
+
+- reviewed persona drafts can be approved, exported as internal handoff JSON, sent through provider-boundary destinations, retried manually or automatically, and recovered after app restart
+- approved drafts can also be published as local share packages that contain:
+  - `publication.json`
+  - `manifest.json`
+  - `index.html`
+  - `styles.css`
+- publication history is journal-backed and visible in `Memory Workspace`, replay, and search
+- replay stays non-mutating, but already-generated share pages can still be opened as a read-only action
+- opening a share page now validates the package boundary before calling the OS open handler
+
+### Phase Ten Verification
+
+```bash
+npm run test:unit -- tests/unit/shared/phaseTenApprovedDraftPublicationContracts.test.ts tests/unit/main/approvedDraftPublicationHtmlService.test.ts tests/unit/main/approvedDraftPublicationService.test.ts tests/unit/main/memoryWorkspaceIpc.test.ts tests/unit/renderer/archiveApi.test.ts tests/unit/renderer/memoryWorkspacePage.test.tsx tests/unit/renderer/memoryWorkspaceReplayPage.test.tsx
+npm run test:e2e -- tests/e2e/memory-workspace-approved-draft-publication-flow.spec.ts
+npm run build
+```
+
 ### Current Operational Note
 
 The local-first runner, shared review queue, formal approved profile read model, and phase-five single-item review workbench are now wired end-to-end.
-Phase 6 is now complete: it includes encrypted preservation exports, restore verification and repeatable recovery drills, provider-boundary audit logging, the people-centric review inbox, conflict-group compare / continuous navigation, safe batch approval, and searchable / replayable decision history.
-See `docs/plans/2026-03-11-phase-six-preservation-operator-efficiency-design.md` for the agreed roadmap.
+The archive now also carries the approved-draft workflow through review, internal handoff, provider-boundary send, retry recovery, local publication/share packaging, and human-readable share-page replay.
+The latest approved-draft share slice is documented in `docs/plans/2026-03-19-phase-ten-l-approved-draft-human-readable-share-package-implementation-plan.md`.
