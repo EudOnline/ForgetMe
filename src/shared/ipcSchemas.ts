@@ -165,8 +165,20 @@ export const revokeApprovedPersonaDraftHostedShareLinkInputSchema = z.object({
   shareLinkId: z.string().min(1)
 })
 
+const hostedShareProtocolSchema = z.string().url().refine(
+  (value) => {
+    try {
+      const parsedUrl = new URL(value)
+      return parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:'
+    } catch {
+      return false
+    }
+  },
+  { message: 'shareUrl must use http or https protocol' }
+)
+
 export const openApprovedDraftHostedShareLinkInputSchema = z.object({
-  shareUrl: z.string().url().refine((value) => /^https?:\/\//.test(value))
+  shareUrl: hostedShareProtocolSchema
 })
 
 const absolutePathLikeSchema = z.string().min(1).refine(

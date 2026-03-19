@@ -773,13 +773,23 @@ export type OpenApprovedDraftPublicationEntryResult = {
   errorMessage: string | null
 }
 
-export type ApprovedDraftHostedShareHostStatus = {
-  availability: 'configured' | 'unconfigured'
-  hostKind: 'configured_remote_host' | null
-  hostLabel: string | null
+type ConfiguredApprovedDraftHostedShareHostStatus = {
+  availability: 'configured'
+  hostKind: 'configured_remote_host'
+  hostLabel: string
 }
 
-export type ApprovedPersonaDraftHostedShareLinkRecord = {
+type UnconfiguredApprovedDraftHostedShareHostStatus = {
+  availability: 'unconfigured'
+  hostKind: null
+  hostLabel: null
+}
+
+export type ApprovedDraftHostedShareHostStatus =
+  | ConfiguredApprovedDraftHostedShareHostStatus
+  | UnconfiguredApprovedDraftHostedShareHostStatus
+
+type ApprovedPersonaDraftHostedShareLinkRecordBase = {
   shareLinkId: string
   publicationId: string
   draftReviewId: string
@@ -789,10 +799,22 @@ export type ApprovedPersonaDraftHostedShareLinkRecord = {
   remoteShareId: string
   shareUrl: string
   publicArtifactSha256: string
-  status: 'active' | 'revoked'
   createdAt: string
-  revokedAt: string | null
 }
+
+type ActiveApprovedPersonaDraftHostedShareLinkRecord = ApprovedPersonaDraftHostedShareLinkRecordBase & {
+  status: 'active'
+  revokedAt: null
+}
+
+type RevokedApprovedPersonaDraftHostedShareLinkRecord = ApprovedPersonaDraftHostedShareLinkRecordBase & {
+  status: 'revoked'
+  revokedAt: string
+}
+
+export type ApprovedPersonaDraftHostedShareLinkRecord =
+  | ActiveApprovedPersonaDraftHostedShareLinkRecord
+  | RevokedApprovedPersonaDraftHostedShareLinkRecord
 
 export type ListApprovedPersonaDraftHostedShareLinksInput = {
   draftReviewId: string

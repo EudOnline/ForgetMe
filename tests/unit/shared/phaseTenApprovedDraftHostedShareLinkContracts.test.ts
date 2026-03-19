@@ -25,6 +25,13 @@ describe('phase-ten approved draft hosted share link contracts', () => {
       hostLabel: 'share.example.test'
     }
 
+    // @ts-expect-error configured status should always include host metadata
+    const invalidHostStatus: ApprovedDraftHostedShareHostStatus = {
+      availability: 'configured',
+      hostKind: null,
+      hostLabel: null
+    }
+
     const record: ApprovedPersonaDraftHostedShareLinkRecord = {
       shareLinkId: 'share-link-1',
       publicationId: 'publication-1',
@@ -38,6 +45,13 @@ describe('phase-ten approved draft hosted share link contracts', () => {
       status: 'active',
       createdAt: '2026-03-18T10:00:00.000Z',
       revokedAt: null
+    }
+
+    // @ts-expect-error active links must keep revokedAt null
+    const invalidActiveRecord: ApprovedPersonaDraftHostedShareLinkRecord = {
+      ...record,
+      status: 'active',
+      revokedAt: '2026-03-18T11:00:00.000Z'
     }
 
     const createInput: CreateApprovedPersonaDraftHostedShareLinkInput = {
@@ -112,5 +126,26 @@ describe('phase-ten approved draft hosted share link contracts', () => {
     expectTypeOf<ArchiveApi['openApprovedDraftHostedShareLink']>().toEqualTypeOf<
       (input: OpenApprovedDraftHostedShareLinkInput) => Promise<OpenApprovedDraftHostedShareLinkResult>
     >()
+  })
+
+  it('ensures the open link schema enforces http(s) protocols via URL parsing', () => {
+    const successResult = openApprovedDraftHostedShareLinkInputSchema.parse({
+      shareUrl: 'HTTPS://share.example.test/s/abc123'
+    })
+
+    expect(successResult.shareUrl).toBe('HTTPS://share.example.test/s/abc123')
+
+    const failure = openApprovedDraftHostedShareLinkInputSchema.safeParse({
+      shareUrl: 'ftp://share.example.test/s/abc123'
+    })
+
+    expect(failure.success).toBe(false)
+    expect(failure.error?.errors).toEqual([
+      {
+        code: 'custom',
+        message: 'shareUrl must use http or https protocol',
+        path: ['shareUrl']
+      }
+    ])
   })
 })
