@@ -1034,9 +1034,9 @@ describe('MemoryWorkspacePage replay', () => {
         }
       ]),
       openApprovedDraftPublicationEntry: vi.fn().mockResolvedValue({
-        status: 'opened',
+        status: 'failed',
         entryPath: '/tmp/approved-draft-publication-publication-replay-1/index.html',
-        errorMessage: null
+        errorMessage: 'Publication entry file not found: /tmp/approved-draft-publication-publication-replay-1/index.html'
       }),
       getPersonaDraftReviewByTurn: vi.fn().mockResolvedValue({
         draftReviewId: 'review-approved-1',
@@ -1072,6 +1072,7 @@ describe('MemoryWorkspacePage replay', () => {
     expect(screen.getByText('Entry page: index.html')).toBeInTheDocument()
     expect(screen.getByText('Data payload: publication.json')).toBeInTheDocument()
     expect(await screen.findByText('SHA256: hash-publication-replay-1')).toBeInTheDocument()
+    expect(screen.getByText('index.html · 2026-03-16T09:30:00.000Z')).toBeInTheDocument()
     expect(screen.getByText('Provider Boundary Send')).toBeInTheDocument()
     expect(await screen.findByText('response recorded')).toBeInTheDocument()
     expect(await screen.findByText('Attempt: manual retry')).toBeInTheDocument()
@@ -1080,6 +1081,12 @@ describe('MemoryWorkspacePage replay', () => {
     expect(screen.getByRole('button', { name: 'Open share page' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Choose publish destination' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Publish approved draft' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Open share page' }))
+    expect(
+      await screen.findByText(
+        'Unable to open share page: Publication entry file not found: /tmp/approved-draft-publication-publication-replay-1/index.html'
+      )
+    ).toBeInTheDocument()
     expect(screen.getByLabelText('Draft review body')).toHaveValue('可审阅草稿：先把关键记录整理进归档，再补齐细节。')
     expect(screen.getByLabelText('Draft review body')).toBeDisabled()
     expect(screen.getByLabelText('Draft review notes')).toHaveValue('Approved for internal review.')

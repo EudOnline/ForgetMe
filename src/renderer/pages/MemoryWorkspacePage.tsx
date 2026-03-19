@@ -55,6 +55,11 @@ type DraftReviewEditorState = {
   reviewNotes: string
 }
 
+type ApprovedDraftPublicationOpenStatus = {
+  kind: 'success' | 'error'
+  message: string
+}
+
 function parsePositiveInteger(value: string | undefined, fallback: number) {
   const parsed = Number.parseInt(value ?? '', 10)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
@@ -628,6 +633,9 @@ export function MemoryWorkspacePage(props: {
   const [approvedDraftPublicationsByTurnId, setApprovedDraftPublicationsByTurnId] = useState<
     Record<string, ApprovedPersonaDraftPublicationRecord[]>
   >({})
+  const [approvedDraftPublicationOpenStatusByTurnId, setApprovedDraftPublicationOpenStatusByTurnId] = useState<
+    Record<string, ApprovedDraftPublicationOpenStatus | null>
+  >({})
   const [approvedDraftHandoffPendingByTurnId, setApprovedDraftHandoffPendingByTurnId] = useState<Record<string, boolean>>({})
   const [approvedDraftPublicationPendingByTurnId, setApprovedDraftPublicationPendingByTurnId] = useState<
     Record<string, boolean>
@@ -676,6 +684,10 @@ export function MemoryWorkspacePage(props: {
     setApprovedDraftPublicationsByTurnId((previousState) => ({
       ...previousState,
       [turnId]: publications
+    }))
+    setApprovedDraftPublicationOpenStatusByTurnId((previousState) => ({
+      ...previousState,
+      [turnId]: null
     }))
   }
 
@@ -949,6 +961,7 @@ export function MemoryWorkspacePage(props: {
     setApprovedDraftSendDestinationId(readStoredApprovedDraftSendDestinationId())
     setApprovedDraftHandoffsByTurnId({})
     setApprovedDraftPublicationsByTurnId({})
+    setApprovedDraftPublicationOpenStatusByTurnId({})
     setApprovedDraftHandoffPendingByTurnId({})
     setApprovedDraftPublicationPendingByTurnId({})
     setApprovedDraftProviderSendsByTurnId({})
@@ -1731,14 +1744,45 @@ export function MemoryWorkspacePage(props: {
   }
 
   const handleOpenApprovedDraftPublication = async (turnId: string) => {
-    const latestPublication = approvedDraftPublicationsByTurnId[turnId]?.[0] ?? null
+    const latestPublication = [...(approvedDraftPublicationsByTurnId[turnId] ?? [])]
+      .sort((left, right) => right.publishedAt.localeCompare(left.publishedAt))[0] ?? null
     if (!latestPublication) {
       return
     }
 
-    await openApprovedDraftPublicationEntry({
-      entryPath: latestPublication.displayEntryPath
-    })
+    setApprovedDraftPublicationOpenStatusByTurnId((previousState) => ({
+      ...previousState,
+      [turnId]: null
+    }))
+
+    try {
+      const result = await openApprovedDraftPublicationEntry({
+        entryPath: latestPublication.displayEntryPath
+      })
+      const nextStatus: ApprovedDraftPublicationOpenStatus = result.status === 'opened'
+        ? {
+            kind: 'success',
+            message: 'Share page opened.'
+          }
+        : {
+            kind: 'error',
+            message: `Unable to open share page: ${result.errorMessage ?? 'Unknown error.'}`
+          }
+
+      setApprovedDraftPublicationOpenStatusByTurnId((previousState) => ({
+        ...previousState,
+        [turnId]: nextStatus
+      }))
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      setApprovedDraftPublicationOpenStatusByTurnId((previousState) => ({
+        ...previousState,
+        [turnId]: {
+          kind: 'error',
+          message: `Unable to open share page: ${errorMessage}`
+        }
+      }))
+    }
   }
 
   const handleRetryApprovedDraftSend = async (turnId: string) => {
@@ -1960,6 +2004,7 @@ export function MemoryWorkspacePage(props: {
         approvedDraftPublicationDestination={approvedDraftPublicationDestination}
         approvedDraftSendDestinations={approvedDraftSendDestinations}
         approvedDraftSendDestinationId={approvedDraftSendDestinationId}
+        approvedDraftPublicationOpenStatusByTurnId={approvedDraftPublicationOpenStatusByTurnId}
         approvedDraftHandoffsByTurnId={approvedDraftHandoffsByTurnId}
         approvedDraftPublicationsByTurnId={approvedDraftPublicationsByTurnId}
         approvedDraftHandoffPendingByTurnId={approvedDraftHandoffPendingByTurnId}

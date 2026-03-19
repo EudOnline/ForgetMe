@@ -924,6 +924,7 @@ describe('MemoryWorkspacePage', () => {
     expect(screen.getByText('2026-03-16T09:30:00.000Z')).toBeInTheDocument()
     expect(screen.getByText('SHA256: hash-publication-1')).toBeInTheDocument()
     expect(screen.getByText('Publication history')).toBeInTheDocument()
+    expect(screen.getByText('index.html · 2026-03-16T09:30:00.000Z')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Open share page' }))
 
@@ -932,6 +933,7 @@ describe('MemoryWorkspacePage', () => {
         entryPath: '/tmp/new-approved-draft-publications/approved-draft-publication-publication-1/index.html'
       })
     })
+    expect(await screen.findByText('Share page opened.')).toBeInTheDocument()
   })
 
   it('sends an approved draft through the provider boundary and renders the latest send audit detail', async () => {

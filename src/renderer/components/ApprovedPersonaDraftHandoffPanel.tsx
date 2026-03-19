@@ -44,6 +44,10 @@ function backgroundRetryStatusLabel(input: {
 export function ApprovedPersonaDraftHandoffPanel(props: {
   destination: string | null
   publicationDestination: string | null
+  publicationOpenStatus?: {
+    kind: 'success' | 'error'
+    message: string
+  } | null
   sendDestinations: ApprovedDraftSendDestination[]
   selectedSendDestinationId: string | null
   handoffs: ApprovedPersonaDraftHandoffRecord[]
@@ -60,7 +64,8 @@ export function ApprovedPersonaDraftHandoffPanel(props: {
   onRetryApprovedDraftSend?: () => void
 }) {
   const latestHandoff = props.handoffs[0] ?? null
-  const latestPublication = props.publications[0] ?? null
+  const publicationHistory = [...props.publications].sort((left, right) => right.publishedAt.localeCompare(left.publishedAt))
+  const latestPublication = publicationHistory[0] ?? null
   const latestProviderSend = props.providerSends[0] ?? null
   const latestProviderEvent = latestProviderSend?.events[latestProviderSend.events.length - 1] ?? null
   const latestAttemptLabel = latestProviderSend ? attemptLabel(latestProviderSend.attemptKind) : 'initial send'
@@ -134,12 +139,17 @@ export function ApprovedPersonaDraftHandoffPanel(props: {
                 Open share page
               </button>
             ) : null}
+            {props.publicationOpenStatus ? (
+              <p role={props.publicationOpenStatus.kind === 'error' ? 'alert' : 'status'}>
+                {props.publicationOpenStatus.message}
+              </p>
+            ) : null}
             <section aria-label="Publication history">
               <h5>Publication history</h5>
               <ul>
-                {props.publications.map((publication) => (
+                {publicationHistory.map((publication) => (
                   <li key={publication.journalId}>
-                    <p>{publication.displayEntryFileName} · {publication.publicationKind}</p>
+                    <p>{publication.displayEntryFileName} · {publication.publishedAt}</p>
                   </li>
                 ))}
               </ul>

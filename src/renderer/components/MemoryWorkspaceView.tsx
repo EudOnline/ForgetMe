@@ -382,6 +382,10 @@ export function MemoryWorkspaceView(props: {
   approvedDraftPublicationDestination?: string | null
   approvedDraftSendDestinations?: ApprovedDraftSendDestination[]
   approvedDraftSendDestinationId?: string | null
+  approvedDraftPublicationOpenStatusByTurnId?: Record<string, {
+    kind: 'success' | 'error'
+    message: string
+  } | null>
   approvedDraftHandoffsByTurnId?: Record<string, ApprovedPersonaDraftHandoffRecord[]>
   approvedDraftPublicationsByTurnId?: Record<string, ApprovedPersonaDraftPublicationRecord[]>
   approvedDraftHandoffPendingByTurnId?: Record<string, boolean>
@@ -553,6 +557,7 @@ export function MemoryWorkspaceView(props: {
                 <ApprovedPersonaDraftHandoffPanel
                   destination={props.approvedDraftHandoffDestination ?? null}
                   publicationDestination={props.approvedDraftPublicationDestination ?? null}
+                  publicationOpenStatus={props.approvedDraftPublicationOpenStatusByTurnId?.[turn.turnId] ?? null}
                   sendDestinations={props.approvedDraftSendDestinations ?? []}
                   selectedSendDestinationId={props.approvedDraftSendDestinationId ?? null}
                   handoffs={props.approvedDraftHandoffsByTurnId?.[turn.turnId] ?? []}
