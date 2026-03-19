@@ -67,6 +67,8 @@ test('memory workspace approved draft publication writes a share package and sho
   await sandboxTurn.getByRole('button', { name: 'Publish approved draft' }).click()
 
   await expect(sandboxTurn.getByText('Published publication.json')).toBeVisible()
+  await expect(sandboxTurn.getByText('Entry page: index.html')).toBeVisible()
+  await expect(sandboxTurn.getByText('Data payload: publication.json')).toBeVisible()
   await expect(sandboxTurn.getByText('Publication history')).toBeVisible()
 
   await expect.poll(() => fs.readdirSync(publicationDir).find((entry) => entry.startsWith('approved-draft-publication-')) ?? null).not.toBeNull()
@@ -76,9 +78,13 @@ test('memory workspace approved draft publication writes a share package and sho
   const packageRoot = path.join(publicationDir, packageDirName!)
   const publicationPath = path.join(packageRoot, 'publication.json')
   const manifestPath = path.join(packageRoot, 'manifest.json')
+  const indexHtmlPath = path.join(packageRoot, 'index.html')
+  const stylesPath = path.join(packageRoot, 'styles.css')
 
   expect(fs.existsSync(publicationPath)).toBe(true)
   expect(fs.existsSync(manifestPath)).toBe(true)
+  expect(fs.existsSync(indexHtmlPath)).toBe(true)
+  expect(fs.existsSync(stylesPath)).toBe(true)
 
   const publicationPayload = JSON.parse(fs.readFileSync(publicationPath, 'utf8'))
   expect(publicationPayload.formatVersion).toBe('phase10k1')
@@ -86,9 +92,16 @@ test('memory workspace approved draft publication writes a share package and sho
   expect(publicationPayload.approvedDraft).toContain('归档')
   expect(publicationPayload).not.toHaveProperty('reviewNotes')
 
+  const indexHtml = fs.readFileSync(indexHtmlPath, 'utf8')
+  expect(indexHtml).toContain(publicationPayload.question)
+  expect(indexHtml).toContain(publicationPayload.approvedDraft)
+  expect(indexHtml).not.toContain('Approved for publication share package.')
+
   const manifestPayload = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
   expect(manifestPayload.sourceArtifact).toBe('approved_persona_draft_handoff')
   expect(manifestPayload.publicArtifactFileName).toBe('publication.json')
+  expect(manifestPayload.displayEntryFileName).toBe('index.html')
+  expect(manifestPayload.displayStylesFileName).toBe('styles.css')
 
   await electronApp.close()
 })
