@@ -211,4 +211,70 @@ describe('archive search', () => {
     }))
     db.close()
   })
+
+  it('finds hosted share link creation by share url and revoke by decision label', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-hosted-share-search-'))
+    const appPaths = ensureAppPaths(root)
+    const db = openDatabase(path.join(appPaths.sqliteDir, 'archive.sqlite'))
+    runMigrations(db)
+
+    appendDecisionJournal(db, {
+      decisionType: 'create_approved_persona_draft_share_link',
+      targetType: 'persona_draft_review',
+      targetId: 'review-1',
+      operationPayload: {
+        shareLinkId: 'share-1',
+        draftReviewId: 'review-1',
+        publicationId: 'pub-1',
+        sourceTurnId: 'turn-1',
+        hostKind: 'configured_remote_host',
+        hostLabel: 'https://host.example.com',
+        requestHash: 'hash-1',
+        remoteShareId: 'remote-1',
+        shareUrl: 'https://host.example.com/share/1'
+      },
+      undoPayload: {},
+      actor: 'local-user'
+    })
+
+    appendDecisionJournal(db, {
+      decisionType: 'revoke_approved_persona_draft_share_link',
+      targetType: 'persona_draft_review',
+      targetId: 'review-1',
+      operationPayload: {
+        shareLinkId: 'share-1',
+        draftReviewId: 'review-1',
+        publicationId: 'pub-1',
+        sourceTurnId: 'turn-1',
+        hostKind: 'configured_remote_host',
+        hostLabel: 'https://host.example.com',
+        requestHash: 'hash-2',
+        remoteShareId: 'remote-1',
+        shareUrl: 'https://host.example.com/share/1'
+      },
+      undoPayload: {},
+      actor: 'local-user'
+    })
+
+    const createdResults = await searchDecisionJournal({ appPaths, query: 'https://host.example.com/share/1' })
+    const revokedResults = await searchDecisionJournal({ appPaths, query: 'Hosted share link revoked' })
+
+    expect(createdResults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          decisionType: 'create_approved_persona_draft_share_link',
+          replaySummary: expect.stringContaining('Hosted share link created')
+        })
+      ])
+    )
+    expect(revokedResults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          decisionType: 'revoke_approved_persona_draft_share_link',
+          replaySummary: expect.stringContaining('Hosted share link revoked')
+        })
+      ])
+    )
+    db.close()
+  })
 })

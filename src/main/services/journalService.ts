@@ -107,11 +107,31 @@ function formatDecisionLabel(entry: Pick<DecisionJournalEntry, 'decisionType' | 
       : 'Approved draft send failed'
   }
 
+  if (entry.decisionType === 'create_approved_persona_draft_share_link') {
+    return 'Hosted share link created'
+  }
+
+  if (entry.decisionType === 'revoke_approved_persona_draft_share_link') {
+    return 'Hosted share link revoked'
+  }
+
   return entry.decisionType
 }
 
 function formatTargetLabel(entry: Pick<DecisionJournalEntry, 'targetType' | 'operationPayload'>) {
   if (entry.targetType === 'persona_draft_review') {
+    if (
+      entry.operationPayload.shareUrl
+      && (entry.operationPayload as Record<string, unknown>).shareUrl
+      && (entry.operationPayload as Record<string, unknown>).sourceTurnId
+    ) {
+      const sourceTurnId = readString(entry.operationPayload.sourceTurnId)
+      const shareUrl = readString(entry.operationPayload.shareUrl)
+      const hostLabel = readString(entry.operationPayload.hostLabel)
+      const summaryParts = ['Persona draft review', sourceTurnId, hostLabel ?? shareUrl].filter((value): value is string => Boolean(value))
+      return summaryParts.join(' · ')
+    }
+
     const sourceTurnId = readString(entry.operationPayload.sourceTurnId)
     const destinationLabel = readString(entry.operationPayload.destinationLabel)
     const provider = readString(entry.operationPayload.provider)

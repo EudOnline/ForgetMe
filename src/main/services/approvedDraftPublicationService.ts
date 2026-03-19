@@ -252,3 +252,42 @@ export function listApprovedPersonaDraftPublications(
     .map(mapPublicationRecord)
     .filter((record): record is ApprovedPersonaDraftPublicationRecord => record !== null)
 }
+
+export function readApprovedDraftPublicationPackage(record: ApprovedPersonaDraftPublicationRecord) {
+  if (
+    !fs.existsSync(record.publicArtifactPath)
+    || !fs.existsSync(record.manifestPath)
+    || !fs.existsSync(record.displayEntryPath)
+  ) {
+    return null
+  }
+
+  const displayStylesPath = path.join(path.dirname(record.displayEntryPath), DISPLAY_STYLES_FILE_NAME)
+  if (!fs.existsSync(displayStylesPath)) {
+    return null
+  }
+
+  const manifestText = fs.readFileSync(record.manifestPath, 'utf8')
+  const publicationText = fs.readFileSync(record.publicArtifactPath, 'utf8')
+  const manifest = JSON.parse(manifestText) as Record<string, unknown>
+  const publication = JSON.parse(publicationText) as Record<string, unknown>
+  const displayEntryHtml = fs.readFileSync(record.displayEntryPath, 'utf8')
+  const displayStylesCss = fs.readFileSync(displayStylesPath, 'utf8')
+  const publicArtifactSha256 = sha256Text(publicationText)
+
+  if (publicArtifactSha256 !== record.publicArtifactSha256) {
+    return null
+  }
+
+  if (typeof manifest === 'object' && manifest !== null && (manifest as { publicArtifactSha256?: string }).publicArtifactSha256 !== record.publicArtifactSha256) {
+    return null
+  }
+
+  return {
+    manifest,
+    publication,
+    displayEntryHtml,
+    displayStylesCss,
+    publicArtifactSha256
+  }
+}
