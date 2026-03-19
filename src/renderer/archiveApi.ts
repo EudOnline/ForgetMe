@@ -96,10 +96,10 @@ const fallbackApi: ArchiveApi = {
     hostKind: null,
     hostLabel: null
   }),
-  listApprovedPersonaDraftHostedShareLinks: async () => [] as ApprovedPersonaDraftHostedShareLinkRecord[],
-  createApprovedPersonaDraftHostedShareLink: async () => null,
-  revokeApprovedPersonaDraftHostedShareLink: async () => null,
-  openApprovedDraftHostedShareLink: async (input: { shareUrl: string }) => ({
+  listApprovedPersonaDraftHostedShareLinks: async (_input: ListApprovedPersonaDraftHostedShareLinksInput) => [] as ApprovedPersonaDraftHostedShareLinkRecord[],
+  createApprovedPersonaDraftHostedShareLink: async (_input: CreateApprovedPersonaDraftHostedShareLinkInput) => null as CreateApprovedPersonaDraftHostedShareLinkResult | null,
+  revokeApprovedPersonaDraftHostedShareLink: async (_input: RevokeApprovedPersonaDraftHostedShareLinkInput) => null as RevokeApprovedPersonaDraftHostedShareLinkResult | null,
+  openApprovedDraftHostedShareLink: async (input: OpenApprovedDraftHostedShareLinkInput) => ({
     status: 'failed' as const,
     shareUrl: input.shareUrl,
     errorMessage: 'archive api unavailable'
