@@ -131,5 +131,12 @@ describe('phase-ten approved draft publication contracts', () => {
     })).toEqual({
       entryPath: '/tmp/persona-draft-publications/approved-draft-publication-publication-1/index.html'
     })
+
+    const uncPath = String.raw`\\server\share\approved-draft-publication-publication-1\index.html`
+    expect(openApprovedDraftPublicationEntryInputSchema.parse({
+      entryPath: uncPath
+    })).toEqual({
+      entryPath: uncPath
+    })
   })
 })

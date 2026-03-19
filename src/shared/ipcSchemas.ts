@@ -160,7 +160,7 @@ export const publishApprovedPersonaDraftInputSchema = approvedPersonaDraftReview
 })
 
 const absolutePathLikeSchema = z.string().min(1).refine(
-  (value) => /^(?:[A-Za-z]:[\\/]|\/)/.test(value),
+  (value) => /^(?:[A-Za-z]:[\\/]|\/|\\\\[^\\/]+[\\/][^\\/]+)/.test(value),
   { message: 'entryPath must be an absolute path' }
 )
 
