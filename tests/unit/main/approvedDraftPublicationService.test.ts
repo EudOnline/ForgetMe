@@ -67,9 +67,13 @@ describe('approvedDraftPublicationService', () => {
     expect(published?.packageRoot).toBe(path.join(destinationRoot, `approved-draft-publication-${published!.publicationId}`))
     expect(published?.publicArtifactPath).toBe(path.join(published!.packageRoot, 'publication.json'))
     expect(published?.manifestPath).toBe(path.join(published!.packageRoot, 'manifest.json'))
+    expect(published?.displayEntryPath).toBe(path.join(published!.packageRoot, 'index.html'))
+    expect(published?.displayEntryFileName).toBe('index.html')
     expect(published?.publicArtifactFileName).toBe('publication.json')
     expect(fs.existsSync(published!.publicArtifactPath)).toBe(true)
     expect(fs.existsSync(published!.manifestPath)).toBe(true)
+    expect(fs.existsSync(path.join(published!.packageRoot, 'index.html'))).toBe(true)
+    expect(fs.existsSync(path.join(published!.packageRoot, 'styles.css'))).toBe(true)
 
     const publicPayload = JSON.parse(fs.readFileSync(published!.publicArtifactPath, 'utf8'))
     expect(publicPayload).toMatchObject({
@@ -96,9 +100,20 @@ describe('approvedDraftPublicationService', () => {
       draftReviewId: approvedReview.draftReviewId,
       sourceTurnId: sandboxTurn.turnId,
       publicArtifactFileName: 'publication.json',
+      displayEntryFileName: 'index.html',
+      displayStylesFileName: 'styles.css',
       publicArtifactSha256,
       sourceArtifact: 'approved_persona_draft_handoff'
     })
+
+    const htmlPayload = fs.readFileSync(path.join(published!.packageRoot, 'index.html'), 'utf8')
+    expect(htmlPayload).toContain(`href="./styles.css"`)
+    expect(htmlPayload).toContain(`href="./publication.json"`)
+    expect(htmlPayload).toContain(sandboxTurn.question)
+    expect(htmlPayload).toContain('归档')
+    expect(htmlPayload).not.toContain('reviewNotes')
+    expect(htmlPayload).not.toContain('supportingExcerptIds')
+    expect(htmlPayload).not.toContain('trace')
 
     const journalEntries = listDecisionJournal(db, {
       decisionType: 'publish_approved_persona_draft',
@@ -113,7 +128,9 @@ describe('approvedDraftPublicationService', () => {
     expect(journalEntries[0]?.operationPayload).toMatchObject({
       publicationId: published!.publicationId,
       packageRoot: published!.packageRoot,
-      publicArtifactPath: published!.publicArtifactPath
+      publicArtifactPath: published!.publicArtifactPath,
+      displayEntryPath: published!.displayEntryPath,
+      displayEntryFileName: 'index.html'
     })
 
     db.close()
@@ -147,5 +164,9 @@ describe('approvedDraftPublicationService', () => {
     expect(history[0]?.publishedAt).toBe('2026-03-16T04:05:00.000Z')
     expect(history[1]?.publishedAt).toBe('2026-03-16T04:00:00.000Z')
     expect(history[0]?.journalId).not.toBe(history[1]?.journalId)
+    expect(history[0]?.displayEntryPath).toContain('/index.html')
+    expect(history[0]?.displayEntryFileName).toBe('index.html')
+    expect(history[1]?.displayEntryPath).toContain('/index.html')
+    expect(history[1]?.displayEntryFileName).toBe('index.html')
   })
 })

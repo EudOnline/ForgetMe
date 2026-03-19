@@ -10,11 +10,17 @@ import type {
 } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
 import { appendDecisionJournal, listDecisionJournal } from './journalService'
+import {
+  approvedDraftPublicationStylesheet,
+  buildApprovedDraftPublicationHtmlDocument
+} from './approvedDraftPublicationHtmlService'
 import { buildApprovedPersonaDraftHandoffArtifact } from './personaDraftHandoffService'
 
 const LOCAL_ACTOR = 'local-user'
 const PUBLIC_ARTIFACT_FILE_NAME = 'publication.json'
 const MANIFEST_FILE_NAME = 'manifest.json'
+const DISPLAY_ENTRY_FILE_NAME = 'index.html' as const
+const DISPLAY_STYLES_FILE_NAME = 'styles.css' as const
 const EXCLUDED_FIELDS = ['reviewNotes', 'supportingExcerptIds', 'trace'] as const
 
 function sha256Text(value: string) {
@@ -54,6 +60,12 @@ function mapPublicationRecord(entry: ReturnType<typeof listDecisionJournal>[numb
   const publicArtifactSha256 = typeof entry.operationPayload.publicArtifactSha256 === 'string'
     ? entry.operationPayload.publicArtifactSha256
     : null
+  const displayEntryPath = typeof entry.operationPayload.displayEntryPath === 'string'
+    ? entry.operationPayload.displayEntryPath
+    : (packageRoot ? path.join(packageRoot, DISPLAY_ENTRY_FILE_NAME) : null)
+  const displayEntryFileName = entry.operationPayload.displayEntryFileName === DISPLAY_ENTRY_FILE_NAME
+    ? DISPLAY_ENTRY_FILE_NAME
+    : DISPLAY_ENTRY_FILE_NAME
   const publishedAt = typeof entry.operationPayload.publishedAt === 'string'
     ? entry.operationPayload.publishedAt
     : null
@@ -67,6 +79,8 @@ function mapPublicationRecord(entry: ReturnType<typeof listDecisionJournal>[numb
     || !publicArtifactPath
     || !publicArtifactFileName
     || !publicArtifactSha256
+    || !displayEntryPath
+    || !displayEntryFileName
     || !publishedAt
   ) {
     return null
@@ -84,6 +98,8 @@ function mapPublicationRecord(entry: ReturnType<typeof listDecisionJournal>[numb
     publicArtifactPath,
     publicArtifactFileName,
     publicArtifactSha256,
+    displayEntryPath,
+    displayEntryFileName,
     publishedAt
   }
 }
@@ -129,6 +145,8 @@ export function buildApprovedPersonaDraftPublicationArtifact(
       workflowKind: handoffArtifact.workflowKind,
       sourceArtifact: 'approved_persona_draft_handoff',
       publicArtifactFileName: PUBLIC_ARTIFACT_FILE_NAME,
+      displayEntryFileName: DISPLAY_ENTRY_FILE_NAME,
+      displayStylesFileName: DISPLAY_STYLES_FILE_NAME,
       excludedFields: [...EXCLUDED_FIELDS],
       shareEnvelope: {
         requestShape: 'local_share_persona_draft_publication',
@@ -159,7 +177,16 @@ export function publishApprovedPersonaDraftToDirectory(
   )
   const publicArtifactPath = path.join(packageRoot, PUBLIC_ARTIFACT_FILE_NAME)
   const manifestPath = path.join(packageRoot, MANIFEST_FILE_NAME)
+  const displayEntryPath = path.join(packageRoot, DISPLAY_ENTRY_FILE_NAME)
+  const displayStylesPath = path.join(packageRoot, DISPLAY_STYLES_FILE_NAME)
   const publicPayload = `${JSON.stringify(publication.artifact, null, 2)}\n`
+  const displayEntryPayload = buildApprovedDraftPublicationHtmlDocument({
+    title: publication.artifact.title,
+    question: publication.artifact.question,
+    approvedDraft: publication.artifact.approvedDraft,
+    publishedAt
+  })
+  const displayStylesPayload = approvedDraftPublicationStylesheet()
   const publicArtifactSha256 = sha256Text(publicPayload)
   const manifestPayload = `${JSON.stringify({
     ...publication.manifest,
@@ -169,6 +196,8 @@ export function publishApprovedPersonaDraftToDirectory(
   fs.mkdirSync(packageRoot, { recursive: true })
   fs.writeFileSync(publicArtifactPath, publicPayload, 'utf8')
   fs.writeFileSync(manifestPath, manifestPayload, 'utf8')
+  fs.writeFileSync(displayEntryPath, displayEntryPayload, 'utf8')
+  fs.writeFileSync(displayStylesPath, displayStylesPayload, 'utf8')
 
   const journal = appendDecisionJournal(db, {
     decisionType: 'publish_approved_persona_draft',
@@ -184,6 +213,8 @@ export function publishApprovedPersonaDraftToDirectory(
       publicArtifactPath,
       publicArtifactFileName: PUBLIC_ARTIFACT_FILE_NAME,
       publicArtifactSha256,
+      displayEntryPath,
+      displayEntryFileName: DISPLAY_ENTRY_FILE_NAME,
       publishedAt,
       sourceArtifact: 'approved_persona_draft_handoff'
     },
@@ -203,6 +234,8 @@ export function publishApprovedPersonaDraftToDirectory(
     publicArtifactPath,
     publicArtifactFileName: PUBLIC_ARTIFACT_FILE_NAME,
     publicArtifactSha256,
+    displayEntryPath,
+    displayEntryFileName: DISPLAY_ENTRY_FILE_NAME,
     publishedAt
   } satisfies PublishApprovedPersonaDraftResult
 }
