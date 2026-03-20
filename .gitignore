@@ -6,3 +6,4 @@ coverage/
 .local-dev/
 playwright-report/
 test-results/
+*.tsbuildinfo
