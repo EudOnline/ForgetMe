@@ -93,6 +93,7 @@ test('memory workspace supports global, person, and group scoped asks', async ()
   await expect(page.getByRole('heading', { name: 'Memory Workspace · Alice Chen Group' })).toBeVisible()
   await expect(page.getByText('Timeline Windows')).toBeVisible()
   await expect(page.getByText('Summary')).toBeVisible()
+  await expect(page.getByText('Conversation Context')).toHaveCount(0)
   await expect(page.getByLabel('Timeline Windows').getByText(/Trip planning/)).toBeVisible()
   await expect(page.getByLabel('Timeline Windows').getByRole('button', { name: 'chat-phase8a.json' })).toBeVisible()
 

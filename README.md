@@ -23,6 +23,7 @@ npm run dev
 ## Test Commands
 
 ```bash
+npm run test:typecheck
 npm run test:unit
 npm run test:e2e -- tests/e2e/import-batch.spec.ts
 npm run test:e2e -- tests/e2e/person-review-flow.spec.ts
@@ -250,8 +251,26 @@ npm run test:e2e -- tests/e2e/memory-workspace-approved-draft-hosted-share-link-
 npm run build
 ```
 
+### Memory Workspace Completion Baseline
+
+`Memory Workspace` now covers the archive-backed conversational slice end to end:
+
+- immutable saved-session replay for global, person, and group scopes
+- deterministic multi-turn follow-up continuity inside the same saved session via a visible `Conversation Context` card
+- quote-backed evidence reads, advice-mode responses, and persona-request guardrails with reviewed draft sandbox flows
+- approved-draft publication, provider-send, hosted-share creation, hosted-share revoke, and replay-safe share-surface access from the same workspace
+
+### Completion Verification
+
+```bash
+npm run test:typecheck
+npm run test:unit -- tests/unit/main/memoryWorkspaceService.test.ts tests/unit/main/memoryWorkspaceSessionService.test.ts tests/unit/main/memoryWorkspaceIpc.test.ts tests/unit/renderer/archiveApi.test.ts tests/unit/preload/index.test.ts tests/unit/renderer/memoryWorkspacePage.test.tsx
+npm run test:e2e -- tests/e2e/memory-workspace-flow.spec.ts
+npm run build
+```
+
 ### Current Operational Note
 
 The local-first runner, shared review queue, formal approved profile read model, and phase-five single-item review workbench are now wired end-to-end.
-The archive now also carries the approved-draft workflow through review, internal handoff, provider-boundary send, retry recovery, local publication/share packaging, hosted share-link creation and revocation, and human-readable share-page replay.
+The archive now also carries `Memory Workspace` through deterministic saved-session follow-up continuity, quote-backed evidence, advice responses, persona guardrails, reviewed draft sandbox flows, internal handoff, provider-boundary send, retry recovery, local publication/share packaging, hosted share-link creation and revocation, and human-readable share-page replay.
 The latest approved-draft share slice is documented in `docs/plans/2026-03-19-phase-ten-m-approved-draft-hosted-share-link-implementation-plan.md`.
