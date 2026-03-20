@@ -35,6 +35,21 @@ const CONFLICT_KEYWORDS = ['冲突', 'conflict', '不确定', 'ambigu', 'gap', '
 const RECENT_KEYWORDS = ['最近', 'timeline', '时间', '发生', 'recent', 'latest']
 const PRIORITY_KEYWORDS = ['优先', '关注', 'pending', 'review', 'pressure', '值得']
 const PERSONA_REQUEST_KEYWORDS = ['像她本人', '像他本人', '像本人', '模仿', '口吻', '语气', '会怎么说', '会怎么建议', 'voice', 'style']
+const FOLLOW_UP_PREFIXES = ['那', '为什么', '那为什么', '继续', '展开', '具体一点', '再说', 'why', 'continue', 'this', 'that']
+const FOLLOW_UP_KEYWORDS = ['继续', '展开说', '具体一点', '那为什么', 'why', 'continue']
+
+type MemoryWorkspacePriorTurnContext = {
+  turnId: string
+  question: string
+  answerSummary: string
+  workflowKind: MemoryWorkspaceResponse['workflowKind']
+  expressionMode: MemoryWorkspaceResponse['expressionMode']
+  createdAt: string
+}
+
+type AskMemoryWorkspaceInternalInput = AskMemoryWorkspaceInput & {
+  priorTurnContext?: MemoryWorkspacePriorTurnContext[]
+}
 
 function normalizeQuestion(question: string) {
   return question.trim().toLowerCase()
@@ -43,6 +58,12 @@ function normalizeQuestion(question: string) {
 function hasKeyword(question: string, keywords: string[]) {
   const normalizedQuestion = normalizeQuestion(question)
   return keywords.some((keyword) => normalizedQuestion.includes(keyword))
+}
+
+function isFollowUpQuestion(question: string) {
+  const normalizedQuestion = normalizeQuestion(question)
+  return FOLLOW_UP_PREFIXES.some((prefix) => normalizedQuestion.startsWith(prefix))
+    || FOLLOW_UP_KEYWORDS.some((keyword) => normalizedQuestion.includes(keyword))
 }
 
 function createCitation(
@@ -165,9 +186,14 @@ function toMemoryCitationFromEvidenceRef(
 }
 
 function pickAnswerCard(question: string, cards: MemoryWorkspaceContextCard[]) {
+  const conversationCard = cards.find((card) => card.title === 'Conversation Context')
   const conflictsCard = cards.find((card) => card.title === 'Conflicts & Gaps' || card.title === 'Review Pressure' || card.title === 'Ambiguity')
   const timelineCard = cards.find((card) => card.title === 'Timeline Windows')
   const summaryCard = cards.find((card) => card.title === 'Summary' || card.title === 'People Overview')
+
+  if (isFollowUpQuestion(question) && conversationCard) {
+    return conversationCard
+  }
 
   if (hasKeyword(question, PRIORITY_KEYWORDS) && conflictsCard) {
     return conflictsCard
@@ -182,6 +208,25 @@ function pickAnswerCard(question: string, cards: MemoryWorkspaceContextCard[]) {
   }
 
   return summaryCard ?? conflictsCard ?? timelineCard ?? cards[0] ?? null
+}
+
+function buildConversationContextCard(
+  question: string,
+  priorTurns: MemoryWorkspacePriorTurnContext[]
+) {
+  if (!isFollowUpQuestion(question) || priorTurns.length === 0) {
+    return null
+  }
+
+  const recentTurns = priorTurns.slice(-3).reverse()
+  return createCard({
+    cardId: 'conversation-context',
+    title: 'Conversation Context',
+    body: recentTurns
+      .map((turn) => `Previous question: ${turn.question} Previous answer: ${turn.answerSummary}`)
+      .join(' '),
+    displayType: 'derived_summary'
+  })
 }
 
 function collectResponseCitations(
@@ -574,10 +619,15 @@ function createResponse(input: {
   workflowKind?: MemoryWorkspaceWorkflowKind
   title: string
   contextCards: MemoryWorkspaceContextCard[]
+  priorTurnContext?: MemoryWorkspacePriorTurnContext[]
 }) {
   const expressionMode = input.expressionMode ?? 'grounded'
   const workflowKind = input.workflowKind ?? 'default'
-  const selectedCard = pickAnswerCard(input.question, input.contextCards)
+  const conversationContextCard = buildConversationContextCard(input.question, input.priorTurnContext ?? [])
+  const contextCards = conversationContextCard
+    ? [conversationContextCard, ...input.contextCards]
+    : input.contextCards
+  const selectedCard = pickAnswerCard(input.question, contextCards)
   const isSandboxWorkflow = workflowKind === 'persona_draft_sandbox'
   const isPersonaRequest = !isSandboxWorkflow && hasKeyword(input.question, PERSONA_REQUEST_KEYWORDS)
   const isQuoteRequest = !isSandboxWorkflow && !isPersonaRequest && isCommunicationEvidenceQuestion(input.question)
@@ -609,7 +659,7 @@ function createResponse(input: {
       answer = createPersonaDraftCoverageAnswer(input.question)
     }
   } else if (isPersonaRequest) {
-    answer = createPersonaFallbackAnswer(input.contextCards, input.question)
+    answer = createPersonaFallbackAnswer(contextCards, input.question)
   } else if (communicationEvidence) {
     answer = createCommunicationEvidenceAnswer({
       question: input.question,
@@ -635,18 +685,18 @@ function createResponse(input: {
     workflowKind,
     title: input.title,
     answer,
-    contextCards: input.contextCards,
+    contextCards,
     guardrail: buildGuardrail({
       question: input.question,
       answer,
-      contextCards: input.contextCards,
+      contextCards,
       workflowKind,
       personaDraft
     }),
     boundaryRedirect: isPersonaRequest
       ? createPersonaBoundaryRedirect({
           scope: input.scope,
-          contextCards: input.contextCards,
+          contextCards,
           hasCommunicationEvidence
         })
       : null,
@@ -769,7 +819,8 @@ export function buildPersonContextPack(
   canonicalPersonId: string,
   question: string,
   expressionMode?: MemoryWorkspaceExpressionMode,
-  workflowKind?: MemoryWorkspaceWorkflowKind
+  workflowKind?: MemoryWorkspaceWorkflowKind,
+  priorTurnContext?: MemoryWorkspacePriorTurnContext[]
 ): MemoryWorkspaceResponse | null {
   const dossier = getPersonDossier(db, { canonicalPersonId })
   if (!dossier) {
@@ -792,7 +843,8 @@ export function buildPersonContextPack(
     expressionMode,
     workflowKind,
     title: `Memory Workspace · ${dossier.identityCard.primaryDisplayName}`,
-    contextCards
+    contextCards,
+    priorTurnContext
   })
 }
 
@@ -887,7 +939,8 @@ export function buildGroupContextPack(
   anchorPersonId: string,
   question: string,
   expressionMode?: MemoryWorkspaceExpressionMode,
-  workflowKind?: MemoryWorkspaceWorkflowKind
+  workflowKind?: MemoryWorkspaceWorkflowKind,
+  priorTurnContext?: MemoryWorkspacePriorTurnContext[]
 ): MemoryWorkspaceResponse | null {
   const portrait = getGroupPortrait(db, { canonicalPersonId: anchorPersonId })
   if (!portrait) {
@@ -908,7 +961,8 @@ export function buildGroupContextPack(
     expressionMode,
     workflowKind,
     title: `Memory Workspace · ${anchorDisplayName} Group`,
-    contextCards
+    contextCards,
+    priorTurnContext
   })
 }
 
@@ -989,7 +1043,8 @@ export function buildGlobalContextPack(
   db: ArchiveDatabase,
   question: string,
   expressionMode?: MemoryWorkspaceExpressionMode,
-  workflowKind?: MemoryWorkspaceWorkflowKind
+  workflowKind?: MemoryWorkspaceWorkflowKind,
+  priorTurnContext?: MemoryWorkspacePriorTurnContext[]
 ): MemoryWorkspaceResponse {
   const contextCards = [
     buildGlobalPeopleCard(db),
@@ -1005,21 +1060,36 @@ export function buildGlobalContextPack(
     expressionMode,
     workflowKind,
     title: 'Memory Workspace · Global',
-    contextCards
+    contextCards,
+    priorTurnContext
   })
 }
 
 export function askMemoryWorkspace(
   db: ArchiveDatabase,
-  input: AskMemoryWorkspaceInput
+  input: AskMemoryWorkspaceInternalInput
 ): MemoryWorkspaceResponse | null {
   if (input.scope.kind === 'global') {
-    return buildGlobalContextPack(db, input.question, input.expressionMode, input.workflowKind)
+    return buildGlobalContextPack(db, input.question, input.expressionMode, input.workflowKind, input.priorTurnContext)
   }
 
   if (input.scope.kind === 'person') {
-    return buildPersonContextPack(db, input.scope.canonicalPersonId, input.question, input.expressionMode, input.workflowKind)
+    return buildPersonContextPack(
+      db,
+      input.scope.canonicalPersonId,
+      input.question,
+      input.expressionMode,
+      input.workflowKind,
+      input.priorTurnContext
+    )
   }
 
-  return buildGroupContextPack(db, input.scope.anchorPersonId, input.question, input.expressionMode, input.workflowKind)
+  return buildGroupContextPack(
+    db,
+    input.scope.anchorPersonId,
+    input.question,
+    input.expressionMode,
+    input.workflowKind,
+    input.priorTurnContext
+  )
 }

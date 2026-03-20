@@ -2117,6 +2117,10 @@ export function MemoryWorkspacePage(props: {
     }
   }
 
+  const sessionStatusText = selectedSessionId && turns.length > 0
+    ? `Continuing session · ${turns.length} previous turns`
+    : 'New session'
+
   return (
     <section>
       <form
@@ -2129,6 +2133,7 @@ export function MemoryWorkspacePage(props: {
           Ask memory workspace
           <input value={question} onChange={(event) => setQuestion(event.target.value)} />
         </label>
+        <p>{sessionStatusText}</p>
         <label>
           Response mode
           <select

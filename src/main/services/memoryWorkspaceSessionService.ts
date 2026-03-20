@@ -121,6 +121,25 @@ function loadSessionRow(db: ArchiveDatabase, sessionId: string) {
   ).get(sessionId) as SessionRow | undefined
 }
 
+function loadTurnRows(db: ArchiveDatabase, sessionId: string) {
+  return db.prepare(
+    `select
+      id,
+      session_id as sessionId,
+      ordinal,
+      question,
+      response_json as responseJson,
+      provider,
+      model,
+      prompt_hash as promptHash,
+      context_hash as contextHash,
+      created_at as createdAt
+     from memory_workspace_turns
+     where session_id = ?
+     order by ordinal asc, created_at asc`
+  ).all(sessionId) as TurnRow[]
+}
+
 export function listMemoryWorkspaceSessions(
   db: ArchiveDatabase,
   input: { scope?: MemoryWorkspaceScope } = {}
@@ -153,22 +172,7 @@ export function getMemoryWorkspaceSession(
     return null
   }
 
-  const turnRows = db.prepare(
-    `select
-      id,
-      session_id as sessionId,
-      ordinal,
-      question,
-      response_json as responseJson,
-      provider,
-      model,
-      prompt_hash as promptHash,
-      context_hash as contextHash,
-      created_at as createdAt
-     from memory_workspace_turns
-     where session_id = ?
-     order by ordinal asc, created_at asc`
-  ).all(input.sessionId) as TurnRow[]
+  const turnRows = loadTurnRows(db, input.sessionId)
 
   return {
     ...mapSessionRow(sessionRow),
@@ -189,11 +193,22 @@ export function askMemoryWorkspacePersisted(
     return null
   }
 
+  const priorTurns = existingSession
+    ? loadTurnRows(db, existingSession.id).map(mapTurnRow)
+    : []
   const response = askMemoryWorkspace(db, {
     scope: input.scope,
     question: input.question,
     expressionMode: input.expressionMode,
-    workflowKind: input.workflowKind
+    workflowKind: input.workflowKind,
+    priorTurnContext: priorTurns.slice(-3).map((turn) => ({
+      turnId: turn.turnId,
+      question: turn.question,
+      answerSummary: turn.response.answer.summary,
+      workflowKind: turn.response.workflowKind,
+      expressionMode: turn.response.expressionMode,
+      createdAt: turn.createdAt
+    }))
   })
 
   if (!response) {
@@ -209,7 +224,12 @@ export function askMemoryWorkspacePersisted(
     question: input.question,
     expressionMode: input.expressionMode ?? 'grounded',
     workflowKind: input.workflowKind ?? 'default',
-    sessionId: existingSession?.id ?? null
+    sessionId: existingSession?.id ?? null,
+    priorTurnContext: priorTurns.slice(-3).map((turn) => ({
+      turnId: turn.turnId,
+      question: turn.question,
+      answerSummary: turn.response.answer.summary
+    }))
   })
   const contextHash = hashValue(response)
   const provider = null
