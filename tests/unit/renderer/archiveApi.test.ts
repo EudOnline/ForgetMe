@@ -186,7 +186,15 @@ describe('archiveApi dossier methods', () => {
           displayType: 'derived_summary',
           citations: []
         },
-        contextCards: [],
+        contextCards: [
+          {
+            cardId: 'conversation-context',
+            title: 'Conversation Context',
+            body: 'Previous question: 她现在有哪些还没解决的冲突？ Previous answer: Based on the archive, unresolved conflicts remain.',
+            displayType: 'derived_summary',
+            citations: []
+          }
+        ],
         guardrail: {
           decision: 'grounded_answer',
           reasonCodes: ['multi_source_synthesis'],
@@ -258,9 +266,16 @@ describe('archiveApi dossier methods', () => {
     const archiveApi = getArchiveApi()
     const turn = await archiveApi.askMemoryWorkspacePersisted({
       scope: { kind: 'person', canonicalPersonId: 'cp-1' },
-      question: '她过去是怎么表达记录和归档这类事的？给我看原话。'
+      question: '她过去是怎么表达记录和归档这类事的？给我看原话。',
+      sessionId: 'session-1'
     })
 
+    expect(askMemoryWorkspacePersisted).toHaveBeenCalledWith({
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '她过去是怎么表达记录和归档这类事的？给我看原话。',
+      sessionId: 'session-1'
+    })
+    expect(turn?.response.contextCards.map((card) => card.title)).toContain('Conversation Context')
     expect(turn?.response.communicationEvidence?.title).toBe('Communication Evidence')
     expect(turn?.response.communicationEvidence?.excerpts[0]?.fileName).toBe('chat-1.json')
     expect(turn?.response.workflowKind).toBe('persona_draft_sandbox')

@@ -294,7 +294,8 @@ describe('memoryWorkspaceSessionService', () => {
     })
     const secondTurn = askMemoryWorkspacePersisted(db, {
       scope: { kind: 'person', canonicalPersonId: 'cp-1' },
-      question: '她有哪些已保存的资料？',
+      question: '那为什么这个冲突最值得先处理？',
+      expressionMode: 'advice',
       sessionId: firstTurn!.sessionId
     })
 
@@ -307,6 +308,44 @@ describe('memoryWorkspaceSessionService', () => {
     expect(detail?.turns.map((turn) => turn.ordinal)).toEqual([1, 2])
     expect(detail?.turns[0]?.question).toBe('她现在有哪些还没解决的冲突？')
     expect(detail?.turns[0]?.response).toEqual(firstTurn?.response)
+    expect(secondTurn?.response.contextCards.map((card) => card.title)).toContain('Conversation Context')
+    expect(
+      secondTurn?.response.contextCards.find((card) => card.title === 'Conversation Context')?.body
+    ).toContain(firstTurn!.question)
+    expect(detail?.turns[1]?.response.contextCards.map((card) => card.title)).toContain('Conversation Context')
+    expect(detail?.turns[1]?.response).toEqual(secondTurn?.response)
+
+    db.close()
+  })
+
+  it('does not inherit prior-turn context when starting a new session or switching scope', () => {
+    const db = seedConversationScenario()
+
+    const firstTurn = askMemoryWorkspacePersisted(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '她有哪些已保存的资料？',
+      expressionMode: 'advice'
+    })
+    const sameSessionFollowUp = askMemoryWorkspacePersisted(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '为什么这个最值得继续看？',
+      expressionMode: 'advice',
+      sessionId: firstTurn!.sessionId
+    })
+    const newSessionFollowUp = askMemoryWorkspacePersisted(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '为什么这个最值得继续看？',
+      expressionMode: 'advice'
+    })
+    const groupFollowUp = askMemoryWorkspacePersisted(db, {
+      scope: { kind: 'group', anchorPersonId: 'cp-1' },
+      question: '为什么这个最值得继续看？',
+      expressionMode: 'advice'
+    })
+
+    expect(sameSessionFollowUp?.response.contextCards.map((card) => card.title)).toContain('Conversation Context')
+    expect(newSessionFollowUp?.response.contextCards.map((card) => card.title)).not.toContain('Conversation Context')
+    expect(groupFollowUp?.response.contextCards.map((card) => card.title)).not.toContain('Conversation Context')
 
     db.close()
   })

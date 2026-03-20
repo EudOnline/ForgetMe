@@ -165,6 +165,69 @@ function buildHostedShareLink(
   }
 }
 
+function buildContinuityTurn(input: {
+  turnId: string
+  ordinal: number
+  question: string
+  answerSummary: string
+  sessionId?: string
+  contextBody?: string
+}) {
+  const sessionId = input.sessionId ?? 'session-continuity-1'
+
+  return {
+    turnId: input.turnId,
+    sessionId,
+    ordinal: input.ordinal,
+    question: input.question,
+    provider: null,
+    model: null,
+    contextHash: `context-hash-${input.turnId}`,
+    promptHash: `prompt-hash-${input.turnId}`,
+    createdAt: `2026-03-15T00:0${input.ordinal}:00.000Z`,
+    response: {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' } as const,
+      question: input.question,
+      expressionMode: 'advice' as const,
+      workflowKind: 'default' as const,
+      title: 'Memory Workspace · Alice Chen',
+      answer: {
+        summary: input.answerSummary,
+        displayType: 'open_conflict' as const,
+        citations: []
+      },
+      guardrail: {
+        decision: 'grounded_answer' as const,
+        reasonCodes: ['multi_source_synthesis' as const],
+        citationCount: 1,
+        sourceKinds: ['review'],
+        fallbackApplied: false
+      },
+      contextCards: [
+        ...(input.contextBody
+          ? [{
+              cardId: `conversation-context-${input.turnId}`,
+              title: 'Conversation Context',
+              body: input.contextBody,
+              displayType: 'derived_summary' as const,
+              citations: []
+            }]
+          : []),
+        {
+          cardId: `conflicts-${input.turnId}`,
+          title: 'Conflicts & Gaps',
+          body: 'Open conflicts: school_name (1 pending values: 北京大学 / 清华大学).',
+          displayType: 'open_conflict' as const,
+          citations: []
+        }
+      ],
+      boundaryRedirect: null,
+      communicationEvidence: null,
+      personaDraft: null
+    }
+  }
+}
+
 afterEach(() => {
   vi.useRealTimers()
   cleanup()
@@ -293,6 +356,104 @@ describe('MemoryWorkspacePage', () => {
       question: '这个群体最近一起发生过什么？',
       expressionMode: 'advice'
     })
+  })
+
+  it('shows continuing-session context and keeps earlier turns immutable during follow-up asks', async () => {
+    const firstTurn = buildContinuityTurn({
+      turnId: 'turn-continuity-1',
+      ordinal: 1,
+      question: '她现在有哪些还没解决的冲突？',
+      answerSummary: 'Based on the archive, the safest next step is to resolve the school_name conflict first.'
+    })
+    const secondTurn = buildContinuityTurn({
+      turnId: 'turn-continuity-2',
+      ordinal: 2,
+      question: '那为什么这个冲突最值得先处理？',
+      answerSummary: 'Based on the archive, this conflict has the highest review pressure in the current record.',
+      contextBody: `Previous question: ${firstTurn.question} Previous answer: ${firstTurn.response.answer.summary}`
+    })
+    const thirdTurn = buildContinuityTurn({
+      turnId: 'turn-continuity-3',
+      ordinal: 3,
+      question: '继续展开说。',
+      answerSummary: 'Based on the archive, the next step is still to reconcile the conflicting school evidence.',
+      contextBody: `Previous question: ${secondTurn.question} Previous answer: ${secondTurn.response.answer.summary}`
+    })
+    const listMemoryWorkspaceSessions = vi.fn()
+      .mockResolvedValueOnce([{
+        sessionId: 'session-continuity-1',
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+        title: 'Memory Workspace · Alice Chen',
+        latestQuestion: secondTurn.question,
+        turnCount: 2,
+        createdAt: '2026-03-15T00:01:00.000Z',
+        updatedAt: '2026-03-15T00:02:00.000Z'
+      }])
+      .mockResolvedValueOnce([{
+        sessionId: 'session-continuity-1',
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+        title: 'Memory Workspace · Alice Chen',
+        latestQuestion: thirdTurn.question,
+        turnCount: 3,
+        createdAt: '2026-03-15T00:01:00.000Z',
+        updatedAt: '2026-03-15T00:03:00.000Z'
+      }])
+    const getMemoryWorkspaceSession = vi.fn()
+      .mockResolvedValueOnce({
+        sessionId: 'session-continuity-1',
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+        title: 'Memory Workspace · Alice Chen',
+        latestQuestion: secondTurn.question,
+        turnCount: 2,
+        createdAt: '2026-03-15T00:01:00.000Z',
+        updatedAt: '2026-03-15T00:02:00.000Z',
+        turns: [firstTurn, secondTurn]
+      })
+      .mockResolvedValueOnce({
+        sessionId: 'session-continuity-1',
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+        title: 'Memory Workspace · Alice Chen',
+        latestQuestion: thirdTurn.question,
+        turnCount: 3,
+        createdAt: '2026-03-15T00:01:00.000Z',
+        updatedAt: '2026-03-15T00:03:00.000Z',
+        turns: [firstTurn, secondTurn, thirdTurn]
+      })
+    const askMemoryWorkspacePersisted = vi.fn().mockResolvedValue(thirdTurn)
+
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions,
+      getMemoryWorkspaceSession,
+      listMemoryWorkspaceCompareSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'person', canonicalPersonId: 'cp-1' }} />)
+
+    expect(await screen.findByLabelText('Turn 1')).toBeInTheDocument()
+    expect(screen.getByLabelText('Turn 2')).toBeInTheDocument()
+    expect(screen.getByText('Conversation Context')).toBeInTheDocument()
+    expect(screen.getByText('Continuing session · 2 previous turns')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Ask memory workspace'), {
+      target: { value: thirdTurn.question }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+
+    await waitFor(() => {
+      expect(askMemoryWorkspacePersisted).toHaveBeenCalledWith({
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+        question: thirdTurn.question,
+        expressionMode: 'grounded',
+        sessionId: 'session-continuity-1'
+      })
+    })
+
+    expect(await screen.findByLabelText('Turn 3')).toBeInTheDocument()
+    expect(screen.getByText(firstTurn.question)).toBeInTheDocument()
+    expect(screen.getByText(secondTurn.question)).toBeInTheDocument()
   })
 
   it('renders citation buttons when navigation handlers are supplied', async () => {

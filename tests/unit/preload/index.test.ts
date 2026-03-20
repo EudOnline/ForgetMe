@@ -55,4 +55,33 @@ describe('preload archiveApi hosted share bridge', () => {
       shareUrl: 'https://share.example.test/s/abc123'
     })
   })
+
+  it('passes persisted memory workspace asks with session ids through contextBridge', async () => {
+    await import('../../../src/preload/index')
+
+    expect(exposeInMainWorld).toHaveBeenCalledTimes(1)
+
+    const archiveApi = exposeInMainWorld.mock.calls[0]?.[1] as {
+      askMemoryWorkspacePersisted: (input: {
+        scope: { kind: 'person'; canonicalPersonId: string }
+        question: string
+        expressionMode: 'advice'
+        sessionId: string
+      }) => Promise<unknown>
+    }
+
+    await archiveApi.askMemoryWorkspacePersisted({
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '那为什么这个冲突最值得先处理？',
+      expressionMode: 'advice',
+      sessionId: 'session-1'
+    })
+
+    expect(invoke).toHaveBeenCalledWith('archive:askMemoryWorkspacePersisted', {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '那为什么这个冲突最值得先处理？',
+      expressionMode: 'advice',
+      sessionId: 'session-1'
+    })
+  })
 })

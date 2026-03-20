@@ -20,6 +20,7 @@ const {
   listApprovedPersonaDraftHostedShareLinks,
   createApprovedPersonaDraftHostedShareLink,
   revokeApprovedPersonaDraftHostedShareLink,
+  askMemoryWorkspacePersistedService,
   listApprovedPersonaDraftProviderSends,
   retryApprovedPersonaDraftProviderSend,
   sendApprovedPersonaDraftToProvider
@@ -39,6 +40,7 @@ const {
   listApprovedPersonaDraftHostedShareLinks: vi.fn(),
   createApprovedPersonaDraftHostedShareLink: vi.fn(),
   revokeApprovedPersonaDraftHostedShareLink: vi.fn(),
+  askMemoryWorkspacePersistedService: vi.fn(),
   listApprovedPersonaDraftProviderSends: vi.fn(),
   retryApprovedPersonaDraftProviderSend: vi.fn(),
   sendApprovedPersonaDraftToProvider: vi.fn()
@@ -92,6 +94,14 @@ vi.mock('../../../src/main/services/approvedDraftSendDestinationService', () => 
   listApprovedDraftSendDestinations
 }))
 
+vi.mock('../../../src/main/services/memoryWorkspaceSessionService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/main/services/memoryWorkspaceSessionService')>()
+  return {
+    ...actual,
+    askMemoryWorkspacePersisted: askMemoryWorkspacePersistedService
+  }
+})
+
 vi.mock('../../../src/main/services/approvedDraftProviderSendService', () => ({
   listApprovedPersonaDraftProviderSends,
   retryApprovedPersonaDraftProviderSend,
@@ -143,6 +153,87 @@ function writeApprovedDraftPublicationPackage(
   }
 }
 
+describe('registerMemoryWorkspaceIpc session handlers', () => {
+  beforeEach(() => {
+    handlerMap.clear()
+    openDatabase.mockReset()
+    runMigrations.mockReset()
+    askMemoryWorkspacePersistedService.mockReset()
+  })
+
+  it('passes persisted session asks through ipc and preserves conversation context cards', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    askMemoryWorkspacePersistedService.mockReturnValue({
+      turnId: 'turn-2',
+      sessionId: 'session-1',
+      ordinal: 2,
+      question: '那为什么这个冲突最值得先处理？',
+      provider: null,
+      model: null,
+      contextHash: 'context-hash-2',
+      promptHash: 'prompt-hash-2',
+      createdAt: '2026-03-20T06:00:00.000Z',
+      response: {
+        scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+        question: '那为什么这个冲突最值得先处理？',
+        expressionMode: 'advice',
+        workflowKind: 'default',
+        title: 'Memory Workspace · Alice Chen',
+        answer: {
+          summary: 'Based on the archive, the safest next step is to resolve the highest-pressure ambiguity first.',
+          displayType: 'open_conflict',
+          citations: []
+        },
+        contextCards: [
+          {
+            cardId: 'conversation-context',
+            title: 'Conversation Context',
+            body: 'Previous question: 她现在有哪些还没解决的冲突？ Previous answer: Based on the archive, unresolved conflicts remain.',
+            displayType: 'derived_summary',
+            citations: []
+          }
+        ],
+        guardrail: {
+          decision: 'grounded_answer',
+          reasonCodes: ['multi_source_synthesis'],
+          citationCount: 1,
+          sourceKinds: ['review'],
+          fallbackApplied: false
+        },
+        boundaryRedirect: null,
+        communicationEvidence: null,
+        personaDraft: null
+      }
+    })
+
+    registerMemoryWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:askMemoryWorkspacePersisted')
+    const result = await handler?.({}, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '那为什么这个冲突最值得先处理？',
+      expressionMode: 'advice',
+      sessionId: 'session-1'
+    })
+
+    expect(openDatabase).toHaveBeenCalledWith('/tmp/forgetme/sqlite/archive.sqlite')
+    expect(runMigrations).toHaveBeenCalled()
+    expect(askMemoryWorkspacePersistedService).toHaveBeenCalledWith(expect.anything(), {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '那为什么这个冲突最值得先处理？',
+      expressionMode: 'advice',
+      sessionId: 'session-1'
+    })
+    expect(result).toEqual(expect.objectContaining({
+      sessionId: 'session-1',
+      ordinal: 2
+    }))
+    expect((result as { response: { contextCards: Array<{ title: string }> } }).response.contextCards[0]?.title).toBe('Conversation Context')
+    expect(close).toHaveBeenCalled()
+  })
+})
+
 describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
   beforeEach(() => {
     handlerMap.clear()
@@ -160,6 +251,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
     listApprovedPersonaDraftHostedShareLinks.mockReset()
     createApprovedPersonaDraftHostedShareLink.mockReset()
     revokeApprovedPersonaDraftHostedShareLink.mockReset()
+    askMemoryWorkspacePersistedService.mockReset()
     listApprovedPersonaDraftProviderSends.mockReset()
     retryApprovedPersonaDraftProviderSend.mockReset()
     sendApprovedPersonaDraftToProvider.mockReset()

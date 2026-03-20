@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { askMemoryWorkspace } from '../../../src/main/services/memoryWorkspaceService'
+import { askMemoryWorkspacePersisted } from '../../../src/main/services/memoryWorkspaceSessionService'
 import { seedMemoryWorkspaceScenario } from './helpers/memoryWorkspaceScenario'
 
 describe('askMemoryWorkspace', () => {
@@ -343,6 +344,60 @@ describe('askMemoryWorkspace', () => {
       scope: { kind: 'person', canonicalPersonId: 'missing' },
       question: 'hi'
     })).toBeNull()
+
+    db.close()
+  })
+
+  it('injects a conversation context card for persisted follow-up asks in the same session', () => {
+    const db = seedMemoryWorkspaceScenario()
+
+    const firstTurn = askMemoryWorkspacePersisted(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '她现在有哪些还没解决的冲突？',
+      expressionMode: 'advice'
+    })
+    const followUpTurn = askMemoryWorkspacePersisted(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '那为什么这个冲突最值得先处理？',
+      expressionMode: 'advice',
+      sessionId: firstTurn!.sessionId
+    })
+
+    expect(followUpTurn?.response.contextCards.map((card) => card.title)).toContain('Conversation Context')
+    expect(
+      followUpTurn?.response.contextCards.find((card) => card.title === 'Conversation Context')?.body
+    ).toContain('她现在有哪些还没解决的冲突？')
+    expect(
+      followUpTurn?.response.contextCards.find((card) => card.title === 'Conversation Context')?.body
+    ).toContain(firstTurn!.response.answer.summary)
+    expect(followUpTurn?.response.answer.summary).toContain('Based on the archive')
+
+    db.close()
+  })
+
+  it('prefers prior-turn context over generic summary selection for explicit follow-up wording', () => {
+    const db = seedMemoryWorkspaceScenario()
+
+    const firstTurn = askMemoryWorkspacePersisted(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '她有哪些已保存的资料？',
+      expressionMode: 'advice'
+    })
+    const followUpTurn = askMemoryWorkspacePersisted(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '为什么这个最值得继续看？',
+      expressionMode: 'advice',
+      sessionId: firstTurn!.sessionId
+    })
+
+    expect(followUpTurn?.response.contextCards[0]?.title).toBe('Conversation Context')
+    expect(
+      followUpTurn?.response.contextCards.find((card) => card.title === 'Conversation Context')?.body
+    ).toContain('她有哪些已保存的资料？')
+    expect(
+      followUpTurn?.response.contextCards.find((card) => card.title === 'Conversation Context')?.body
+    ).toContain(firstTurn!.response.answer.summary)
+    expect(followUpTurn?.response.answer.summary).toContain('Based on the archive')
 
     db.close()
   })
