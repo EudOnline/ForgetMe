@@ -50,6 +50,13 @@ function packageMode(manifest: BackupManifest) {
   return manifest.package?.mode ?? 'directory'
 }
 
+function encryptedPackage(manifest: BackupManifest): Extract<NonNullable<BackupManifest['package']>, { mode: 'encrypted' }> {
+  if (!manifest.package || manifest.package.mode !== 'encrypted') {
+    throw new Error('Encrypted package metadata is missing')
+  }
+  return manifest.package
+}
+
 function decryptEncryptedExport(input: {
   exportRoot: string
   manifest: BackupManifest
@@ -57,23 +64,21 @@ function decryptEncryptedExport(input: {
 }) {
   const { exportRoot, manifest, encryptionPassword } = input
 
-  if (packageMode(manifest) !== 'encrypted') {
-    throw new Error('Encrypted package metadata is missing')
-  }
+  const packageMetadata = encryptedPackage(manifest)
   if (!encryptionPassword) {
     throw new Error('Encrypted backup requires a password')
   }
 
-  const encryptedPath = path.join(exportRoot, manifest.package.encryptedArtifactRelativePath)
+  const encryptedPath = path.join(exportRoot, packageMetadata.encryptedArtifactRelativePath)
   const encryptedBytes = fs.readFileSync(encryptedPath)
-  const key = crypto.scryptSync(encryptionPassword, Buffer.from(manifest.package.saltBase64, 'base64'), 32)
+  const key = crypto.scryptSync(encryptionPassword, Buffer.from(packageMetadata.saltBase64, 'base64'), 32)
   const decipher = crypto.createDecipheriv(
-    manifest.package.algorithm,
+    packageMetadata.algorithm,
     key,
-    Buffer.from(manifest.package.ivBase64, 'base64')
+    Buffer.from(packageMetadata.ivBase64, 'base64')
   )
 
-  decipher.setAuthTag(Buffer.from(manifest.package.authTagBase64, 'base64'))
+  decipher.setAuthTag(Buffer.from(packageMetadata.authTagBase64, 'base64'))
 
   try {
     const decrypted = Buffer.concat([decipher.update(encryptedBytes), decipher.final()])

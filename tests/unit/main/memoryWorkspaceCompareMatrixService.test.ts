@@ -29,6 +29,7 @@ function createCompareSessionDetail(input: {
     title: 'Memory Workspace Compare',
     question: input.question,
     expressionMode: input.expressionMode ?? 'grounded',
+    workflowKind: 'default',
     runCount: 1,
     metadata: {
       targetLabels: [targetLabel],
@@ -60,25 +61,29 @@ function createCompareSessionDetail(input: {
       model: null,
       status: 'completed',
       errorMessage: null,
-      response: {
-        scope: input.scope,
-        question: input.question,
-        expressionMode: input.expressionMode ?? 'grounded',
-        title: 'Memory Workspace',
-        answer: {
-          summary: 'Grounded summary.',
+	      response: {
+	        scope: input.scope,
+	        question: input.question,
+	        expressionMode: input.expressionMode ?? 'grounded',
+	        workflowKind: 'default',
+	        title: 'Memory Workspace',
+	        answer: {
+	          summary: 'Grounded summary.',
           displayType: 'derived_summary',
           citations: []
         },
         contextCards: [],
-        guardrail: {
-          decision: 'grounded_answer',
-          reasonCodes: [],
-          citationCount: 0,
-          sourceKinds: [],
-          fallbackApplied: false
-        }
-      },
+	        guardrail: {
+	          decision: 'grounded_answer',
+	          reasonCodes: [],
+	          citationCount: 0,
+	          sourceKinds: [],
+	          fallbackApplied: false
+	        },
+	        boundaryRedirect: null,
+	        communicationEvidence: null,
+	        personaDraft: null
+	      },
       evaluation: {
         totalScore: 20,
         maxScore: 20,

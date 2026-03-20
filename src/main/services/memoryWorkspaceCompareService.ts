@@ -1210,7 +1210,7 @@ function mapStoredJudgeVerdict(row: CompareRunRow): MemoryWorkspaceCompareJudgeV
 }
 
 function mapCompareRunRow(row: CompareRunRow): MemoryWorkspaceCompareRunRecord {
-  const target = row.executionMode === 'local_baseline'
+  const target: MemoryWorkspaceCompareTarget = row.executionMode === 'local_baseline'
     ? {
         targetId: row.targetId,
         label: row.targetLabel,

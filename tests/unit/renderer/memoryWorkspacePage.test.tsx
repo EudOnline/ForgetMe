@@ -168,7 +168,7 @@ function buildHostedShareLink(
 afterEach(() => {
   vi.useRealTimers()
   cleanup()
-  delete (window as Window & { archiveApi?: unknown }).archiveApi
+  Reflect.deleteProperty(window, 'archiveApi')
   delete process.env.FORGETME_APPROVED_DRAFT_SEND_POLL_INTERVAL_MS
   localStorageMock.clear()
 })

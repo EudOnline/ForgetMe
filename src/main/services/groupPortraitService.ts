@@ -596,7 +596,8 @@ export function getGroupPortrait(db: ArchiveDatabase, input: { canonicalPersonId
 export function listGroupPortraits(db: ArchiveDatabase): GroupPortraitBrowseSummary[] {
   return getPeopleList(db)
     .map((person) => getGroupPortrait(db, { canonicalPersonId: person.id }))
-    .filter((portrait): portrait is GroupPortrait => Boolean(portrait) && portrait.members.length >= 2)
+    .filter((portrait): portrait is GroupPortrait => portrait !== null)
+    .filter((portrait) => portrait.members.length >= 2)
     .map((portrait) => ({
       anchorPersonId: portrait.anchorPersonId,
       anchorDisplayName: portrait.members.find((member) => member.isAnchor)?.displayName ?? portrait.anchorPersonId,

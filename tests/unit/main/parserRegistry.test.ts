@@ -11,37 +11,43 @@ describe('parseFrozenFile', () => {
     const docx = await parseFrozenFile(path.resolve('tests/fixtures/imports/sample-doc.docx'))
 
     expect(chat.kind).toBe('chat')
-    expect(chat.summary.messageCount).toBeGreaterThan(0)
-    expect(chat.summary.communicationExcerpts).toMatchObject([
-      {
-        ordinal: 1,
-        speakerDisplayName: 'Alice',
-        text: 'Hello Bob'
-      },
-      {
-        ordinal: 2,
-        speakerDisplayName: 'Bob',
-        text: 'Hi Alice'
-      }
-    ])
+    if (chat.kind === 'chat') {
+      expect(chat.summary.messageCount).toBeGreaterThan(0)
+      expect(chat.summary.communicationExcerpts).toMatchObject([
+        {
+          ordinal: 1,
+          speakerDisplayName: 'Alice',
+          text: 'Hello Bob'
+        },
+        {
+          ordinal: 2,
+          speakerDisplayName: 'Bob',
+          text: 'Hi Alice'
+        }
+      ])
+    }
     expect(textChat.kind).toBe('chat')
-    expect(textChat.summary.communicationExcerpts).toMatchObject([
-      {
-        ordinal: 1,
-        speakerDisplayName: null,
-        text: 'Alice: Hey Bob'
-      },
-      {
-        ordinal: 2,
-        speakerDisplayName: null,
-        text: 'Bob: Hi Alice'
-      }
-    ])
+    if (textChat.kind === 'chat') {
+      expect(textChat.summary.communicationExcerpts).toMatchObject([
+        {
+          ordinal: 1,
+          speakerDisplayName: null,
+          text: 'Alice: Hey Bob'
+        },
+        {
+          ordinal: 2,
+          speakerDisplayName: null,
+          text: 'Bob: Hi Alice'
+        }
+      ])
+    }
     expect(image.kind).toBe('image')
     expect(image.summary).toHaveProperty('width')
     expect(doc.kind).toBe('document')
     expect(doc.summary).toHaveProperty('pageCount')
     expect(docx.kind).toBe('document')
-    expect(docx.summary.previewText).toContain('ForgetMe')
+    if (docx.kind === 'document') {
+      expect(docx.summary.previewText).toContain('ForgetMe')
+    }
   })
 })

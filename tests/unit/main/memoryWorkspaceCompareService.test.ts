@@ -576,15 +576,18 @@ describe('memoryWorkspaceCompareService', () => {
     const callLiteLLM = vi.spyOn(modelGatewayService, 'callLiteLLM')
     const resolveModelRoute = vi.spyOn(modelGatewayService, 'resolveModelRoute')
 
-    resolveModelRoute.mockImplementation(({ preferredProvider }) => ({
-      provider: preferredProvider ?? 'siliconflow',
-      baseURL: 'http://127.0.0.1:4000',
-      model: 'route-default-model',
-      timeoutMs: 1_000,
-      retryCount: 0,
-      apiKeyEnvName: 'TEST_API_KEY',
-      headers: {}
-    }))
+	    resolveModelRoute.mockImplementation(({ preferredProvider }) => ({
+	      provider: preferredProvider ?? 'siliconflow',
+	      baseURL: 'http://127.0.0.1:4000',
+	      model: 'route-default-model',
+	      timeoutMs: 1_000,
+	      retryCount: 0,
+	      apiKeyEnvName: 'TEST_API_KEY',
+	      headers: {
+	        'x-forgetme-provider': preferredProvider ?? 'siliconflow',
+	        'x-forgetme-task-type': 'memory_dialogue'
+	      }
+	    }))
 
     callLiteLLM
       .mockResolvedValueOnce({

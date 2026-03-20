@@ -87,12 +87,13 @@ describe('enrichmentReadService', () => {
 
     const rerun = rerunEnrichmentJob(db, { jobId: 'job-1' })
 
+    expect(rerun).not.toBeNull()
     expect(rerun).toEqual(expect.objectContaining({
       fileId: 'f-1',
       enhancerType: 'document_ocr',
       status: 'pending'
     }))
-    expect(rerun.id).not.toBe('job-1')
+    expect(rerun?.id).not.toBe('job-1')
     expect((db.prepare('select count(*) as count from enrichment_jobs where file_id = ?').get('f-1') as { count: number }).count).toBe(2)
     expect(db.prepare('select status from enrichment_jobs where id = ?').get('job-1')).toEqual({ status: 'completed' })
     db.close()

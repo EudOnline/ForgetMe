@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ReviewWorkbenchPage } from '../../../src/renderer/pages/ReviewWorkbenchPage'
 
 afterEach(() => {
-  delete (window as Window & { archiveApi?: unknown }).archiveApi
+  Reflect.deleteProperty(window, 'archiveApi')
   vi.unstubAllGlobals()
 })
 

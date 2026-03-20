@@ -92,7 +92,7 @@ function mapReviewRow(row: PersonaDraftReviewRow): MemoryWorkspacePersonaDraftRe
     editedDraft: row.editedDraft,
     reviewNotes: row.reviewNotes,
     supportingExcerpts: JSON.parse(row.supportingExcerptsJson) as string[],
-    trace: JSON.parse(row.traceJson) as MemoryWorkspaceResponse['personaDraft']['trace'],
+    trace: JSON.parse(row.traceJson) as NonNullable<MemoryWorkspaceResponse['personaDraft']>['trace'],
     approvedJournalId: row.approvedJournalId,
     rejectedJournalId: row.rejectedJournalId,
     createdAt: row.createdAt,

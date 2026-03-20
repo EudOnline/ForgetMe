@@ -62,7 +62,8 @@ describe('approvedDraftHostedShareLinkService', () => {
     process.env.FORGETME_APPROVED_DRAFT_SHARE_HOST_BASE_URL = 'https://host.example.com/api'
     process.env.FORGETME_APPROVED_DRAFT_SHARE_HOST_TOKEN = 'token-123'
 
-    const fetchSpy = vi.spyOn(global, 'fetch' as any).mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (...args: Parameters<typeof fetch>) => {
+      const [url, init] = args
       const body = JSON.parse((init?.body as string) ?? '{}')
       expect(init?.method).toBe('POST')
       expect(String(url)).toBe('https://host.example.com/api/approved-draft-share-links')
@@ -228,7 +229,8 @@ describe('approvedDraftHostedShareLinkService', () => {
     process.env.FORGETME_APPROVED_DRAFT_SHARE_HOST_TOKEN = 'token-123'
 
     let createCount = 0
-    const fetchSpy = vi.spyOn(global, 'fetch' as any).mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (...args: Parameters<typeof fetch>) => {
+      const [url] = args
       if (String(url).endsWith('/approved-draft-share-links')) {
         createCount += 1
         return new Response(JSON.stringify({

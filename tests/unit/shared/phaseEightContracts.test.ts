@@ -210,13 +210,14 @@ describe('phase-eight memory workspace contracts', () => {
       model: 'Qwen/Qwen2.5-72B-Instruct',
       status: 'completed',
       errorMessage: null,
-      response: {
-        scope: { kind: 'person', canonicalPersonId: 'cp-1' },
-        question: input.question,
-        expressionMode: 'advice',
-        title: 'Memory Workspace · Alice Chen',
-        answer: {
-          summary: 'Alice Chen has approved education and note evidence in the archive.',
+	      response: {
+	        scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+	        question: input.question,
+	        expressionMode: 'advice',
+	        workflowKind: 'default',
+	        title: 'Memory Workspace · Alice Chen',
+	        answer: {
+	          summary: 'Alice Chen has approved education and note evidence in the archive.',
           displayType: 'derived_summary',
           citations: []
         },
@@ -227,10 +228,11 @@ describe('phase-eight memory workspace contracts', () => {
           citationCount: 2,
           sourceKinds: ['person', 'file'],
           fallbackApplied: false
-        },
-        boundaryRedirect: null,
-        communicationEvidence: null
-      },
+	        },
+	        boundaryRedirect: null,
+	        communicationEvidence: null,
+	        personaDraft: null
+	      },
       evaluation: {
         totalScore: 18,
         maxScore: 20,

@@ -313,9 +313,17 @@ function inferCompareTargetControlsFromRuns(runs: MemoryWorkspaceCompareRunRecor
   return {
     localBaselineEnabled: runs.some((run) => run.target.executionMode === 'local_baseline'),
     siliconflowEnabled: Boolean(siliconflowRun),
-    siliconflowModel: siliconflowRun?.target.model ?? siliconflowRun?.model ?? defaults.siliconflowModel,
+    siliconflowModel: (
+      siliconflowRun?.target.executionMode === 'provider_model'
+        ? siliconflowRun.target.model
+        : siliconflowRun?.model
+    ) ?? defaults.siliconflowModel,
     openrouterEnabled: Boolean(openrouterRun),
-    openrouterModel: openrouterRun?.target.model ?? openrouterRun?.model ?? defaults.openrouterModel
+    openrouterModel: (
+      openrouterRun?.target.executionMode === 'provider_model'
+        ? openrouterRun.target.model
+        : openrouterRun?.model
+    ) ?? defaults.openrouterModel
   }
 }
 

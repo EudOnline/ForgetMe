@@ -42,8 +42,10 @@ describe('resolveApprovedFieldAttribution', () => {
     const result = resolveApprovedFieldAttribution(db, { evidenceId: 'ee-1' })
 
     expect(result.mode).toBe('auto_project')
-    expect(result.canonicalPersonId).toBe('cp-1')
-    expect(result.matchedRule).toBe('single_file_person')
+    if (result.mode === 'auto_project') {
+      expect(result.canonicalPersonId).toBe('cp-1')
+      expect(result.matchedRule).toBe('single_file_person')
+    }
     db.close()
   })
 
@@ -74,8 +76,10 @@ describe('resolveApprovedFieldAttribution', () => {
     const result = resolveApprovedFieldAttribution(db, { evidenceId: 'ee-2' })
 
     expect(result.mode).toBe('auto_project')
-    expect(result.canonicalPersonId).toBe('cp-1')
-    expect(result.matchedRule).toBe('unique_alias_match')
+    if (result.mode === 'auto_project') {
+      expect(result.canonicalPersonId).toBe('cp-1')
+      expect(result.matchedRule).toBe('unique_alias_match')
+    }
     db.close()
   })
 
@@ -112,7 +116,9 @@ describe('resolveApprovedFieldAttribution', () => {
     const result = resolveApprovedFieldAttribution(db, { evidenceId: 'ee-3' })
 
     expect(result.mode).toBe('queue_candidate')
-    expect(result.reasonCode).toBe('ambiguous_person_match')
+    if (result.mode === 'queue_candidate') {
+      expect(result.reasonCode).toBe('ambiguous_person_match')
+    }
     db.close()
   })
 })
