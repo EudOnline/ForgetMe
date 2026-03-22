@@ -1,4 +1,5 @@
 import type { ReviewImpactPreview } from '../../shared/archiveContracts'
+import { useI18n } from '../i18n'
 
 function ImpactSection(props: {
   title: string
@@ -8,16 +9,18 @@ function ImpactSection(props: {
     canonicalPersonId: string | null
   }
 }) {
+  const { t } = useI18n()
+
   return (
     <section>
       <h3>{props.title}</h3>
       <dl>
-        <dt>Kind</dt>
+        <dt>{t('reviewWorkbench.impact.kind')}</dt>
         <dd>{props.impact.kind}</dd>
-        <dt>Summary</dt>
+        <dt>{t('reviewWorkbench.impact.summary')}</dt>
         <dd>{props.impact.summary}</dd>
-        <dt>Person</dt>
-        <dd>{props.impact.canonicalPersonId ?? 'No resolved person'}</dd>
+        <dt>{t('reviewWorkbench.impact.person')}</dt>
+        <dd>{props.impact.canonicalPersonId ?? t('reviewWorkbench.impact.noPerson')}</dd>
       </dl>
     </section>
   )
@@ -26,12 +29,14 @@ function ImpactSection(props: {
 export function ReviewImpactPreviewCard(props: {
   preview: ReviewImpactPreview
 }) {
+  const { t } = useI18n()
+
   return (
     <section>
-      <h2>Impact Preview</h2>
-      <ImpactSection title="Approve" impact={props.preview.approveImpact} />
-      <ImpactSection title="Reject" impact={props.preview.rejectImpact} />
-      <ImpactSection title="Undo" impact={props.preview.undoImpact} />
+      <h2>{t('reviewWorkbench.impact.title')}</h2>
+      <ImpactSection title={t('reviewWorkbench.impact.approve')} impact={props.preview.approveImpact} />
+      <ImpactSection title={t('reviewWorkbench.impact.reject')} impact={props.preview.rejectImpact} />
+      <ImpactSection title={t('reviewWorkbench.impact.undo')} impact={props.preview.undoImpact} />
     </section>
   )
 }

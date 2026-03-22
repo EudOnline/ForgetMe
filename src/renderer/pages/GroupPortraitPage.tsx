@@ -8,6 +8,7 @@ import type {
   PersonDossierReviewShortcut
 } from '../../shared/archiveContracts'
 import { getArchiveApi } from '../archiveApi'
+import { useI18n } from '../i18n'
 import { GroupPortraitView } from '../components/GroupPortraitView'
 
 export function GroupPortraitPage(props: {
@@ -19,6 +20,7 @@ export function GroupPortraitPage(props: {
   onOpenReplayHistory?: (shortcut: GroupPortraitReplayShortcut) => void
   onOpenMemoryWorkspace?: (scope: MemoryWorkspaceScope) => void
 }) {
+  const { t } = useI18n()
   const archiveApi = useMemo(() => getArchiveApi(), [])
   const [portrait, setPortrait] = useState<GroupPortrait | null>(null)
   const [browseSummaries, setBrowseSummaries] = useState<GroupPortraitBrowseSummary[]>([])
@@ -83,28 +85,32 @@ export function GroupPortraitPage(props: {
   if (!props.canonicalPersonId) {
     return (
       <section>
-        <h1>Group Portraits</h1>
+        <h1>{t('groupPortrait.browse.title')}</h1>
         {browseSummaries.length ? (
           <ul>
             {browseSummaries.map((summary) => (
               <li key={summary.anchorPersonId}>
                 <h2>{summary.title}</h2>
                 <p>
-                  {summary.memberCount} members · {summary.sharedEventCount} shared events · {summary.sharedEvidenceSourceCount} shared sources
+                  {t('groupPortrait.browse.stats', {
+                    members: summary.memberCount,
+                    events: summary.sharedEventCount,
+                    sources: summary.sharedEvidenceSourceCount
+                  })}
                 </p>
-                <p>Members: {summary.membersPreview.join(', ')}</p>
+                <p>{t('groupPortrait.browse.members')}: {summary.membersPreview.join(', ')}</p>
                 <button
                   type="button"
-                  aria-label={`Open ${summary.title}`}
+                  aria-label={`${t('groupPortrait.browse.open')} ${summary.title}`}
                   onClick={() => props.onOpenGroupPortrait?.(summary.anchorPersonId)}
                 >
-                  Open
+                  {t('groupPortrait.browse.open')}
                 </button>
               </li>
             ))}
           </ul>
         ) : (
-          <p>No multi-person group portraits discovered yet.</p>
+          <p>{t('groupPortrait.browse.none')}</p>
         )}
       </section>
     )

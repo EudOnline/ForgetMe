@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from './testing-library'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ReviewQueuePage } from '../../../src/renderer/pages/ReviewQueuePage'
 

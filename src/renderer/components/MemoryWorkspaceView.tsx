@@ -21,6 +21,9 @@ import type {
 } from '../../shared/archiveContracts'
 import { ApprovedPersonaDraftHandoffPanel } from './ApprovedPersonaDraftHandoffPanel'
 import { PersonaDraftReviewPanel } from './PersonaDraftReviewPanel'
+import { useI18n } from '../i18n'
+
+type Translator = (key: string, params?: Record<string, string | number | boolean | null | undefined>) => string
 
 function formatDisplayType(displayType: string) {
   return displayType.replace(/_/g, ' ')
@@ -90,20 +93,20 @@ function renderCitation(
   )
 }
 
-function scopePrompt(scope: MemoryWorkspaceScope) {
+function scopePrompt(scope: MemoryWorkspaceScope, t: Translator) {
   if (scope.kind === 'person') {
-    return 'Ask about this person’s approved facts, timeline, relationships, or open conflicts.'
+    return t('memoryWorkspace.prompt.person')
   }
 
   if (scope.kind === 'group') {
-    return 'Ask about this group’s shared events, timeline windows, or unresolved ambiguity.'
+    return t('memoryWorkspace.prompt.group')
   }
 
-  return 'Ask about the whole archive, people, groups, or review pressure.'
+  return t('memoryWorkspace.prompt.global')
 }
 
-function sessionLabel(summary: MemoryWorkspaceSessionSummary) {
-  return `${summary.title} · ${summary.latestQuestion ?? 'New session'}`
+function sessionLabel(summary: MemoryWorkspaceSessionSummary, t: Translator) {
+  return `${summary.title} · ${summary.latestQuestion ?? t('memoryWorkspace.newSession')}`
 }
 
 function compareSessionLabel(summary: MemoryWorkspaceCompareSessionSummary) {
@@ -148,18 +151,19 @@ function renderResponse(
     onOpenEvidenceFile?: (fileId: string) => void
     onOpenReviewHistory?: (citation: MemoryWorkspaceCitation) => void
     onRunSuggestedAction?: (suggestion: MemoryWorkspaceSuggestedAction) => void
-  }
+  },
+  t: Translator
 ) {
   const suggestedActions = response.boundaryRedirect ? normalizeSuggestedActions(response.boundaryRedirect) : []
 
   return (
     <>
-      <section aria-label="Answer">
-        <h3>Answer</h3>
-        <p>Mode: {response.expressionMode ?? 'grounded'}</p>
-        <p>Workflow: {formatDisplayType(response.workflowKind ?? 'default')}</p>
+      <section aria-label={t('memoryWorkspace.response.answer')}>
+        <h3>{t('memoryWorkspace.response.answer')}</h3>
+        <p>{t('memoryWorkspace.response.mode')}: {response.expressionMode ?? 'grounded'}</p>
+        <p>{t('memoryWorkspace.response.workflow')}: {formatDisplayType(response.workflowKind ?? 'default')}</p>
         <p>{response.answer.summary}</p>
-        <p>Display type: {formatDisplayType(response.answer.displayType)}</p>
+        <p>{t('memoryWorkspace.response.displayType')}: {formatDisplayType(response.answer.displayType)}</p>
         {response.answer.citations.length ? (
           <div>
             {response.answer.citations.map((citation) => renderCitation(citation, handlers))}
@@ -167,12 +171,12 @@ function renderResponse(
         ) : null}
       </section>
 
-      <section aria-label="Guardrails">
-        <h3>Guardrails</h3>
+      <section aria-label={t('memoryWorkspace.guardrails')}>
+        <h3>{t('memoryWorkspace.guardrails')}</h3>
         <p>{response.guardrail.decision}</p>
-        <p>Fallback applied: {response.guardrail.fallbackApplied ? 'yes' : 'no'}</p>
-        <p>Citation count: {response.guardrail.citationCount}</p>
-        <p>Source kinds: {response.guardrail.sourceKinds.join(', ') || 'none'}</p>
+        <p>{t('memoryWorkspace.guardrails.fallbackApplied')}: {response.guardrail.fallbackApplied ? t('common.yes') : t('common.no')}</p>
+        <p>{t('memoryWorkspace.guardrails.citationCount')}: {response.guardrail.citationCount}</p>
+        <p>{t('memoryWorkspace.guardrails.sourceKinds')}: {response.guardrail.sourceKinds.join(', ') || 'none'}</p>
         {response.guardrail.reasonCodes.length ? (
           <ul>
             {response.guardrail.reasonCodes.map((reasonCode) => (
@@ -180,13 +184,13 @@ function renderResponse(
             ))}
           </ul>
         ) : (
-          <p>No guardrail reasons triggered.</p>
+          <p>{t('memoryWorkspace.guardrails.none')}</p>
         )}
       </section>
 
       {response.boundaryRedirect ? (
-        <section aria-label="Boundary Redirect">
-          <h3>Boundary redirect</h3>
+        <section aria-label={t('memoryWorkspace.boundaryRedirect.section')}>
+          <h3>{t('memoryWorkspace.boundaryRedirect')}</h3>
           <p>{response.boundaryRedirect.title}</p>
           <p>{response.boundaryRedirect.message}</p>
           {response.boundaryRedirect.reasons.length ? (
@@ -209,7 +213,7 @@ function renderResponse(
                   ) : (
                     <strong>{suggestion.label}</strong>
                   )}
-                  <p>Mode: {suggestion.expressionMode}</p>
+                  <p>{t('memoryWorkspace.suggested.mode')}: {suggestion.expressionMode}</p>
                   <p>{suggestion.question}</p>
                   <p>{suggestion.rationale}</p>
                 </li>
@@ -294,7 +298,8 @@ function renderCompareRun(
     onOpenGroup?: (anchorPersonId: string) => void
     onOpenEvidenceFile?: (fileId: string) => void
     onOpenReviewHistory?: (citation: MemoryWorkspaceCitation) => void
-  }
+  },
+  t: Translator
 ) {
   return (
     <section key={run.compareRunId} aria-label={`Compare Run ${run.ordinal}`}>
@@ -347,7 +352,7 @@ function renderCompareRun(
         {run.judge.errorMessage ? <p>Judge error: {run.judge.errorMessage}</p> : null}
       </section>
       {run.errorMessage ? <p>Error: {run.errorMessage}</p> : null}
-      {run.response ? renderResponse(run.response, handlers) : null}
+      {run.response ? renderResponse(run.response, handlers, t) : null}
     </section>
   )
 }
@@ -431,12 +436,13 @@ export function MemoryWorkspaceView(props: {
   onOpenReviewHistory?: (citation: MemoryWorkspaceCitation) => void
   onRunSuggestedAction?: (suggestion: MemoryWorkspaceSuggestedAction) => void
 }) {
+  const { t } = useI18n()
   const activeResponse = props.turns[props.turns.length - 1]?.response ?? null
   const promptMessage =
     props.emptyStateMessage ??
     (props.hasLoadedSessions && props.sessionSummaries.length === 0
-      ? 'No saved sessions for this scope yet.'
-      : scopePrompt(props.scope))
+      ? t('memoryWorkspace.noSessions')
+      : scopePrompt(props.scope, t))
   const shouldShowPrompt =
     !props.turns.length &&
     !props.isLoading &&
@@ -444,7 +450,7 @@ export function MemoryWorkspaceView(props: {
 
   return (
     <section>
-      <h1>Memory Workspace</h1>
+      <h1>{t('memoryWorkspace.title')}</h1>
       {props.hasLoadedMatrices ? (
         <section aria-label="Saved Compare Matrices">
           <h2>Saved Compare Matrices</h2>
@@ -498,12 +504,12 @@ export function MemoryWorkspaceView(props: {
       ) : null}
 
       {props.hasLoadedSessions ? (
-        <section aria-label="Saved Sessions">
-          <h2>Saved Sessions</h2>
+        <section aria-label={t('memoryWorkspace.savedSessions')}>
+          <h2>{t('memoryWorkspace.savedSessions')}</h2>
           {props.sessionSummaries.length ? (
             <>
               <button type="button" onClick={props.onStartNewSession} disabled={!props.onStartNewSession}>
-                Start new session
+                {t('memoryWorkspace.newSessionButton')}
               </button>
               <ul>
                 {props.sessionSummaries.map((summary) => (
@@ -514,20 +520,20 @@ export function MemoryWorkspaceView(props: {
                       onClick={() => props.onSelectSession?.(summary.sessionId)}
                       disabled={!props.onSelectSession}
                     >
-                      {sessionLabel(summary)}
+                      {sessionLabel(summary, t)}
                     </button>
                   </li>
                 ))}
               </ul>
             </>
           ) : (
-            <p>No saved sessions for this scope yet.</p>
+            <p>{t('memoryWorkspace.noSessions')}</p>
           )}
         </section>
       ) : null}
 
       {shouldShowPrompt ? <p>{promptMessage}</p> : null}
-      {props.isLoading ? <p>Asking memory workspace…</p> : null}
+      {props.isLoading ? <p>{t('memoryWorkspace.loading')}</p> : null}
       {activeResponse ? (
         <section aria-label="Workspace Response">
           <h2>{activeResponse.title}</h2>
@@ -535,7 +541,7 @@ export function MemoryWorkspaceView(props: {
             <section key={turn.turnId} aria-label={`Turn ${turn.ordinal}`}>
               <h3>{turn.question}</h3>
               <p>{turn.createdAt}</p>
-              {renderResponse(turn.response, props)}
+              {renderResponse(turn.response, props, t)}
               {(() => {
                 const review = props.draftReviewsByTurnId?.[turn.turnId] ?? null
                 return turn.response.personaDraft ? (
@@ -686,7 +692,7 @@ export function MemoryWorkspaceView(props: {
               </p>
             </section>
           ) : null}
-          {props.compareRuns.map((run) => renderCompareRun(run, props))}
+          {props.compareRuns.map((run) => renderCompareRun(run, props, t))}
         </section>
       ) : null}
     </section>

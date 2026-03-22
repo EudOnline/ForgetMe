@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
 import type { BackupExportResult, RestoreRunResult } from '../../shared/archiveContracts'
 import { getArchiveApi } from '../archiveApi'
+import { useI18n } from '../i18n'
 
 export function PreservationPage() {
+  const { t } = useI18n()
   const archiveApi = useMemo(() => getArchiveApi(), [])
   const [destinationRoot, setDestinationRoot] = useState('')
   const [exportRoot, setExportRoot] = useState('')
@@ -55,10 +57,10 @@ export function PreservationPage() {
       if (result) {
         setLastExport(result)
         setExportRoot(result.exportRoot)
-        setStatusMessage('Export completed')
+        setStatusMessage(t('preservation.exportCompleted'))
       }
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : 'Export failed')
+      setStatusMessage(error instanceof Error ? error.message : t('preservation.exportFailed'))
     }
 
     setIsWorking(false)
@@ -86,10 +88,14 @@ export function PreservationPage() {
       })
       if (result) {
         setLastRestore(result)
-        setStatusMessage(result.checks.every((check) => check.status === 'passed') ? 'Restore checks passed' : 'Restore checks failed')
+        setStatusMessage(
+          result.checks.every((check) => check.status === 'passed')
+            ? t('preservation.restoreChecksPassed')
+            : t('preservation.restoreChecksFailed')
+        )
       }
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : 'Restore failed')
+      setStatusMessage(error instanceof Error ? error.message : t('preservation.restoreFailed'))
     }
 
     setIsWorking(false)
@@ -117,10 +123,10 @@ export function PreservationPage() {
       })
       if (result) {
         setLastDrill(result)
-        setStatusMessage(result.summary.failedCount === 0 ? 'Recovery drill passed' : 'Recovery drill failed')
+        setStatusMessage(result.summary.failedCount === 0 ? t('preservation.drillPassed') : t('preservation.drillFailed'))
       }
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : 'Recovery drill failed')
+      setStatusMessage(error instanceof Error ? error.message : t('preservation.drillFailed'))
     }
 
     setIsWorking(false)
@@ -128,48 +134,48 @@ export function PreservationPage() {
 
   return (
     <section>
-      <h2>Preservation</h2>
-      <p>Export the local archive package and restore it into a fresh app-data root.</p>
+      <h2>{t('preservation.title')}</h2>
+      <p>{t('preservation.subtitle')}</p>
 
       <div>
-        <button type="button" onClick={() => void handlePickExportDestination()} disabled={isWorking}>Choose Export Destination</button>
-        <div>{destinationRoot || 'No export destination selected.'}</div>
+        <button type="button" onClick={() => void handlePickExportDestination()} disabled={isWorking}>{t('preservation.chooseExportDestination')}</button>
+        <div>{destinationRoot || t('preservation.noExportDestination')}</div>
       </div>
 
       <div>
-        <button type="button" onClick={() => void handlePickExportSource()} disabled={isWorking}>Choose Export Source</button>
-        <div>{exportRoot || lastExport?.exportRoot || 'No export source selected.'}</div>
+        <button type="button" onClick={() => void handlePickExportSource()} disabled={isWorking}>{t('preservation.chooseExportSource')}</button>
+        <div>{exportRoot || lastExport?.exportRoot || t('preservation.noExportSource')}</div>
       </div>
 
       <div>
-        <button type="button" onClick={() => void handlePickRestoreTarget()} disabled={isWorking}>Choose Restore Target</button>
-        <div>{targetRoot || 'No restore target selected.'}</div>
+        <button type="button" onClick={() => void handlePickRestoreTarget()} disabled={isWorking}>{t('preservation.chooseRestoreTarget')}</button>
+        <div>{targetRoot || t('preservation.noRestoreTarget')}</div>
       </div>
 
       <label>
-        Export password
+        {t('preservation.exportPassword')}
         <input type="password" value={exportPassword} onChange={(event) => setExportPassword(event.target.value)} />
       </label>
 
       <label>
-        Restore password
+        {t('preservation.restorePassword')}
         <input type="password" value={restorePassword} onChange={(event) => setRestorePassword(event.target.value)} />
       </label>
 
       <div>
-        <button type="button" onClick={() => void handleExport()} disabled={isWorking}>Export Archive</button>
-        <button type="button" onClick={() => void handleRestore()} disabled={isWorking}>Restore Archive</button>
-        <button type="button" onClick={() => void handleRecoveryDrill()} disabled={isWorking}>Run Recovery Drill</button>
+        <button type="button" onClick={() => void handleExport()} disabled={isWorking}>{t('preservation.exportArchive')}</button>
+        <button type="button" onClick={() => void handleRestore()} disabled={isWorking}>{t('preservation.restoreArchive')}</button>
+        <button type="button" onClick={() => void handleRecoveryDrill()} disabled={isWorking}>{t('preservation.runRecoveryDrill')}</button>
       </div>
 
       {statusMessage ? <p>{statusMessage}</p> : null}
-      {lastExport ? <p>Last export: {lastExport.exportRoot}</p> : null}
-      {lastRestore ? <p>Last restore target: {lastRestore.targetRoot}</p> : null}
-      {lastDrill ? <p>Last recovery drill target: {lastDrill.targetRoot}</p> : null}
+      {lastExport ? <p>{t('preservation.lastExport', { path: lastExport.exportRoot })}</p> : null}
+      {lastRestore ? <p>{t('preservation.lastRestore', { path: lastRestore.targetRoot })}</p> : null}
+      {lastDrill ? <p>{t('preservation.lastDrill', { path: lastDrill.targetRoot })}</p> : null}
       {lastDrill ? (
         <div>
-          <h3>Recovery Drill Report</h3>
-          <p>{lastDrill.summary.passedCount} passed · {lastDrill.summary.failedCount} failed</p>
+          <h3>{t('preservation.drillReport.title')}</h3>
+          <p>{t('preservation.drillReport.summary', { passed: lastDrill.summary.passedCount, failed: lastDrill.summary.failedCount })}</p>
           <ul>
             {lastDrill.checks.map((check) => (
               <li key={check.name}>

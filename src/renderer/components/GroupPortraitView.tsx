@@ -5,6 +5,7 @@ import type {
   MemoryWorkspaceScope,
   PersonDossierReviewShortcut
 } from '../../shared/archiveContracts'
+import { useI18n } from '../i18n'
 
 function formatRatio(value: number) {
   return value.toFixed(2)
@@ -25,57 +26,59 @@ export function GroupPortraitView(props: {
   onOpenReplayHistory?: (shortcut: GroupPortraitReplayShortcut) => void
   onOpenMemoryWorkspace?: (scope: MemoryWorkspaceScope) => void
 }) {
+  const { t } = useI18n()
+
   if (!props.portrait) {
-    return <p>Select a person to open the group portrait.</p>
+    return <p>{t('groupPortrait.select')}</p>
   }
 
   const { portrait } = props
 
   return (
     <section>
-      <h1>Group Portrait</h1>
+      <h1>{t('groupPortrait.title')}</h1>
       <p>{portrait.title}</p>
       <button
         type="button"
         onClick={() => props.onOpenMemoryWorkspace?.({ kind: 'group', anchorPersonId: portrait.anchorPersonId })}
       >
-        Open memory workspace
+        {t('groupPortrait.openMemoryWorkspace')}
       </button>
 
-      <section aria-label="Context Pack Export">
-        <h2>Context Pack Export</h2>
+      <section aria-label={t('groupPortrait.contextPack.title')}>
+        <h2>{t('groupPortrait.contextPack.title')}</h2>
         <label>
-          Context pack mode
+          {t('groupPortrait.contextPack.mode')}
           <select
             value={props.contextPackMode ?? 'approved_plus_derived'}
             onChange={(event) => props.onChangeContextPackMode?.(event.target.value as ContextPackExportMode)}
           >
-            <option value="approved_plus_derived">Approved + derived</option>
-            <option value="approved_only">Approved only</option>
+            <option value="approved_plus_derived">{t('groupPortrait.contextPack.mode.approvedPlusDerived')}</option>
+            <option value="approved_only">{t('groupPortrait.contextPack.mode.approvedOnly')}</option>
           </select>
         </label>
-        <div>{props.contextPackDestination || 'No context pack destination selected.'}</div>
+        <div>{props.contextPackDestination || t('groupPortrait.contextPack.noDestination')}</div>
         <div>
           <button
             type="button"
             onClick={() => props.onPickContextPackDestination?.()}
             disabled={props.isExportingContextPack}
           >
-            Choose context pack destination
+            {t('groupPortrait.contextPack.chooseDestination')}
           </button>
           <button
             type="button"
             onClick={() => props.onExportContextPack?.()}
             disabled={props.isExportingContextPack}
           >
-            Export context pack
+            {t('groupPortrait.contextPack.export')}
           </button>
         </div>
         {props.contextPackStatus ? <p>{props.contextPackStatus}</p> : null}
       </section>
 
-      <section aria-label="Members">
-        <h2>Members</h2>
+      <section aria-label={t('groupPortrait.members.title')}>
+        <h2>{t('groupPortrait.members.title')}</h2>
         <ul>
           {portrait.members.map((member) => (
             <li key={member.personId}>
@@ -90,7 +93,7 @@ export function GroupPortraitView(props: {
               ) : (
                 member.displayName
               )}
-              {member.isAnchor ? ' · anchor' : ''}
+              {member.isAnchor ? ` · ${t('groupPortrait.members.anchor')}` : ''}
               {member.manualLabel ? ` · ${member.manualLabel}` : ''}
               {` · files ${member.sharedFileCount} · events ${member.sharedEventCount} · connections ${member.connectionCount}`}
             </li>
@@ -98,14 +101,14 @@ export function GroupPortraitView(props: {
         </ul>
       </section>
 
-      <section aria-label="Relationship Density">
-        <h2>Relationship Density</h2>
+      <section aria-label={t('groupPortrait.relationshipDensity.title')}>
+        <h2>{t('groupPortrait.relationshipDensity.title')}</h2>
         <p>{portrait.relationshipDensity.actualEdgeCount} / {portrait.relationshipDensity.possibleEdgeCount}</p>
-        <p>Ratio: {formatRatio(portrait.relationshipDensity.densityRatio)}</p>
+        <p>{t('groupPortrait.relationshipDensity.ratio')}: {formatRatio(portrait.relationshipDensity.densityRatio)}</p>
       </section>
 
-      <section aria-label="Shared Events">
-        <h2>Shared Events</h2>
+      <section aria-label={t('groupPortrait.sharedEvents.title')}>
+        <h2>{t('groupPortrait.sharedEvents.title')}</h2>
         {portrait.sharedEvents.length ? (
           <ul>
             {portrait.sharedEvents.map((event) => (
@@ -136,12 +139,12 @@ export function GroupPortraitView(props: {
             ))}
           </ul>
         ) : (
-          <p>No shared events yet.</p>
+          <p>{t('groupPortrait.sharedEvents.none')}</p>
         )}
       </section>
 
-      <section aria-label="Timeline Windows">
-        <h2>Timeline Windows</h2>
+      <section aria-label={t('groupPortrait.timelineWindows.title')}>
+        <h2>{t('groupPortrait.timelineWindows.title')}</h2>
         {portrait.timelineWindows.length ? (
           <ul>
             {portrait.timelineWindows.map((window) => (
@@ -152,12 +155,12 @@ export function GroupPortraitView(props: {
             ))}
           </ul>
         ) : (
-          <p>No timeline windows yet.</p>
+          <p>{t('groupPortrait.timelineWindows.none')}</p>
         )}
       </section>
 
-      <section aria-label="Summary">
-        <h2>Summary</h2>
+      <section aria-label={t('groupPortrait.summary.title')}>
+        <h2>{t('groupPortrait.summary.title')}</h2>
         <ul>
           {portrait.narrativeSummary.map((item) => (
             <li key={item.summaryId}>{item.text}</li>
@@ -165,8 +168,8 @@ export function GroupPortraitView(props: {
         </ul>
       </section>
 
-      <section aria-label="Shared Evidence Sources">
-        <h2>Shared Evidence Sources</h2>
+      <section aria-label={t('groupPortrait.sharedEvidenceSources.title')}>
+        <h2>{t('groupPortrait.sharedEvidenceSources.title')}</h2>
         {portrait.sharedEvidenceSources.length ? (
           <ul>
             {portrait.sharedEvidenceSources.map((source) => (
@@ -183,12 +186,12 @@ export function GroupPortraitView(props: {
             ))}
           </ul>
         ) : (
-          <p>No shared evidence sources yet.</p>
+          <p>{t('groupPortrait.sharedEvidenceSources.none')}</p>
         )}
       </section>
 
-      <section aria-label="Replay Shortcuts">
-        <h2>Replay Shortcuts</h2>
+      <section aria-label={t('groupPortrait.replayShortcuts.title')}>
+        <h2>{t('groupPortrait.replayShortcuts.title')}</h2>
         {portrait.replayShortcuts.length ? (
           <ul>
             {portrait.replayShortcuts.map((shortcut) => (
@@ -204,26 +207,26 @@ export function GroupPortraitView(props: {
             ))}
           </ul>
         ) : (
-          <p>No replay shortcuts yet.</p>
+          <p>{t('groupPortrait.replayShortcuts.none')}</p>
         )}
       </section>
 
-      <section aria-label="Central People">
-        <h2>Central People</h2>
+      <section aria-label={t('groupPortrait.centralPeople.title')}>
+        <h2>{t('groupPortrait.centralPeople.title')}</h2>
         <ul>
           {portrait.centralPeople.map((person) => (
             <li key={person.personId}>
               {person.displayName} · connections {person.connectionCount} · files {person.sharedFileCount} · events {person.sharedEventCount}
             </li>
-          ))}
-        </ul>
-      </section>
+        ))}
+      </ul>
+    </section>
 
-      <section aria-label="Unresolved Ambiguity">
-        <h2>Unresolved Ambiguity</h2>
-        <p>Pending review: {portrait.ambiguitySummary.pendingReviewCount}</p>
-        <p>Conflict groups: {portrait.ambiguitySummary.conflictGroupCount}</p>
-        <p>Affected members: {portrait.ambiguitySummary.affectedMemberCount}</p>
+      <section aria-label={t('groupPortrait.unresolvedAmbiguity.title')}>
+        <h2>{t('groupPortrait.unresolvedAmbiguity.title')}</h2>
+        <p>{t('groupPortrait.unresolvedAmbiguity.pendingReview')}: {portrait.ambiguitySummary.pendingReviewCount}</p>
+        <p>{t('groupPortrait.unresolvedAmbiguity.conflictGroups')}: {portrait.ambiguitySummary.conflictGroupCount}</p>
+        <p>{t('groupPortrait.unresolvedAmbiguity.affectedMembers')}: {portrait.ambiguitySummary.affectedMemberCount}</p>
         {portrait.ambiguitySummary.reviewShortcut && props.onOpenReviewWorkbench ? (
           <button
             type="button"

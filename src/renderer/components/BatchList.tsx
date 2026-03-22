@@ -1,11 +1,14 @@
 import type { ImportBatchSummary } from '../../shared/archiveContracts'
+import { useI18n } from '../i18n'
 
 export function BatchList(props: {
   batches: ImportBatchSummary[]
   onSelect?: (batchId: string) => void
 }) {
+  const { t } = useI18n()
+
   if (props.batches.length === 0) {
-    return <p>No batches imported yet.</p>
+    return <p>{t('batches.noBatches')}</p>
   }
 
   return (

@@ -6,13 +6,14 @@ import type {
   PersonDossierEvidenceRef,
   PersonDossierReviewShortcut
 } from '../../shared/archiveContracts'
+import { useI18n } from '../i18n'
 
 function formatDisplayType(displayType: DossierDisplayType) {
   return displayType.replace(/_/g, ' ')
 }
 
-function formatDate(value: string | null) {
-  return value ?? 'Unknown'
+function formatDate(value: string | null, unknownLabel: string) {
+  return value ?? unknownLabel
 }
 
 function renderEvidenceRef(ref: PersonDossierEvidenceRef, onOpenEvidenceFile?: (fileId: string) => void) {
@@ -45,74 +46,76 @@ export function PersonDossierView(props: {
   onOpenGroupPortrait?: (canonicalPersonId: string) => void
   onOpenMemoryWorkspace?: (scope: MemoryWorkspaceScope) => void
 }) {
+  const { t } = useI18n()
+
   if (!props.dossier) {
-    return <p>Select a person to open the dossier.</p>
+    return <p>{t('personDossier.select')}</p>
   }
 
   const { dossier } = props
 
   return (
     <section>
-      <h1>Person Dossier</h1>
+      <h1>{t('personDossier.title')}</h1>
       <button type="button" onClick={() => props.onOpenGroupPortrait?.(dossier.person.id)}>
-        Open group portrait
+        {t('personDossier.openGroupPortrait')}
       </button>
       <button
         type="button"
         onClick={() => props.onOpenMemoryWorkspace?.({ kind: 'person', canonicalPersonId: dossier.person.id })}
       >
-        Open memory workspace
+        {t('personDossier.openMemoryWorkspace')}
       </button>
 
-      <section aria-label="Context Pack Export">
-        <h2>Context Pack Export</h2>
+      <section aria-label={t('personDossier.contextPack.title')}>
+        <h2>{t('personDossier.contextPack.title')}</h2>
         <label>
-          Context pack mode
+          {t('personDossier.contextPack.mode')}
           <select
             value={props.contextPackMode ?? 'approved_plus_derived'}
             onChange={(event) => props.onChangeContextPackMode?.(event.target.value as ContextPackExportMode)}
           >
-            <option value="approved_plus_derived">Approved + derived</option>
-            <option value="approved_only">Approved only</option>
+            <option value="approved_plus_derived">{t('personDossier.contextPack.mode.approvedPlusDerived')}</option>
+            <option value="approved_only">{t('personDossier.contextPack.mode.approvedOnly')}</option>
           </select>
         </label>
-        <div>{props.contextPackDestination || 'No context pack destination selected.'}</div>
+        <div>{props.contextPackDestination || t('personDossier.contextPack.noDestination')}</div>
         <div>
           <button
             type="button"
             onClick={() => props.onPickContextPackDestination?.()}
             disabled={props.isExportingContextPack}
           >
-            Choose context pack destination
+            {t('personDossier.contextPack.chooseDestination')}
           </button>
           <button
             type="button"
             onClick={() => props.onExportContextPack?.()}
             disabled={props.isExportingContextPack}
           >
-            Export context pack
+            {t('personDossier.contextPack.export')}
           </button>
         </div>
         {props.contextPackStatus ? <p>{props.contextPackStatus}</p> : null}
       </section>
 
-      <section aria-label="Identity Card">
-        <h2>Identity Card</h2>
+      <section aria-label={t('personDossier.identityCard.title')}>
+        <h2>{t('personDossier.identityCard.title')}</h2>
         <p>{dossier.identityCard.primaryDisplayName}</p>
-        <p>Display type: {formatDisplayType(dossier.identityCard.displayType)}</p>
-        <p>Aliases: {dossier.identityCard.aliases.join(', ') || 'None'}</p>
-        <p>Labels: {dossier.identityCard.manualLabels.join(', ') || 'None'}</p>
-        <p>First seen: {formatDate(dossier.identityCard.firstSeenAt)}</p>
-        <p>Last seen: {formatDate(dossier.identityCard.lastSeenAt)}</p>
-        <p>Evidence anchors: {dossier.identityCard.evidenceCount}</p>
+        <p>{t('personDossier.identityCard.displayType')}: {formatDisplayType(dossier.identityCard.displayType)}</p>
+        <p>{t('personDossier.identityCard.aliases')}: {dossier.identityCard.aliases.join(', ') || t('common.none')}</p>
+        <p>{t('personDossier.identityCard.labels')}: {dossier.identityCard.manualLabels.join(', ') || t('common.none')}</p>
+        <p>{t('personDossier.identityCard.firstSeen')}: {formatDate(dossier.identityCard.firstSeenAt, t('personDossier.unknownDate'))}</p>
+        <p>{t('personDossier.identityCard.lastSeen')}: {formatDate(dossier.identityCard.lastSeenAt, t('personDossier.unknownDate'))}</p>
+        <p>{t('personDossier.identityCard.evidenceAnchors')}: {dossier.identityCard.evidenceCount}</p>
       </section>
 
-      <section aria-label="Thematic Portrait">
-        <h2>Thematic Portrait</h2>
+      <section aria-label={t('personDossier.thematicPortrait.title')}>
+        <h2>{t('personDossier.thematicPortrait.title')}</h2>
         {dossier.thematicSections.map((section) => (
           <section key={section.sectionKey}>
             <h3>{section.title}</h3>
-            <p>Display type: {formatDisplayType(section.displayType)}</p>
+            <p>{t('personDossier.identityCard.displayType')}: {formatDisplayType(section.displayType)}</p>
             {section.displayType === 'coverage_gap' ? (
               section.items.map((item) => <p key={item.id}>{item.value}</p>)
             ) : (
@@ -128,8 +131,8 @@ export function PersonDossierView(props: {
         ))}
       </section>
 
-      <section aria-label="Timeline Highlights">
-        <h2>Timeline Highlights</h2>
+      <section aria-label={t('personDossier.timelineHighlights.title')}>
+        <h2>{t('personDossier.timelineHighlights.title')}</h2>
         {dossier.timelineHighlights.length ? (
           <ul>
             {dossier.timelineHighlights.map((highlight) => (
@@ -140,17 +143,17 @@ export function PersonDossierView(props: {
             ))}
           </ul>
         ) : (
-          <p>No approved timeline highlights yet.</p>
+          <p>{t('personDossier.timelineHighlights.none')}</p>
         )}
       </section>
 
-      <section aria-label="Relationship Context">
-        <h2>Relationship Context</h2>
+      <section aria-label={t('personDossier.relationshipContext.title')}>
+        <h2>{t('personDossier.relationshipContext.title')}</h2>
         {dossier.relationshipSummary.length ? (
           <ul>
             {dossier.relationshipSummary.map((relationship) => (
               <li key={relationship.personId}>
-                {relationship.displayName} · shared files {relationship.sharedFileCount}
+                {relationship.displayName} · {t('personDossier.relationshipContext.sharedFiles', { count: relationship.sharedFileCount })}
                 {relationship.manualLabel ? ` · ${relationship.manualLabel}` : ''}
                 {' · '}
                 {formatDisplayType(relationship.displayType)}
@@ -158,22 +161,22 @@ export function PersonDossierView(props: {
             ))}
           </ul>
         ) : (
-          <p>No approved relationship context yet.</p>
+          <p>{t('personDossier.relationshipContext.none')}</p>
         )}
       </section>
 
-      <section aria-label="Conflicts & Gaps">
-        <h2>Conflicts & Gaps</h2>
+      <section aria-label={t('personDossier.conflictsGaps.title')}>
+        <h2>{t('personDossier.conflictsGaps.title')}</h2>
         {dossier.conflictSummary.length ? (
           <ul>
             {dossier.conflictSummary.map((conflict) => (
               <li key={conflict.fieldKey ?? conflict.title}>
-                {conflict.title} · pending {conflict.pendingCount} · {conflict.distinctValues.join(' / ')}
+                {conflict.title} · {t('personDossier.conflictsGaps.pendingCount', { count: conflict.pendingCount })} · {conflict.distinctValues.join(' / ')}
               </li>
             ))}
           </ul>
         ) : (
-          <p>No open conflicts right now.</p>
+          <p>{t('personDossier.conflictsGaps.none')}</p>
         )}
         {dossier.coverageGaps.length ? (
           <ul>
@@ -184,7 +187,7 @@ export function PersonDossierView(props: {
             ))}
           </ul>
         ) : (
-          <p>No explicit coverage gaps right now.</p>
+          <p>{t('personDossier.coverageGaps.none')}</p>
         )}
         {dossier.reviewShortcuts.length ? (
           <div>
@@ -201,14 +204,14 @@ export function PersonDossierView(props: {
         ) : null}
       </section>
 
-      <section aria-label="Evidence Backtrace">
-        <h2>Evidence Backtrace</h2>
+      <section aria-label={t('personDossier.evidenceBacktrace.title')}>
+        <h2>{t('personDossier.evidenceBacktrace.title')}</h2>
         {dossier.evidenceBacktrace.length ? (
           <div>
             {dossier.evidenceBacktrace.map((ref) => renderEvidenceRef(ref, props.onOpenEvidenceFile))}
           </div>
         ) : (
-          <p>No evidence backtrace anchors yet.</p>
+          <p>{t('personDossier.evidenceBacktrace.none')}</p>
         )}
       </section>
     </section>

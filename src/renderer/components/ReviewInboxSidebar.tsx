@@ -1,4 +1,5 @@
 import type { ReviewInboxPersonSummary } from '../../shared/archiveContracts'
+import { useI18n } from '../i18n'
 
 export function ReviewInboxSidebar(props: {
   people: ReviewInboxPersonSummary[]
@@ -6,13 +7,15 @@ export function ReviewInboxSidebar(props: {
   onSelectPerson?: (person: ReviewInboxPersonSummary) => void | Promise<void>
   onShowAll?: () => void | Promise<void>
 }) {
+  const { t } = useI18n()
+
   return (
     <aside>
-      <h2>People Inbox</h2>
+      <h2>{t('reviewWorkbench.inbox.title')}</h2>
       <button type="button" onClick={() => void props.onShowAll?.()} aria-pressed={props.selectedPersonKey === null}>
-        All Pending
+        {t('reviewWorkbench.inbox.allPending')}
       </button>
-      {props.people.length === 0 ? <p>No people with pending review items.</p> : null}
+      {props.people.length === 0 ? <p>{t('reviewWorkbench.inbox.none')}</p> : null}
       <ul>
         {props.people.map((person) => {
           const personKey = person.canonicalPersonId ?? '__unassigned__'
@@ -25,10 +28,10 @@ export function ReviewInboxSidebar(props: {
               >
                 {person.canonicalPersonName}
               </button>
-              <div>{person.pendingCount} pending</div>
-              <div>{person.fieldKeys.join(', ') || 'No fields'}</div>
-              {person.conflictCount > 0 ? <div>{person.conflictCount} conflicts</div> : null}
-              {person.hasContinuousSequence ? <div>Continue available</div> : null}
+              <div>{t('reviewWorkbench.inbox.pending', { count: person.pendingCount })}</div>
+              <div>{person.fieldKeys.join(', ') || t('reviewWorkbench.inbox.noFields')}</div>
+              {person.conflictCount > 0 ? <div>{t('reviewWorkbench.inbox.conflicts', { count: person.conflictCount })}</div> : null}
+              {person.hasContinuousSequence ? <div>{t('reviewWorkbench.inbox.continue')}</div> : null}
             </li>
           )
         })}

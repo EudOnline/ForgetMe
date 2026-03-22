@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from './testing-library'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { GroupPortraitPage } from '../../../src/renderer/pages/GroupPortraitPage'
 

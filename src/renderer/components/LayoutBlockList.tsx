@@ -1,3 +1,5 @@
+import { useI18n } from '../i18n'
+
 export function LayoutBlockList(props: {
   blocks: Array<{
     page: number
@@ -5,14 +7,16 @@ export function LayoutBlockList(props: {
     bbox?: number[]
   }>
 }) {
+  const { t } = useI18n()
+
   return (
     <section>
-      <h3>Layout Blocks</h3>
-      {props.blocks.length === 0 ? <p>No layout blocks available.</p> : null}
+      <h3>{t('documentEvidence.layoutBlocks')}</h3>
+      {props.blocks.length === 0 ? <p>{t('documentEvidence.noLayoutBlocks')}</p> : null}
       <ul>
         {props.blocks.map((block, index) => (
           <li key={`${block.page}-${index}`}>
-            Page {block.page}: {block.text}
+            {t('documentEvidence.pageLabel', { page: block.page, text: block.text })}
           </li>
         ))}
       </ul>

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { DocumentEvidence } from '../../shared/archiveContracts'
 import { getArchiveApi } from '../archiveApi'
+import { useI18n } from '../i18n'
 import { LayoutBlockList } from '../components/LayoutBlockList'
 import { OCRTextPanel } from '../components/OCRTextPanel'
 import { StructuredFieldCandidateTable } from '../components/StructuredFieldCandidateTable'
 
 export function DocumentEvidencePage(props: { fileId: string | null }) {
+  const { t } = useI18n()
   const archiveApi = useMemo(() => getArchiveApi(), [])
   const [evidence, setEvidence] = useState<DocumentEvidence | null>(null)
 
@@ -23,22 +25,22 @@ export function DocumentEvidencePage(props: { fileId: string | null }) {
   }, [archiveApi, props.fileId])
 
   if (!props.fileId) {
-    return <p>Select a file to inspect document evidence.</p>
+    return <p>{t('documentEvidence.selectFile')}</p>
   }
 
   if (!evidence) {
-    return <p>Loading evidence…</p>
+    return <p>{t('documentEvidence.loading')}</p>
   }
 
   return (
     <section>
-      <h2>Document Evidence</h2>
+      <h2>{t('documentEvidence.title')}</h2>
       <p>{evidence.fileName}</p>
       <OCRTextPanel rawText={evidence.rawText} />
       <LayoutBlockList blocks={evidence.layoutBlocks} />
 
       <section>
-        <h3>Approved Fields</h3>
+        <h3>{t('documentEvidence.approvedFields')}</h3>
         <ul>
           {evidence.approvedFields.map((field) => (
             <li key={`${field.fileId}-${field.fieldKey}-${field.value}`}>
@@ -49,7 +51,7 @@ export function DocumentEvidencePage(props: { fileId: string | null }) {
       </section>
 
       <section>
-        <h3>Field Candidates</h3>
+        <h3>{t('documentEvidence.fieldCandidates')}</h3>
         <StructuredFieldCandidateTable
           candidates={evidence.fieldCandidates}
           onApprove={async (queueItemId) => {

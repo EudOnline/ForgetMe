@@ -1,11 +1,14 @@
 import type { CanonicalPersonSummary } from '../../shared/archiveContracts'
+import { useI18n } from '../i18n'
 
 export function PersonList(props: {
   people: CanonicalPersonSummary[]
   onSelect?: (canonicalPersonId: string) => void
 }) {
+  const { t } = useI18n()
+
   if (props.people.length === 0) {
-    return <p>No approved people yet.</p>
+    return <p>{t('people.noApprovedPeople')}</p>
   }
 
   return (

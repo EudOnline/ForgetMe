@@ -1,3 +1,5 @@
+import { useI18n } from '../i18n'
+
 export function ReviewActionBar(props: {
   queueStatus: string
   undoJournalId: string | null
@@ -6,15 +8,16 @@ export function ReviewActionBar(props: {
   onReject?: () => void
   onUndo?: () => void
 }) {
+  const { t } = useI18n()
   const pending = props.queueStatus === 'pending'
 
   return (
     <section>
-      <h2>Actions</h2>
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-        <button type="button" onClick={() => props.onApprove?.()} disabled={!pending || props.busy}>Approve</button>
-        <button type="button" onClick={() => props.onReject?.()} disabled={!pending || props.busy}>Reject</button>
-        <button type="button" onClick={() => props.onUndo?.()} disabled={!props.undoJournalId || props.busy}>Undo</button>
+      <h2>{t('reviewWorkbench.actions.title')}</h2>
+      <div className="fmButtonRow">
+        <button type="button" onClick={() => props.onApprove?.()} disabled={!pending || props.busy}>{t('reviewWorkbench.actions.approve')}</button>
+        <button type="button" onClick={() => props.onReject?.()} disabled={!pending || props.busy}>{t('reviewWorkbench.actions.reject')}</button>
+        <button type="button" onClick={() => props.onUndo?.()} disabled={!props.undoJournalId || props.busy}>{t('reviewWorkbench.actions.undo')}</button>
       </div>
     </section>
   )

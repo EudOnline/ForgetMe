@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { DecisionJournalEntry, ReviewQueueItem } from '../../shared/archiveContracts'
 import { getArchiveApi } from '../archiveApi'
+import { useI18n } from '../i18n'
 import { ReviewQueueTable } from '../components/ReviewQueueTable'
 import { UndoHistoryTable } from '../components/UndoHistoryTable'
 
@@ -9,6 +10,7 @@ export function ReviewQueuePage(props: {
   initialJournalQuery?: string | null
   initialSelectedJournalId?: string | null
 }) {
+  const { t } = useI18n()
   const archiveApi = useMemo(() => getArchiveApi(), [])
   const [items, setItems] = useState<ReviewQueueItem[]>([])
   const [journal, setJournal] = useState<DecisionJournalEntry[]>([])
@@ -52,14 +54,14 @@ export function ReviewQueuePage(props: {
 
   return (
     <section>
-      <h1>Review Queue</h1>
+      <h1>{t('reviewQueue.title')}</h1>
       {props.onOpenWorkbench ? (
         <button type="button" onClick={() => props.onOpenWorkbench?.(items[0]?.id ?? null)} disabled={items.length === 0}>
-          Open Workbench
+          {t('reviewQueue.openWorkbench')}
         </button>
       ) : null}
       <ReviewQueueTable items={items} onApprove={handleApprove} onReject={handleReject} />
-      <h2>Undo History</h2>
+      <h2>{t('reviewQueue.undoHistory.title')}</h2>
       <form
         onSubmit={(event) => {
           event.preventDefault()
@@ -67,15 +69,15 @@ export function ReviewQueuePage(props: {
         }}
       >
         <label>
-          Search history
+          {t('reviewQueue.undoHistory.searchLabel')}
           <input value={journalQuery} onChange={(event) => setJournalQuery(event.target.value)} />
         </label>
-        <button type="submit">Filter History</button>
+        <button type="submit">{t('reviewQueue.undoHistory.filter')}</button>
       </form>
       <UndoHistoryTable entries={journal} onUndo={handleUndo} onReplay={setSelectedJournal} />
       {selectedJournal ? (
         <section>
-          <h3>Replay Detail</h3>
+          <h3>{t('reviewQueue.replayDetail.title')}</h3>
           <p>{selectedJournal.replaySummary ?? selectedJournal.decisionType}</p>
           <p>{selectedJournal.actor}</p>
           <pre>{JSON.stringify(selectedJournal.operationPayload, null, 2)}</pre>

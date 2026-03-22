@@ -1,28 +1,30 @@
 import type { ReviewWorkbenchDetail } from '../../shared/archiveContracts'
+import { useI18n } from '../i18n'
 
 export function ReviewCandidateSummaryCard(props: {
   detail: ReviewWorkbenchDetail
 }) {
+  const { t } = useI18n()
   const { item, candidate, queueItem } = props.detail
 
   return (
     <section>
-      <h2>Candidate Detail</h2>
+      <h2>{t('reviewWorkbench.candidate.title')}</h2>
       <dl>
-        <dt>Type</dt>
+        <dt>{t('reviewWorkbench.candidate.type')}</dt>
         <dd>{item.itemType}</dd>
-        <dt>Field</dt>
-        <dd>{item.fieldKey ?? 'unknown'}</dd>
-        <dt>Value</dt>
-        <dd>{item.displayValue || 'unknown'}</dd>
-        <dt>Person</dt>
-        <dd>{item.canonicalPersonName ?? 'Unassigned person'}</dd>
-        <dt>Status</dt>
+        <dt>{t('reviewWorkbench.candidate.field')}</dt>
+        <dd>{item.fieldKey ?? t('common.unknown')}</dd>
+        <dt>{t('reviewWorkbench.candidate.value')}</dt>
+        <dd>{item.displayValue || t('common.unknown')}</dd>
+        <dt>{t('reviewWorkbench.candidate.person')}</dt>
+        <dd>{item.canonicalPersonName ?? t('personDossier.unassignedPerson')}</dd>
+        <dt>{t('reviewWorkbench.candidate.status')}</dt>
         <dd>{queueItem.status}</dd>
-        <dt>Confidence</dt>
+        <dt>{t('reviewWorkbench.candidate.confidence')}</dt>
         <dd>{queueItem.confidence}</dd>
       </dl>
-      {candidate ? <pre>{JSON.stringify(candidate, null, 2)}</pre> : <p>No candidate payload.</p>}
+      {candidate ? <pre>{JSON.stringify(candidate, null, 2)}</pre> : <p>{t('reviewWorkbench.candidate.noPayload')}</p>}
     </section>
   )
 }

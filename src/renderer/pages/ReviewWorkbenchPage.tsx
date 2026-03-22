@@ -6,6 +6,7 @@ import type {
   ReviewWorkbenchListItem
 } from '../../shared/archiveContracts'
 import { getArchiveApi } from '../archiveApi'
+import { useI18n } from '../i18n'
 import { ReviewActionBar } from '../components/ReviewActionBar'
 import { ReviewCandidateSummaryCard } from '../components/ReviewCandidateSummaryCard'
 import {
@@ -126,6 +127,7 @@ function isEditableTarget(target: EventTarget | null) {
 export function ReviewWorkbenchPage(props: {
   initialQueueItemId?: string | null
 }) {
+  const { t } = useI18n()
   const archiveApi = useMemo(() => getArchiveApi(), [])
   const [items, setItems] = useState<ReviewWorkbenchListItem[]>([])
   const [peopleInbox, setPeopleInbox] = useState<ReviewInboxPersonSummary[]>([])
@@ -427,11 +429,11 @@ export function ReviewWorkbenchPage(props: {
 
   return (
     <section>
-      <h1>Review Workbench</h1>
+      <h1>{t('reviewWorkbench.title')}</h1>
       {errorMessage ? <p role="alert">{errorMessage}</p> : null}
-      {selectedItemIsStale ? <p>Selected item is no longer pending.</p> : null}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr 1fr', gap: '16px', alignItems: 'start' }}>
-        <div style={{ display: 'grid', gap: '16px' }}>
+      {selectedItemIsStale ? <p>{t('reviewWorkbench.stale')}</p> : null}
+      <div className="fmWorkbenchLayout">
+        <div className="fmWorkbenchSideStack">
           <ReviewInboxSidebar
             people={peopleInbox}
             selectedPersonKey={selectedInboxPersonKey}
@@ -449,28 +451,28 @@ export function ReviewWorkbenchPage(props: {
         <div>
           {batchApprovalSummary ? (
             <section>
-              <h2>Safe Batch Approval</h2>
+              <h2>{t('reviewWorkbench.safeBatch.title')}</h2>
               <dl>
-                <dt>Person</dt>
+                <dt>{t('reviewWorkbench.safeBatch.personLabel')}</dt>
                 <dd>{batchApprovalSummary.canonicalPersonName}</dd>
-                <dt>Field</dt>
-                <dd>{batchApprovalSummary.fieldKey ?? 'unknown'}</dd>
-                <dt>Items</dt>
-                <dd>{batchApprovalSummary.itemCount} items</dd>
+                <dt>{t('reviewWorkbench.safeBatch.fieldLabel')}</dt>
+                <dd>{batchApprovalSummary.fieldKey ?? t('reviewWorkbench.compare.unknownField')}</dd>
+                <dt>{t('reviewWorkbench.safeBatch.itemsLabel')}</dt>
+                <dd>{t('reviewWorkbench.safeBatch.itemsCount', { count: batchApprovalSummary.itemCount })}</dd>
               </dl>
               {isBatchConfirming ? (
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <span>Creates a batch journal and remains undoable.</span>
+                <div className="fmButtonRow">
+                  <span>{t('reviewWorkbench.safeBatch.createsBatch')}</span>
                   <button type="button" onClick={() => void runBatchApprove()} disabled={isBusy}>
-                    Confirm Batch Approve
+                    {t('reviewWorkbench.safeBatch.confirm')}
                   </button>
                   <button type="button" onClick={() => setIsBatchConfirming(false)} disabled={isBusy}>
-                    Cancel
+                    {t('workbench.cancel')}
                   </button>
                 </div>
               ) : (
                 <button type="button" onClick={() => setIsBatchConfirming(true)} disabled={isBusy}>
-                  Batch Approve
+                  {t('reviewWorkbench.safeBatch.batchApprove')}
                 </button>
               )}
             </section>
@@ -493,11 +495,11 @@ export function ReviewWorkbenchPage(props: {
               onNext={handleNavigateNext}
             />
           ) : null}
-          {detail ? <ReviewCandidateSummaryCard detail={detail} /> : <p>No workbench item selected.</p>}
+          {detail ? <ReviewCandidateSummaryCard detail={detail} /> : <p>{t('reviewWorkbench.noSelectedItem')}</p>}
           {detail ? <ReviewEvidenceTraceCard trace={detail.trace} /> : null}
         </div>
         <div>
-          {detail ? <ReviewImpactPreviewCard preview={detail.impactPreview} /> : <p>No impact preview available.</p>}
+          {detail ? <ReviewImpactPreviewCard preview={detail.impactPreview} /> : <p>{t('reviewWorkbench.impact.none')}</p>}
           {detail ? (
             <ReviewActionBar
               queueStatus={detail.queueItem.status}

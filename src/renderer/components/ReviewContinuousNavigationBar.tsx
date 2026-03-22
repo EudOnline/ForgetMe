@@ -1,3 +1,5 @@
+import { useI18n } from '../i18n'
+
 export function ReviewContinuousNavigationBar(props: {
   currentIndex: number
   totalCount: number
@@ -6,18 +8,20 @@ export function ReviewContinuousNavigationBar(props: {
   onPrevious?: () => void | Promise<void>
   onNext?: () => void | Promise<void>
 }) {
+  const { t } = useI18n()
+
   return (
     <section>
-      <h2>Continuous Navigation</h2>
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+      <h2>{t('reviewWorkbench.nav.title')}</h2>
+      <div className="fmButtonRow">
         <button type="button" onClick={() => void props.onPrevious?.()} disabled={!props.canGoPrevious}>
-          Previous
+          {t('reviewWorkbench.nav.previous')}
         </button>
         <span>{props.currentIndex} / {props.totalCount}</span>
         <button type="button" onClick={() => void props.onNext?.()} disabled={!props.canGoNext}>
-          Next
+          {t('reviewWorkbench.nav.next')}
         </button>
-        <span>j / k</span>
+        <span>{t('reviewWorkbench.nav.hint')}</span>
       </div>
     </section>
   )

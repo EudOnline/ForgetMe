@@ -1,17 +1,20 @@
 import type { ImportBatchSummary } from '../../shared/archiveContracts'
+import { useI18n } from '../i18n'
 
 export function FileTable(props: { batch: ImportBatchSummary | null }) {
+  const { t } = useI18n()
+
   if (!props.batch?.files?.length) {
-    return <p>No files in this batch.</p>
+    return <p>{t('fileTable.noFiles')}</p>
   }
 
   return (
     <table>
       <thead>
         <tr>
-          <th>File</th>
-          <th>Duplicate</th>
-          <th>Parser</th>
+          <th>{t('fileTable.header.file')}</th>
+          <th>{t('fileTable.header.duplicate')}</th>
+          <th>{t('fileTable.header.parser')}</th>
         </tr>
       </thead>
       <tbody>

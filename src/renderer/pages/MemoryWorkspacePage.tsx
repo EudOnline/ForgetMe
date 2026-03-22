@@ -27,6 +27,7 @@ import type {
 } from '../../shared/archiveContracts'
 import { getArchiveApi } from '../archiveApi'
 import { MemoryWorkspaceView } from '../components/MemoryWorkspaceView'
+import { useI18n } from '../i18n'
 
 const compareJudgeDefaultsStorageKey = 'forgetme.memoryWorkspace.compareJudgeDefaults'
 const compareTargetDefaultsStorageKey = 'forgetme.memoryWorkspace.compareTargetDefaults'
@@ -73,10 +74,13 @@ function parsePositiveInteger(value: string | undefined, fallback: number) {
 }
 
 function approvedDraftProviderSendPollIntervalMs() {
-  return parsePositiveInteger(
+  const resolved = parsePositiveInteger(
     process.env.FORGETME_APPROVED_DRAFT_SEND_POLL_INTERVAL_MS,
     DEFAULT_APPROVED_DRAFT_SEND_POLL_INTERVAL_MS
   )
+
+  // Avoid pathological tight loops (and flaky tests) when the env override is extremely low.
+  return Math.max(100, resolved)
 }
 
 function defaultCompareJudgeDefaults(): CompareJudgeDefaults {
@@ -492,6 +496,7 @@ export function MemoryWorkspacePage(props: {
   onOpenEvidenceFile?: (fileId: string) => void
   onOpenReviewHistory?: (citation: MemoryWorkspaceCitation) => void
 }) {
+  const { t } = useI18n()
   const archiveApi = useMemo(() => getArchiveApi(), [])
   const runCompareMatrix = useMemo(
     () => (typeof archiveApi.runMemoryWorkspaceCompareMatrix === 'function'
@@ -2118,8 +2123,8 @@ export function MemoryWorkspacePage(props: {
   }
 
   const sessionStatusText = selectedSessionId && turns.length > 0
-    ? `Continuing session · ${turns.length} previous turns`
-    : 'New session'
+    ? t('memoryWorkspace.session.continuing', { count: turns.length })
+    : t('memoryWorkspace.newSession')
 
   return (
     <section>
@@ -2130,24 +2135,24 @@ export function MemoryWorkspacePage(props: {
         }}
       >
         <label>
-          Ask memory workspace
+          {t('memoryWorkspace.askLabel')}
           <input value={question} onChange={(event) => setQuestion(event.target.value)} />
         </label>
         <p>{sessionStatusText}</p>
         <label>
-          Response mode
+          {t('memoryWorkspace.responseMode')}
           <select
             value={expressionMode}
             onChange={(event) => setExpressionMode(event.target.value === 'advice' ? 'advice' : 'grounded')}
           >
-            <option value="grounded">Grounded</option>
-            <option value="advice">Advice</option>
+            <option value="grounded">{t('memoryWorkspace.expressionMode.grounded')}</option>
+            <option value="advice">{t('memoryWorkspace.expressionMode.advice')}</option>
           </select>
         </label>
         <fieldset>
-          <legend>Compare options</legend>
+          <legend>{t('memoryWorkspace.compare.options')}</legend>
           <fieldset>
-            <legend>Compare targets</legend>
+            <legend>{t('memoryWorkspace.compare.targets')}</legend>
             <label>
               <input
                 type="checkbox"
@@ -2157,7 +2162,7 @@ export function MemoryWorkspacePage(props: {
                   localBaselineEnabled: event.target.checked
                 }))}
               />
-              Include local baseline
+              {t('memoryWorkspace.compare.includeLocalBaseline')}
             </label>
             <label>
               <input
@@ -2168,10 +2173,10 @@ export function MemoryWorkspacePage(props: {
                   siliconflowEnabled: event.target.checked
                 }))}
               />
-              Include SiliconFlow target
+              {t('memoryWorkspace.compare.includeSiliconFlowTarget')}
             </label>
             <label>
-              SiliconFlow model
+              {t('memoryWorkspace.compare.siliconFlowModel')}
               <input
                 value={compareTargetControls.siliconflowModel}
                 disabled={!compareTargetControls.siliconflowEnabled}
@@ -2190,10 +2195,10 @@ export function MemoryWorkspacePage(props: {
                   openrouterEnabled: event.target.checked
                 }))}
               />
-              Include OpenRouter target
+              {t('memoryWorkspace.compare.includeOpenRouterTarget')}
             </label>
             <label>
-              OpenRouter model
+              {t('memoryWorkspace.compare.openRouterModel')}
               <input
                 value={compareTargetControls.openrouterModel}
                 disabled={!compareTargetControls.openrouterEnabled}
@@ -2204,7 +2209,7 @@ export function MemoryWorkspacePage(props: {
               />
             </label>
             {selectedCompareTargets.length === 0 ? (
-              <p>Select at least one compare target.</p>
+              <p>{t('memoryWorkspace.compare.selectAtLeastOneTarget')}</p>
             ) : null}
           </fieldset>
           <label>
@@ -2213,12 +2218,12 @@ export function MemoryWorkspacePage(props: {
               checked={compareJudgeEnabled}
               onChange={(event) => setCompareJudgeEnabled(event.target.checked)}
             />
-            Enable judge review
+            {t('memoryWorkspace.compare.enableJudgeReview')}
           </label>
           {compareJudgeEnabled ? (
             <>
               <label>
-                Judge provider
+                {t('memoryWorkspace.compare.judgeProvider')}
                 <select
                   value={compareJudgeProvider}
                   onChange={(event) => setCompareJudgeProvider(event.target.value === 'openrouter' ? 'openrouter' : 'siliconflow')}
@@ -2228,48 +2233,48 @@ export function MemoryWorkspacePage(props: {
                 </select>
               </label>
               <label>
-                Judge model override
+                {t('memoryWorkspace.compare.judgeModelOverride')}
                 <input value={compareJudgeModel} onChange={(event) => setCompareJudgeModel(event.target.value)} />
               </label>
             </>
           ) : null}
         </fieldset>
         <fieldset>
-          <legend>Compare matrix</legend>
+          <legend>{t('memoryWorkspace.compare.matrix')}</legend>
           <label>
-            Compare matrix title
+            {t('memoryWorkspace.compare.matrixTitle')}
             <input value={matrixTitle} onChange={(event) => setMatrixTitle(event.target.value)} />
           </label>
           <label>
-            Compare matrix rows
+            {t('memoryWorkspace.compare.matrixRows')}
             <textarea value={matrixRowsInput} onChange={(event) => setMatrixRowsInput(event.target.value)} />
           </label>
-          <p>Use one line per row: `scope | question` or `label | scope | question`.</p>
+          <p>{t('memoryWorkspace.compare.matrixRowsHint')}</p>
           {matrixError ? <p>{matrixError}</p> : null}
         </fieldset>
         <button type="submit" disabled={question.trim().length === 0 || isLoading}>
-          Ask
+          {t('memoryWorkspace.askButton')}
         </button>
         <button
           type="button"
           disabled={!selectedCompareSummary || compareRuns.length === 0}
           onClick={handleUseSelectedCompareSetup}
         >
-          Use selected compare setup
+          {t('memoryWorkspace.compare.useSelectedSetup')}
         </button>
         <button
           type="button"
           disabled={question.trim().length === 0 || isComparing || selectedCompareTargets.length === 0}
           onClick={() => { void handleRunCompare() }}
         >
-          Run compare
+          {t('memoryWorkspace.compare.runCompare')}
         </button>
         <button
           type="button"
           disabled={matrixRowsInput.trim().length === 0 || isRunningMatrix}
           onClick={() => { void handleRunCompareMatrix() }}
         >
-          Run matrix compare
+          {t('memoryWorkspace.compare.runMatrixCompare')}
         </button>
       </form>
 

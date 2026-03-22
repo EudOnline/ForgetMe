@@ -1,4 +1,5 @@
 import type { EnrichmentJob } from '../../shared/archiveContracts'
+import { useI18n } from '../i18n'
 
 export function EnrichmentJobTable(props: {
   jobs: EnrichmentJob[]
@@ -6,21 +7,23 @@ export function EnrichmentJobTable(props: {
   onInspectFile?: (fileId: string) => void
   onInspectBoundary?: (jobId: string) => void | Promise<void>
 }) {
+  const { t } = useI18n()
+
   if (props.jobs.length === 0) {
-    return <p>No enrichment jobs yet.</p>
+    return <p>{t('enrichmentJobs.none')}</p>
   }
 
   return (
     <table>
       <thead>
         <tr>
-          <th>Type</th>
-          <th>File</th>
-          <th>Status</th>
-          <th>Attempts</th>
-          <th>Last Error</th>
-          <th>Provider</th>
-          <th>Actions</th>
+          <th>{t('enrichmentJobs.table.type')}</th>
+          <th>{t('enrichmentJobs.table.file')}</th>
+          <th>{t('enrichmentJobs.table.status')}</th>
+          <th>{t('enrichmentJobs.table.attempts')}</th>
+          <th>{t('enrichmentJobs.table.lastError')}</th>
+          <th>{t('enrichmentJobs.table.provider')}</th>
+          <th>{t('enrichmentJobs.table.actions')}</th>
         </tr>
       </thead>
       <tbody>
@@ -33,9 +36,9 @@ export function EnrichmentJobTable(props: {
             <td>{job.errorMessage ?? '—'}</td>
             <td>{job.provider}</td>
             <td>
-              <button type="button" onClick={() => void props.onRerun?.(job.id)}>Rerun</button>
-              <button type="button" onClick={() => props.onInspectFile?.(job.fileId)}>Inspect</button>
-              <button type="button" onClick={() => void props.onInspectBoundary?.(job.id)}>Boundary</button>
+              <button type="button" onClick={() => void props.onRerun?.(job.id)}>{t('enrichmentJobs.action.rerun')}</button>
+              <button type="button" onClick={() => props.onInspectFile?.(job.fileId)}>{t('enrichmentJobs.action.inspect')}</button>
+              <button type="button" onClick={() => void props.onInspectBoundary?.(job.id)}>{t('enrichmentJobs.action.boundary')}</button>
             </td>
           </tr>
         ))}

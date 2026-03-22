@@ -1,3 +1,5 @@
+import { useI18n } from '../i18n'
+
 export type ReviewConflictCompareValueCount = {
   value: string
   count: number
@@ -9,18 +11,20 @@ export function ReviewConflictCompareCard(props: {
   distinctValuesWithCounts: ReviewConflictCompareValueCount[]
   hasConflict: boolean
 }) {
+  const { t } = useI18n()
+
   return (
     <section>
-      <h2>Conflict Compare</h2>
+      <h2>{t('reviewWorkbench.compare.title')}</h2>
       <dl>
-        <dt>Field</dt>
-        <dd>{props.fieldKey ?? 'unknown'}</dd>
-        <dt>Status</dt>
-        <dd>{props.hasConflict ? 'Conflict' : 'Aligned'}</dd>
-        <dt>Pending</dt>
+        <dt>{t('reviewWorkbench.compare.field')}</dt>
+        <dd>{props.fieldKey ?? t('reviewWorkbench.compare.unknownField')}</dd>
+        <dt>{t('reviewWorkbench.compare.status')}</dt>
+        <dd>{props.hasConflict ? t('reviewWorkbench.compare.conflict') : t('reviewWorkbench.compare.aligned')}</dd>
+        <dt>{t('reviewWorkbench.compare.pending')}</dt>
         <dd>{props.pendingCount}</dd>
-        <dt>Distinct Values</dt>
-        <dd>{props.distinctValuesWithCounts.length} values</dd>
+        <dt>{t('reviewWorkbench.compare.distinctValues')}</dt>
+        <dd>{t('reviewWorkbench.compare.valuesCount', { count: props.distinctValuesWithCounts.length })}</dd>
       </dl>
       <ul>
         {props.distinctValuesWithCounts.map((entry) => (

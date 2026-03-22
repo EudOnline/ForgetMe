@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen } from './testing-library'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PersonDetailPage } from '../../../src/renderer/pages/PersonDetailPage'
 
