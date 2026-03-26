@@ -23,11 +23,13 @@ npm run dev
 ## Test Commands
 
 ```bash
-npm run test:typecheck
-npm run test:unit
-npm run test:e2e -- tests/e2e/import-batch.spec.ts
-npm run test:e2e -- tests/e2e/person-review-flow.spec.ts
-npm run build
+npm run verify:release
+```
+
+The release verification gate bundles the following smoke suite:
+
+```bash
+npm run test:e2e -- tests/e2e/import-batch.spec.ts tests/e2e/person-review-flow.spec.ts tests/e2e/memory-workspace-flow.spec.ts tests/e2e/memory-workspace-approved-draft-hosted-share-link-flow.spec.ts
 ```
 
 ## App Data Directory
