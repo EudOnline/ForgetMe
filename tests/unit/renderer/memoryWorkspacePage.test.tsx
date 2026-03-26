@@ -3890,6 +3890,54 @@ describe('MemoryWorkspacePage', () => {
     expect(await screen.findByText('Unable to create hosted share link: host unavailable')).toBeInTheDocument()
   })
 
+  it('shows unconfigured hosted-share guidance when publication exists', async () => {
+    const sandboxTurn = buildSandboxTurn({
+      turnId: 'turn-hosted-unconfigured-with-publication-1',
+      sessionId: 'session-hosted-unconfigured-with-publication-1',
+      contextHash: 'context-hash-hosted-unconfigured-with-publication-1',
+      promptHash: 'prompt-hash-hosted-unconfigured-with-publication-1'
+    })
+    const approvedReview = buildApprovedReview({
+      draftReviewId: 'review-hosted-unconfigured-with-publication-1',
+      sourceTurnId: 'turn-hosted-unconfigured-with-publication-1'
+    })
+    const publication = buildPublication({
+      publicationId: 'publication-hosted-unconfigured-with-publication-1',
+      draftReviewId: 'review-hosted-unconfigured-with-publication-1',
+      sourceTurnId: 'turn-hosted-unconfigured-with-publication-1',
+      journalId: 'journal-publication-hosted-unconfigured-with-publication-1'
+    })
+
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceSession: vi.fn().mockResolvedValue(null),
+      listMemoryWorkspaceCompareSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted: vi.fn().mockResolvedValue(sandboxTurn),
+      getPersonaDraftReviewByTurn: vi.fn().mockResolvedValue(approvedReview),
+      listApprovedPersonaDraftHandoffs: vi.fn().mockResolvedValue([]),
+      listApprovedPersonaDraftPublications: vi.fn().mockResolvedValue([publication]),
+      getApprovedDraftHostedShareHostStatus: vi.fn().mockResolvedValue({
+        availability: 'unconfigured',
+        hostKind: null,
+        hostLabel: null
+      }),
+      listApprovedPersonaDraftHostedShareLinks: vi.fn().mockResolvedValue([])
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'person', canonicalPersonId: 'cp-1' }} />)
+
+    fireEvent.change(screen.getByLabelText('Ask memory workspace'), {
+      target: { value: '如果她来写一段关于记录和归档的回复，会怎么写？' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+
+    expect(await screen.findByText('Published publication.json')).toBeInTheDocument()
+    expect(screen.getByText('Hosted share link is unavailable until a share host is configured.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create hosted share link' })).not.toBeInTheDocument()
+  })
+
   it('hides hosted share creation when the share host is unconfigured', async () => {
     const sandboxTurn = buildSandboxTurn()
     const approvedReview = buildApprovedReview()
