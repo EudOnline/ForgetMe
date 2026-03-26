@@ -32,6 +32,10 @@ The release verification gate bundles the following smoke suite:
 npm run test:e2e -- tests/e2e/import-batch.spec.ts tests/e2e/person-review-flow.spec.ts tests/e2e/memory-workspace-flow.spec.ts tests/e2e/memory-workspace-approved-draft-hosted-share-link-flow.spec.ts
 ```
 
+## Release Readiness
+
+Use the release checklist in `docs/release/v1-rc-checklist.md` before calling the repository RC-ready. It captures the automated gate, preservation drill, dirty-data drill, hosted-share drill, and the remaining manual sanity checks.
+
 ## App Data Directory
 
 - Development default: `.local-dev/forgetme`
