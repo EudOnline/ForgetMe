@@ -65,6 +65,9 @@ const dictionaries: Record<UiLanguage, Record<string, string>> = {
     'batches.noBatches': 'No batches imported yet.',
     'batch.detail.title': 'Batch Detail',
     'batch.detail.select': 'Select a batch.',
+    'batch.detail.status.title': 'Batch status',
+    'batch.detail.status.duplicates': 'Exact duplicates',
+    'batch.detail.status.skipped': 'Skipped imports',
 
     'fileTable.noFiles': 'No files in this batch.',
     'fileTable.header.file': 'File',
@@ -481,6 +484,9 @@ const dictionaries: Record<UiLanguage, Record<string, string>> = {
     'batches.noBatches': '还没有导入任何批次。',
     'batch.detail.title': '批次详情',
     'batch.detail.select': '请选择一个批次。',
+    'batch.detail.status.title': '批次状态',
+    'batch.detail.status.duplicates': '完全重复文件',
+    'batch.detail.status.skipped': '已跳过导入',
 
     'fileTable.noFiles': '该批次没有文件。',
     'fileTable.header.file': '文件',

@@ -1,0 +1,12 @@
+{
+  "messages": [
+    {
+      "sender": "Alice",
+      "text": "Need the passport scan before Friday."
+    },
+    {
+      "sender": "Bob",
+      "text": "I saved a local copy in the archive."
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+
+Alice:   Need the scanned receipt before the archive sync.
+
+
+[[interrupted export]]
+
+Bob:  I saved a backup copy locally.
+

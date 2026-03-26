@@ -66,4 +66,39 @@ describe('createImportBatch', () => {
 
     db.close()
   })
+
+  it('keeps partial success and duplicate classification when dirty data is mixed into one batch', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-import-dirty-data-'))
+    const appPaths = ensureAppPaths(root)
+    const unsupportedFile = path.join(root, 'fixture-unsupported.exe')
+    fs.writeFileSync(unsupportedFile, 'binary-ish fixture')
+
+    const batch = await createImportBatch({
+      appPaths,
+      sourcePaths: [
+        path.resolve('tests/fixtures/imports/duplicate-chat-a.json'),
+        path.resolve('tests/fixtures/imports/duplicate-chat-b.json'),
+        path.resolve('tests/fixtures/imports/noisy-chat.txt'),
+        unsupportedFile
+      ],
+      sourceLabel: 'dirty-data-test'
+    })
+
+    expect(batch.files).toHaveLength(4)
+    expect(batch.summary).toMatchObject({
+      frozenCount: 4,
+      parsedCount: 3,
+      duplicateCount: 1,
+      reviewCount: 1
+    })
+    expect(batch.files.filter((file) => file.duplicateClass === 'duplicate_exact')).toHaveLength(1)
+    expect(batch.files.filter((file) => file.parserStatus === 'parsed')).toHaveLength(3)
+    expect(batch.files.filter((file) => file.parserStatus === 'failed').map((file) => file.fileName)).toEqual(['fixture-unsupported.exe'])
+    expect(batch.files.map((file) => file.fileName)).toEqual([
+      'duplicate-chat-a.json',
+      'duplicate-chat-b.json',
+      'noisy-chat.txt',
+      'fixture-unsupported.exe'
+    ])
+  })
 })
