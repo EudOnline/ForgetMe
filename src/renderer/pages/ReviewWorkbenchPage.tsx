@@ -235,12 +235,16 @@ export function ReviewWorkbenchPage(props: {
       }
 
       const staleDetail = await archiveApi.getReviewWorkbenchItem(staleQueueItemId)
-      setDetail(staleDetail)
+      if (selectedQueueItemIdRef.current === staleQueueItemId) {
+        setDetail(staleDetail)
+      }
       return staleDetail
     }
 
     const nextDetail = await archiveApi.getReviewWorkbenchItem(resolvedQueueItemId)
-    setDetail(nextDetail)
+    if (selectedQueueItemIdRef.current === resolvedQueueItemId) {
+      setDetail(nextDetail)
+    }
     return nextDetail
   }, [archiveApi, props.initialQueueItemId])
 
@@ -252,7 +256,10 @@ export function ReviewWorkbenchPage(props: {
     setErrorMessage(null)
     selectedQueueItemIdRef.current = queueItemId
     setSelectedQueueItemId(queueItemId)
-    setDetail(await archiveApi.getReviewWorkbenchItem(queueItemId))
+    const nextDetail = await archiveApi.getReviewWorkbenchItem(queueItemId)
+    if (selectedQueueItemIdRef.current === queueItemId) {
+      setDetail(nextDetail)
+    }
   }, [archiveApi])
 
   const handleSelectPerson = async (person: ReviewInboxPersonSummary) => {
