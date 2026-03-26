@@ -407,13 +407,19 @@ describe('ReviewWorkbenchPage', () => {
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: 'Previous' }))
       })
-      expect(getReviewWorkbenchItem).toHaveBeenLastCalledWith('rq-a1')
 
       await waitFor(() => {
-        expect(consoleErrorSpy).not.toHaveBeenCalledWith(
-          expect.stringContaining('not wrapped in act')
-        )
+        expect(getReviewWorkbenchItem).toHaveBeenLastCalledWith('rq-a1')
       })
+
+      await act(async () => {
+        await Promise.resolve()
+      })
+
+      const sawActWarning = consoleErrorSpy.mock.calls.some((args) =>
+        String(args[0]).includes('not wrapped in act')
+      )
+      expect(sawActWarning).toBe(false)
     } finally {
       consoleErrorSpy.mockRestore()
     }
