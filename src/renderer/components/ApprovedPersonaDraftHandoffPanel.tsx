@@ -6,6 +6,7 @@ import type {
   ApprovedPersonaDraftPublicationRecord,
   ApprovedPersonaDraftProviderSendArtifact
 } from '../../shared/archiveContracts'
+import { useI18n } from '../i18n'
 
 function formatPayload(payload: Record<string, unknown>) {
   return JSON.stringify(payload, null, 2)
@@ -74,6 +75,7 @@ export function ApprovedPersonaDraftHandoffPanel(props: {
   onSendApprovedDraft?: () => void
   onRetryApprovedDraftSend?: () => void
 }) {
+  const { t } = useI18n()
   const latestHandoff = props.handoffs[0] ?? null
   const publicationHistory = [...props.publications].sort((left, right) => right.publishedAt.localeCompare(left.publishedAt))
   const latestPublication = publicationHistory[0] ?? null
@@ -87,6 +89,7 @@ export function ApprovedPersonaDraftHandoffPanel(props: {
     : null
   const latestBackgroundRetry = latestProviderSend?.backgroundRetry ?? null
   const retryActionDisabled = props.isPending || !props.onRetryApprovedDraftSend || latestBackgroundRetry?.status === 'processing'
+  const publishDisabled = props.isPending || !props.onPublishApprovedDraft || !props.publicationDestination
 
   return (
     <section aria-label="Approved Draft Handoff">
@@ -118,6 +121,9 @@ export function ApprovedPersonaDraftHandoffPanel(props: {
       <section aria-label="Publish / Share">
         <h4>Publish / Share</h4>
         <div>{props.publicationDestination || 'No publish destination selected.'}</div>
+        {!props.publicationDestination ? (
+          <p>{t('approvedDraftHandoff.publish.destinationRequired')}</p>
+        ) : null}
         {props.onChoosePublicationDestination ? (
           <button
             type="button"
@@ -130,7 +136,7 @@ export function ApprovedPersonaDraftHandoffPanel(props: {
         {props.onPublishApprovedDraft ? (
           <button
             type="button"
-            disabled={props.isPending}
+            disabled={publishDisabled}
             onClick={() => props.onPublishApprovedDraft?.()}
           >
             Publish approved draft
@@ -174,9 +180,9 @@ export function ApprovedPersonaDraftHandoffPanel(props: {
         <section aria-label="Hosted Share Link">
           <h5>Hosted Share Link</h5>
           {!latestPublication ? (
-            <p>Publish approved draft to create a local package before hosting</p>
+            <p>{t('approvedDraftHandoff.hosted.publishFirst')}</p>
           ) : props.hostedShareHostStatus?.availability === 'unconfigured' ? (
-            <p>Hosted share link is unavailable until a share host is configured</p>
+            <p>{t('approvedDraftHandoff.hosted.unconfigured')}</p>
           ) : null}
           {latestPublication && props.hostedShareHostStatus?.availability === 'configured' && !latestHostedShareLink && props.onCreateApprovedDraftHostedShareLink ? (
             <button

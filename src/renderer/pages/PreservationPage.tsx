@@ -3,6 +3,10 @@ import type { BackupExportResult, RestoreRunResult } from '../../shared/archiveC
 import { getArchiveApi } from '../archiveApi'
 import { useI18n } from '../i18n'
 
+function asErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
 export function PreservationPage() {
   const { t } = useI18n()
   const archiveApi = useMemo(() => getArchiveApi(), [])
@@ -12,10 +16,30 @@ export function PreservationPage() {
   const [exportPassword, setExportPassword] = useState('')
   const [restorePassword, setRestorePassword] = useState('')
   const [isWorking, setIsWorking] = useState(false)
-  const [statusMessage, setStatusMessage] = useState('')
+  const [status, setStatus] = useState<{
+    kind: 'success' | 'error'
+    summary: string
+    detail?: string
+  } | null>(null)
   const [lastExport, setLastExport] = useState<BackupExportResult | null>(null)
   const [lastRestore, setLastRestore] = useState<RestoreRunResult | null>(null)
   const [lastDrill, setLastDrill] = useState<RestoreRunResult | null>(null)
+
+  const summarizePreservationError = (errorMessage: string, fallbackSummary: string) => {
+    if (errorMessage.startsWith('Target root is not empty')) {
+      return t('preservation.error.restoreTargetNotEmpty')
+    }
+
+    if (errorMessage.includes('Encrypted backup requires a password')) {
+      return t('preservation.error.passwordRequired')
+    }
+
+    if (errorMessage.includes('Encrypted backup password is invalid or the package is corrupted')) {
+      return t('preservation.error.passwordInvalid')
+    }
+
+    return fallbackSummary
+  }
 
   const handlePickExportDestination = async () => {
     const selected = await archiveApi.selectBackupExportDestination()
@@ -40,7 +64,7 @@ export function PreservationPage() {
 
   const handleExport = async () => {
     setIsWorking(true)
-    setStatusMessage('')
+    setStatus(null)
 
     const nextDestinationRoot = destinationRoot || await archiveApi.selectBackupExportDestination()
     if (!nextDestinationRoot) {
@@ -57,10 +81,18 @@ export function PreservationPage() {
       if (result) {
         setLastExport(result)
         setExportRoot(result.exportRoot)
-        setStatusMessage(t('preservation.exportCompleted'))
+        setStatus({
+          kind: 'success',
+          summary: t('preservation.exportCompleted')
+        })
       }
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : t('preservation.exportFailed'))
+      const errorMessage = asErrorMessage(error)
+      setStatus({
+        kind: 'error',
+        summary: summarizePreservationError(errorMessage, t('preservation.exportFailed')),
+        detail: errorMessage
+      })
     }
 
     setIsWorking(false)
@@ -68,7 +100,7 @@ export function PreservationPage() {
 
   const handleRestore = async () => {
     setIsWorking(true)
-    setStatusMessage('')
+    setStatus(null)
 
     const nextExportRoot = exportRoot || lastExport?.exportRoot || await archiveApi.selectBackupExportSource()
     const nextTargetRoot = targetRoot || await archiveApi.selectRestoreTargetDirectory()
@@ -88,14 +120,20 @@ export function PreservationPage() {
       })
       if (result) {
         setLastRestore(result)
-        setStatusMessage(
-          result.checks.every((check) => check.status === 'passed')
+        setStatus({
+          kind: result.checks.every((check) => check.status === 'passed') ? 'success' : 'error',
+          summary: result.checks.every((check) => check.status === 'passed')
             ? t('preservation.restoreChecksPassed')
             : t('preservation.restoreChecksFailed')
-        )
+        })
       }
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : t('preservation.restoreFailed'))
+      const errorMessage = asErrorMessage(error)
+      setStatus({
+        kind: 'error',
+        summary: summarizePreservationError(errorMessage, t('preservation.restoreFailed')),
+        detail: errorMessage
+      })
     }
 
     setIsWorking(false)
@@ -103,7 +141,7 @@ export function PreservationPage() {
 
   const handleRecoveryDrill = async () => {
     setIsWorking(true)
-    setStatusMessage('')
+    setStatus(null)
 
     const nextExportRoot = exportRoot || lastExport?.exportRoot || await archiveApi.selectBackupExportSource()
     const nextTargetRoot = targetRoot || await archiveApi.selectRestoreTargetDirectory()
@@ -123,10 +161,18 @@ export function PreservationPage() {
       })
       if (result) {
         setLastDrill(result)
-        setStatusMessage(result.summary.failedCount === 0 ? t('preservation.drillPassed') : t('preservation.drillFailed'))
+        setStatus({
+          kind: result.summary.failedCount === 0 ? 'success' : 'error',
+          summary: result.summary.failedCount === 0 ? t('preservation.drillPassed') : t('preservation.drillFailed')
+        })
       }
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : t('preservation.drillFailed'))
+      const errorMessage = asErrorMessage(error)
+      setStatus({
+        kind: 'error',
+        summary: summarizePreservationError(errorMessage, t('preservation.drillFailed')),
+        detail: errorMessage
+      })
     }
 
     setIsWorking(false)
@@ -168,7 +214,14 @@ export function PreservationPage() {
         <button type="button" onClick={() => void handleRecoveryDrill()} disabled={isWorking}>{t('preservation.runRecoveryDrill')}</button>
       </div>
 
-      {statusMessage ? <p>{statusMessage}</p> : null}
+      {status ? (
+        <div role={status.kind === 'error' ? 'alert' : 'status'}>
+          <p>{status.summary}</p>
+          {status.detail && status.detail !== status.summary ? (
+            <p>{t('preservation.error.detail', { message: status.detail })}</p>
+          ) : null}
+        </div>
+      ) : null}
       {lastExport ? <p>{t('preservation.lastExport', { path: lastExport.exportRoot })}</p> : null}
       {lastRestore ? <p>{t('preservation.lastRestore', { path: lastRestore.targetRoot })}</p> : null}
       {lastDrill ? <p>{t('preservation.lastDrill', { path: lastDrill.targetRoot })}</p> : null}
