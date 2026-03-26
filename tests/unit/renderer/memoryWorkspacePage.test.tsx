@@ -1232,6 +1232,42 @@ describe('MemoryWorkspacePage', () => {
     expect(await screen.findByText('Share page opened.')).toBeInTheDocument()
   })
 
+  it('explains publish is blocked until a destination is chosen', async () => {
+    const sandboxTurn = buildSandboxTurn({
+      turnId: 'turn-sandbox-publish-missing-destination-1',
+      sessionId: 'session-sandbox-publish-missing-destination-1',
+      contextHash: 'context-hash-sandbox-publish-missing-destination-1',
+      promptHash: 'prompt-hash-sandbox-publish-missing-destination-1'
+    })
+    const approvedReview = buildApprovedReview({
+      draftReviewId: 'review-publish-missing-destination-1',
+      sourceTurnId: 'turn-sandbox-publish-missing-destination-1'
+    })
+
+    stubArchiveWindow({
+      listMemoryWorkspaceSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceSession: vi.fn().mockResolvedValue(null),
+      listMemoryWorkspaceCompareSessions: vi.fn().mockResolvedValue([]),
+      getMemoryWorkspaceCompareSession: vi.fn().mockResolvedValue(null),
+      runMemoryWorkspaceCompare: vi.fn().mockResolvedValue(null),
+      askMemoryWorkspacePersisted: vi.fn().mockResolvedValue(sandboxTurn),
+      getPersonaDraftReviewByTurn: vi.fn().mockResolvedValue(approvedReview),
+      selectApprovedDraftPublicationDestination: vi.fn().mockResolvedValue(null),
+      listApprovedPersonaDraftPublications: vi.fn().mockResolvedValue([]),
+      listApprovedPersonaDraftHandoffs: vi.fn().mockResolvedValue([])
+    })
+
+    render(<MemoryWorkspacePage scope={{ kind: 'person', canonicalPersonId: 'cp-1' }} />)
+
+    fireEvent.change(screen.getByLabelText('Ask memory workspace'), {
+      target: { value: '如果她来写一段关于记录和归档的回复，会怎么写？' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+
+    expect(await screen.findByText('Choose a publish destination before creating a share package.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Publish approved draft' })).toBeDisabled()
+  })
+
   it('sends an approved draft through the provider boundary and renders the latest send audit detail', async () => {
     const sandboxTurn = {
       turnId: 'turn-sandbox-send-1',
@@ -3884,7 +3920,7 @@ describe('MemoryWorkspacePage', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
 
-    expect(await screen.findByText('Hosted share link is unavailable until a share host is configured')).toBeInTheDocument()
+    expect(await screen.findByText('Hosted share link is unavailable until a share host is configured.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create hosted share link' })).not.toBeInTheDocument()
   })
 
@@ -3917,7 +3953,7 @@ describe('MemoryWorkspacePage', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
 
-    expect(await screen.findByText('Publish approved draft to create a local package before hosting')).toBeInTheDocument()
+    expect(await screen.findByText('Publish approved draft to create a local package before hosting.')).toBeInTheDocument()
   })
 
   it('refreshes hosted share status after revoke and marks the latest link revoked', async () => {

@@ -57,6 +57,10 @@ const dictionaries: Record<UiLanguage, Record<string, string>> = {
     'import.title': 'Import Batch',
     'import.chooseFiles': 'Choose Files',
     'import.recentBatches': 'Recent Batches',
+    'import.feedback.unsupportedSkipped': 'This file type is not supported and was skipped.',
+    'import.feedback.filesSkipped': 'Some files could not be imported and were skipped.',
+    'import.feedback.skippedFilesDetail': 'Skipped files: {files}',
+    'import.feedback.rawDetail': 'Details: {message}',
 
     'batches.noBatches': 'No batches imported yet.',
     'batch.detail.title': 'Batch Detail',
@@ -305,6 +309,10 @@ const dictionaries: Record<UiLanguage, Record<string, string>> = {
     'preservation.lastDrill': 'Last recovery drill target: {path}',
     'preservation.drillReport.title': 'Recovery Drill Report',
     'preservation.drillReport.summary': '{passed} passed · {failed} failed',
+    'preservation.error.restoreTargetNotEmpty': 'Restore target must be empty before recovery starts.',
+    'preservation.error.passwordRequired': 'Enter the restore password before recovering this encrypted backup.',
+    'preservation.error.passwordInvalid': 'Restore password is incorrect or the backup package is corrupted.',
+    'preservation.error.detail': 'Details: {message}',
 
     'memoryWorkspace.title': 'Memory Workspace',
     'memoryWorkspace.askLabel': 'Ask memory workspace',
@@ -464,6 +472,10 @@ const dictionaries: Record<UiLanguage, Record<string, string>> = {
     'import.title': '导入批次',
     'import.chooseFiles': '选择文件',
     'import.recentBatches': '最近批次',
+    'import.feedback.unsupportedSkipped': '该文件类型不受支持，已跳过。',
+    'import.feedback.filesSkipped': '部分文件无法导入，已跳过。',
+    'import.feedback.skippedFilesDetail': '已跳过文件: {files}',
+    'import.feedback.rawDetail': '详情: {message}',
 
     'batches.noBatches': '还没有导入任何批次。',
     'batch.detail.title': '批次详情',
@@ -712,6 +724,10 @@ const dictionaries: Record<UiLanguage, Record<string, string>> = {
     'preservation.lastDrill': '最近演练目标: {path}',
     'preservation.drillReport.title': '恢复演练报告',
     'preservation.drillReport.summary': '{passed} 通过 · {failed} 失败',
+    'preservation.error.restoreTargetNotEmpty': '恢复前目标目录必须为空。',
+    'preservation.error.passwordRequired': '恢复加密备份前请先输入恢复密码。',
+    'preservation.error.passwordInvalid': '恢复密码不正确，或备份包已损坏。',
+    'preservation.error.detail': '详情: {message}',
 
     'memoryWorkspace.title': '记忆工作台',
     'memoryWorkspace.askLabel': '向记忆工作台提问',

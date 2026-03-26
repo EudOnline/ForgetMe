@@ -161,4 +161,50 @@ describe('PreservationPage', () => {
       encryptionPassword: 'secret-restore'
     })
   })
+
+  it('summarizes restore target not empty errors for operators', async () => {
+    vi.stubGlobal('window', {
+      archiveApi: {
+        selectBackupExportDestination: vi.fn(),
+        selectBackupExportSource: vi.fn().mockResolvedValue('/tmp/export-1'),
+        selectRestoreTargetDirectory: vi.fn().mockResolvedValue('/tmp/restore-root'),
+        createBackupExport: vi.fn(),
+        restoreBackupExport: vi.fn().mockRejectedValue(new Error('Target root is not empty: /tmp/restore-root')),
+        runRecoveryDrill: vi.fn()
+      }
+    })
+
+    render(<PreservationPage />)
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Restore Archive' }))
+    })
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Restore target must be empty before recovery starts.')
+    expect(alert).toHaveTextContent('Target root is not empty: /tmp/restore-root')
+  })
+
+  it('summarizes encrypted restore attempts without password', async () => {
+    vi.stubGlobal('window', {
+      archiveApi: {
+        selectBackupExportDestination: vi.fn(),
+        selectBackupExportSource: vi.fn().mockResolvedValue('/tmp/export-encrypted'),
+        selectRestoreTargetDirectory: vi.fn().mockResolvedValue('/tmp/restore-root'),
+        createBackupExport: vi.fn(),
+        restoreBackupExport: vi.fn().mockRejectedValue(new Error('Encrypted backup requires a password')),
+        runRecoveryDrill: vi.fn()
+      }
+    })
+
+    render(<PreservationPage />)
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Restore Archive' }))
+    })
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Enter the restore password before recovering this encrypted backup.')
+    expect(alert).toHaveTextContent('Encrypted backup requires a password')
+  })
 })
