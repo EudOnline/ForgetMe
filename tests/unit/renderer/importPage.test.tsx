@@ -56,6 +56,40 @@ describe('ImportPage', () => {
     expect(createImportBatch).toHaveBeenCalled()
   })
 
+  it('shows files-skipped guidance when a supported file fails parsing after batch creation', async () => {
+    const createImportBatch = vi.fn().mockResolvedValue({
+      batchId: 'batch-parse-failed-1',
+      sourceLabel: 'chat.txt',
+      createdAt: '2026-03-20T08:00:00.000Z',
+      files: [
+        {
+          fileId: 'file-parse-failed-1',
+          fileName: 'chat.txt',
+          duplicateClass: 'unique',
+          parserStatus: 'failed',
+          frozenAbsolutePath: '/tmp/frozen-chat.txt'
+        }
+      ]
+    })
+
+    vi.stubGlobal('window', {
+      archiveApi: {
+        listImportBatches: vi.fn().mockResolvedValue([]),
+        selectImportFiles: vi.fn().mockResolvedValue(['/tmp/chat.txt']),
+        createImportBatch
+      }
+    })
+
+    render(<ImportPage />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose Files' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Some files could not be imported and were skipped.')
+    expect(alert).toHaveTextContent('chat.txt')
+    expect(createImportBatch).toHaveBeenCalled()
+  })
+
   it('shows a safe import failure summary with raw error detail', async () => {
     vi.stubGlobal('window', {
       archiveApi: {
