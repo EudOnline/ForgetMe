@@ -623,3 +623,37 @@ article strong {
     grid-template-columns: 1fr;
   }
 }
+
+/* --- Global Interaction Styles --- */
+
+/* Apply soft transitions to all buttons and interactive cards */
+button,
+.interactive-card {
+  transition: transform 0.3s var(--fm-ease-out), box-shadow 0.3s var(--fm-ease-out), background-color 0.2s ease;
+}
+
+/* Hover state: scale up and elevate */
+button:hover:not(:disabled),
+.interactive-card:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: var(--fm-shadow-2);
+}
+
+/* Active state: shrink down (squishy feel) */
+button:active:not(:disabled),
+.interactive-card:active {
+  transform: scale(0.96);
+  box-shadow: var(--fm-shadow-1);
+}
+
+/* Inputs should have larger radii and soft focus rings */
+input, textarea, select {
+  border-radius: var(--fm-radius-s);
+  transition: border-color 0.3s var(--fm-ease-out), box-shadow 0.3s var(--fm-ease-out);
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--fm-accent);
+  box-shadow: 0 0 0 4px color-mix(in oklch, var(--fm-accent) 20%, transparent);
+}
