@@ -87,7 +87,7 @@ textarea {
 }
 
 a {
-  color: var(--fm-accent-ink);
+  color: color-mix(in oklch, var(--fm-accent) 72%, var(--fm-ink-0));
   text-decoration-color: color-mix(in oklch, var(--fm-accent) 40%, transparent);
   text-underline-offset: 0.18em;
 }
