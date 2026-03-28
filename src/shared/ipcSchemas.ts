@@ -21,6 +21,66 @@ export const canonicalPersonIdSchema = z.object({
   canonicalPersonId: z.string().min(1)
 })
 
+export const agentRoleSchema = z.enum([
+  'orchestrator',
+  'ingestion',
+  'review',
+  'workspace',
+  'governance'
+])
+
+export const agentTaskKindSchema = z.enum([
+  'orchestrator.plan_next_action',
+  'ingestion.import_batch',
+  'review.apply_safe_group',
+  'review.apply_item_decision',
+  'workspace.ask_memory',
+  'governance.propose_policy_update'
+])
+
+const agentRunStatusSchema = z.enum([
+  'queued',
+  'running',
+  'completed',
+  'failed',
+  'cancelled'
+])
+
+const destructiveReviewTaskKinds = new Set([
+  'review.apply_safe_group',
+  'review.apply_item_decision'
+])
+
+export const runAgentTaskInputSchema = z.object({
+  prompt: z.string().min(1),
+  role: agentRoleSchema,
+  taskKind: agentTaskKindSchema.optional(),
+  confirmationToken: z.string().min(1).optional()
+}).superRefine((value, ctx) => {
+  if (value.taskKind && destructiveReviewTaskKinds.has(value.taskKind) && !value.confirmationToken) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'confirmationToken is required for destructive review tasks',
+      path: ['confirmationToken']
+    })
+  }
+})
+
+export const listAgentRunsInputSchema = z.object({
+  role: agentRoleSchema.optional(),
+  status: agentRunStatusSchema.optional(),
+  limit: z.number().int().positive().max(200).optional()
+}).optional().default({})
+
+export const getAgentRunInputSchema = z.object({
+  runId: z.string().min(1)
+})
+
+export const listAgentMemoriesInputSchema = z.object({
+  role: agentRoleSchema.optional(),
+  memoryKey: z.string().min(1).optional()
+}).optional().default({})
+
 export const memoryWorkspaceScopeSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('global')

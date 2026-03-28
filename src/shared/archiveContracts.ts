@@ -1418,6 +1418,98 @@ export type CreateImportBatchInput = {
   sourceLabel: string
 }
 
+export type AgentRole =
+  | 'orchestrator'
+  | 'ingestion'
+  | 'review'
+  | 'workspace'
+  | 'governance'
+
+export type AgentTaskKind =
+  | 'orchestrator.plan_next_action'
+  | 'ingestion.import_batch'
+  | 'review.apply_safe_group'
+  | 'review.apply_item_decision'
+  | 'workspace.ask_memory'
+  | 'governance.propose_policy_update'
+
+export type AgentRunStatus =
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+
+export type AgentRunRecord = {
+  runId: string
+  role: AgentRole
+  taskKind: AgentTaskKind | null
+  status: AgentRunStatus
+  prompt: string
+  confirmationToken: string | null
+  policyVersion: string | null
+  errorMessage: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type AgentMessageRecord = {
+  messageId: string
+  runId: string
+  ordinal: number
+  sender: 'system' | 'agent' | 'user' | 'tool'
+  content: string
+  createdAt: string
+}
+
+export type AgentRunDetail = AgentRunRecord & {
+  messages: AgentMessageRecord[]
+}
+
+export type AgentMemoryRecord = {
+  memoryId: string
+  role: AgentRole
+  memoryKey: string
+  memoryValue: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type AgentPolicyVersionRecord = {
+  policyVersionId: string
+  role: AgentRole
+  policyKey: string
+  policyBody: string
+  createdAt: string
+}
+
+export type RunAgentTaskInput = {
+  prompt: string
+  role: AgentRole
+  taskKind?: AgentTaskKind
+  confirmationToken?: string
+}
+
+export type RunAgentTaskResult = {
+  runId: string
+  status: AgentRunStatus
+}
+
+export type ListAgentRunsInput = {
+  role?: AgentRole
+  status?: AgentRunStatus
+  limit?: number
+}
+
+export type GetAgentRunInput = {
+  runId: string
+}
+
+export type ListAgentMemoriesInput = {
+  role?: AgentRole
+  memoryKey?: string
+}
+
 export interface ArchiveApi {
   selectImportFiles: () => Promise<string[]>
   selectBackupExportDestination: () => Promise<string | null>
@@ -1427,6 +1519,10 @@ export interface ArchiveApi {
   restoreBackupExport: (input: { exportRoot: string; targetRoot: string; overwrite?: boolean; encryptionPassword?: string }) => Promise<RestoreRunResult | null>
   runRecoveryDrill: (input: { exportRoot: string; targetRoot: string; overwrite?: boolean; encryptionPassword?: string }) => Promise<RestoreRunResult | null>
   createImportBatch: (input: CreateImportBatchInput) => Promise<ImportBatchSummary>
+  runAgentTask: (input: RunAgentTaskInput) => Promise<RunAgentTaskResult>
+  listAgentRuns: (input?: ListAgentRunsInput) => Promise<AgentRunRecord[]>
+  getAgentRun: (input: GetAgentRunInput) => Promise<AgentRunDetail | null>
+  listAgentMemories: (input?: ListAgentMemoriesInput) => Promise<AgentMemoryRecord[]>
   listImportBatches: () => Promise<ImportBatchSummary[]>
   getImportBatch: (batchId: string) => Promise<ImportBatchSummary | null>
   searchArchive: (input: { query?: string; fileKinds?: string[]; batchId?: string; duplicateClass?: string; personName?: string }) => Promise<ArchiveSearchResult[]>
