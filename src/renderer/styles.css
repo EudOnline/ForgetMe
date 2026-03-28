@@ -1,42 +1,44 @@
 /*
-  ForgetMe UI theme: "Archival Ledger"
-  Warm paper surfaces, ink-forward typography, and evidence-friendly hierarchy.
+  ForgetMe UI theme: "Soft Floating Panels"
+  Clean, modern, and slightly cute with bouncy interactions.
 */
 
 :root {
   color-scheme: light;
 
   /* Typography */
-  --fm-font-display: "Fraunces", "Iowan Old Style", "Palatino Linotype", Palatino, "Songti SC", "STSong", serif;
-  --fm-font-body: "Atkinson Hyperlegible", "IBM Plex Sans", "SF Pro Text", "PingFang SC", "Hiragino Sans GB",
-    "Microsoft YaHei", system-ui, sans-serif;
-  --fm-font-mono: "Berkeley Mono", "JetBrains Mono", "SF Mono", ui-monospace, "PingFang SC", monospace;
+  --fm-font-display: "Nunito", "Quicksand", system-ui, sans-serif;
+  --fm-font-body: "Nunito", "Quicksand", system-ui, sans-serif;
+  --fm-font-mono: "Berkeley Mono", "JetBrains Mono", "SF Mono", ui-monospace, monospace;
 
-  /* Color (OKLCH for predictable contrast) */
-  --fm-paper-0: oklch(98% 0.012 95);
-  --fm-paper-1: oklch(96% 0.018 95);
-  --fm-surface-0: oklch(99.2% 0.008 95);
-  --fm-surface-1: oklch(98.4% 0.01 95);
-  --fm-ink-0: oklch(22% 0.03 75);
-  --fm-ink-1: oklch(38% 0.03 75);
-  --fm-ink-2: oklch(52% 0.03 75);
-  --fm-accent: oklch(58% 0.18 35); /* archival vermilion */
-  --fm-accent-ink: oklch(24% 0.04 35);
-  --fm-danger: oklch(56% 0.2 25);
+  /* Color (OKLCH) */
+  --fm-bg: oklch(98% 0.01 240);          /* Very soft gray/blue tint backdrop */
+  --fm-paper-0: oklch(100% 0 0);         /* Pure white surfaces */
+  --fm-paper-1: oklch(99.5% 0.005 240);  /* Off-white secondary surfaces */
+  --fm-surface-0: oklch(100% 0 0);
+  --fm-surface-1: oklch(99.5% 0.005 240);
 
-  --fm-border: color-mix(in oklch, var(--fm-ink-0) 16%, transparent);
-  --fm-border-strong: color-mix(in oklch, var(--fm-ink-0) 28%, transparent);
+  --fm-ink-0: oklch(35% 0.02 240);       /* Deep slate gray text */
+  --fm-ink-1: oklch(50% 0.02 240);
+  --fm-ink-2: oklch(65% 0.02 240);
+
+  --fm-accent: oklch(70% 0.16 20);       /* Bright Coral */
+  --fm-accent-ink: oklch(98% 0.02 20);   /* Text on accent */
+  --fm-danger: oklch(65% 0.18 15);       /* Soft Red */
+
+  --fm-border: color-mix(in oklch, var(--fm-ink-0) 8%, transparent);
+  --fm-border-strong: color-mix(in oklch, var(--fm-ink-0) 15%, transparent);
 
   /* Shape + shadow */
-  --fm-radius-s: 10px;
-  --fm-radius-m: 14px;
-  --fm-radius-l: 18px;
-  --fm-shadow-1: 0 1px 0 color-mix(in oklch, var(--fm-ink-0) 12%, transparent);
-  --fm-shadow-2: 0 14px 40px color-mix(in oklch, var(--fm-ink-0) 10%, transparent);
+  --fm-radius-s: 12px;
+  --fm-radius-m: 16px;
+  --fm-radius-l: 24px;
+  --fm-shadow-1: 0 4px 12px rgba(0, 0, 0, 0.03);
+  --fm-shadow-2: 0 8px 30px rgba(0, 0, 0, 0.05);
 
-  /* Motion */
-  --fm-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --fm-ease-inout: cubic-bezier(0.45, 0, 0.55, 1);
+  /* Motion (Spring Physics) */
+  --fm-ease-out: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --fm-ease-inout: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* Layout */
   --fm-nav-w: 270px;
