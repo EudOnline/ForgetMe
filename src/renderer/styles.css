@@ -11,6 +11,16 @@
   --fm-font-body: "Nunito", "Quicksand", system-ui, sans-serif;
   --fm-font-mono: "Berkeley Mono", "JetBrains Mono", "SF Mono", ui-monospace, monospace;
 
+  /* Fluid Typography Scale */
+  --fm-text-xs: clamp(0.7rem, 0.65rem + 0.25vw, 0.8rem);
+  --fm-text-sm: clamp(0.8rem, 0.75rem + 0.25vw, 0.95rem);
+  --fm-text-base: clamp(0.95rem, 0.9rem + 0.25vw, 1.05rem);
+  --fm-text-lg: clamp(1.1rem, 1rem + 0.5vw, 1.25rem);
+  --fm-text-xl: clamp(1.25rem, 1.15rem + 0.5vw, 1.5rem);
+
+  /* Touch Targets */
+  --fm-touch-min: 44px;
+
   /* Color (OKLCH) */
   --fm-bg: oklch(98% 0.01 240);          /* Very soft gray/blue tint backdrop */
   --fm-paper-0: oklch(100% 0 0);         /* Pure white surfaces */
@@ -60,6 +70,7 @@ body,
 body {
   margin: 0;
   font-family: var(--fm-font-body);
+  font-size: var(--fm-text-base);
   color: var(--fm-ink-0);
   overflow: hidden;
   background: var(--fm-bg);
@@ -299,6 +310,7 @@ input,
 select,
 textarea {
   padding: 10px 12px;
+  min-height: var(--fm-touch-min);
   border-radius: var(--fm-radius-s);
   border: 1px solid var(--fm-border);
   background: color-mix(in oklch, var(--fm-surface-0) 80%, white 20%);
@@ -313,7 +325,11 @@ button {
   border-radius: var(--fm-radius-s);
   border: 1px solid var(--fm-border);
   background: linear-gradient(180deg, var(--fm-surface-0), var(--fm-surface-1));
-  padding: 10px 12px;
+  padding: 10px 16px;
+  min-height: var(--fm-touch-min);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   transition:
     transform 160ms var(--fm-ease-out),
@@ -604,7 +620,7 @@ article strong {
 
 .fmWorkbenchLayout {
   display: grid;
-  grid-template-columns: 1fr 1fr 2fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
   align-items: start;
 }
@@ -618,9 +634,69 @@ article strong {
   :root {
     --fm-nav-w: 220px;
   }
+}
 
+@media (max-width: 768px) {
+  .fmShell {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 64px;
+  }
+
+  .fmNav {
+    grid-row: 2;
+    padding: 0;
+    border-right: none;
+    border-top: 1px solid var(--fm-border);
+    background: var(--fm-surface-0);
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .fmNavGroup {
+    margin-bottom: 0;
+    display: flex;
+    flex: 1;
+    align-items: center;
+  }
+
+  .fmNavLabel {
+    display: none;
+  }
+
+  .fmNavItems {
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
+    width: 100%;
+    justify-content: space-evenly;
+  }
+
+  .fmNavItems > li {
+    flex: 1;
+  }
+
+  .fmNavItem {
+    padding: 8px 4px;
+    text-align: center;
+    font-size: 0.8rem;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Reset Workbench columns on small screens explicitly since auto-fit might not go to 1 soon enough depending on padding */
   .fmWorkbenchLayout {
     grid-template-columns: 1fr;
+  }
+
+  /* Stack brand and language on mobile */
+  .fmTop {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 14px;
   }
 }
 
