@@ -45,6 +45,19 @@ test('agent console confirmation-gates destructive review item actions and repla
   await expect(page.getByText('completed')).toBeVisible({ timeout: 15_000 })
 
   const queueItemId = await page.evaluate(async () => {
+    const archiveApi = (
+      window as typeof window & {
+        archiveApi?: {
+          listReviewWorkbenchItems: (input: { status: 'pending' }) => Promise<Array<{ queueItemId: string }>>
+        }
+      }
+    ).archiveApi
+
+    if (archiveApi) {
+      const items = await archiveApi.listReviewWorkbenchItems({ status: 'pending' })
+      return items[0]?.queueItemId ?? null
+    }
+
     const electronModule = window.require?.('electron')
     const ipcRenderer = electronModule?.ipcRenderer
     if (!ipcRenderer) {
