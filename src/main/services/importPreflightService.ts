@@ -16,6 +16,19 @@ function normalizeFileName(fileName: string) {
   return fileName.trim().toLowerCase()
 }
 
+function normalizeExtension(extension: string) {
+  const normalized = extension.trim().toLowerCase()
+  if (!normalized) {
+    return ''
+  }
+
+  return normalized.startsWith('.') ? normalized : `.${normalized}`
+}
+
+function buildNormalizedDuplicateKey(fileName: string, extension: string) {
+  return `${normalizeFileName(fileName)}::${normalizeExtension(extension)}`
+}
+
 function classifyImportKindHint(extension: string): ImportPreflightItem['importKindHint'] {
   if (extension === '.json' || extension === '.txt') {
     return 'chat'
@@ -40,34 +53,65 @@ export async function buildImportPreflight(input: {
   runMigrations(db)
 
   try {
-    const existingRows = db.prepare(
-      `select lower(file_name) as fileName, lower(extension) as extension
-       from vault_files
-       where deleted_at is null`
-    ).all() as Array<{ fileName: string; extension: string }>
-    const existingKeys = new Set(existingRows.map((row) => `${row.fileName}::${row.extension}`))
-    const seenInBatch = new Set<string>()
-
-    const items = input.sourcePaths.map((sourcePath) => {
+    const candidates = input.sourcePaths.map((sourcePath) => {
       const fileName = path.basename(sourcePath)
       const normalizedFileName = normalizeFileName(fileName)
-      const extension = path.extname(fileName).toLowerCase()
+      const extension = normalizeExtension(path.extname(fileName))
       const isSupported = isSupportedImportExtension(extension)
-      const duplicateKey = `${normalizedFileName}::${extension}`
-      const isDuplicateCandidate = isSupported && (existingKeys.has(duplicateKey) || seenInBatch.has(duplicateKey))
-
-      if (isSupported) {
-        seenInBatch.add(duplicateKey)
-      }
+      const duplicateKey = buildNormalizedDuplicateKey(fileName, extension)
 
       return {
         sourcePath,
         fileName,
         extension,
         normalizedFileName,
+        duplicateKey,
         importKindHint: classifyImportKindHint(extension),
-        isSupported,
-        status: !isSupported ? 'unsupported' : isDuplicateCandidate ? 'duplicate_candidate' : 'supported'
+        isSupported
+      }
+    })
+    const supportedCandidates = candidates.filter((candidate) => candidate.isSupported)
+    const supportedDuplicateKeys = new Set(supportedCandidates.map((candidate) => candidate.duplicateKey))
+    const supportedFileNames = [...new Set(supportedCandidates.map((candidate) => candidate.normalizedFileName))]
+    const supportedExtensions = [...new Set(supportedCandidates.map((candidate) => candidate.extension))]
+    const existingKeys = new Set<string>()
+
+    if (supportedFileNames.length > 0 && supportedExtensions.length > 0) {
+      const fileNamePlaceholders = supportedFileNames.map(() => '?').join(', ')
+      const extensionPlaceholders = supportedExtensions.map(() => '?').join(', ')
+      const existingRows = db.prepare(
+        `select file_name as fileName, extension
+         from vault_files
+         where deleted_at is null
+           and lower(trim(file_name)) in (${fileNamePlaceholders})
+           and lower(trim(extension)) in (${extensionPlaceholders})`
+      ).all(...supportedFileNames, ...supportedExtensions) as Array<{ fileName: string; extension: string }>
+
+      for (const row of existingRows) {
+        const normalizedKey = buildNormalizedDuplicateKey(row.fileName, row.extension)
+        if (supportedDuplicateKeys.has(normalizedKey)) {
+          existingKeys.add(normalizedKey)
+        }
+      }
+    }
+
+    const seenInBatch = new Set<string>()
+    const items = candidates.map((candidate) => {
+      const isDuplicateCandidate = candidate.isSupported
+        && (existingKeys.has(candidate.duplicateKey) || seenInBatch.has(candidate.duplicateKey))
+
+      if (candidate.isSupported) {
+        seenInBatch.add(candidate.duplicateKey)
+      }
+
+      return {
+        sourcePath: candidate.sourcePath,
+        fileName: candidate.fileName,
+        extension: candidate.extension,
+        normalizedFileName: candidate.normalizedFileName,
+        importKindHint: candidate.importKindHint,
+        isSupported: candidate.isSupported,
+        status: !candidate.isSupported ? 'unsupported' : isDuplicateCandidate ? 'duplicate_candidate' : 'supported'
       } satisfies ImportPreflightItem
     })
 
