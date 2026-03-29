@@ -10,6 +10,7 @@ import type {
 import { getArchiveApi } from './archiveApi'
 import { useI18n } from './i18n'
 import { BatchDetailPage } from './pages/BatchDetailPage'
+import { AgentConsolePage } from './pages/AgentConsolePage'
 import { BatchListPage } from './pages/BatchListPage'
 import { DocumentEvidencePage } from './pages/DocumentEvidencePage'
 import { EnrichmentJobsPage } from './pages/EnrichmentJobsPage'
@@ -37,6 +38,7 @@ type Page =
   | 'enrichment'
   | 'evidence'
   | 'preservation'
+  | 'agent-console'
 
 export default function App() {
   const { language, setLanguage, t } = useI18n()
@@ -111,7 +113,8 @@ export default function App() {
     'review-workbench': 'page.review.workbench',
     preservation: 'page.ops.preservation',
     enrichment: 'page.ops.enrichmentJobs',
-    evidence: 'page.evidence.document'
+    evidence: 'page.evidence.document',
+    'agent-console': 'page.ops.agentConsole'
   }
 
   return (
@@ -240,6 +243,11 @@ export default function App() {
                   {t('nav.documentEvidence')}
                 </button>
               </li>
+              <li>
+                <button className="fmNavItem" type="button" onClick={() => setPage('agent-console')} aria-current={page === 'agent-console' ? 'page' : undefined}>
+                  {t('nav.agentConsole')}
+                </button>
+              </li>
             </ul>
           </div>
         </nav>
@@ -291,6 +299,15 @@ export default function App() {
             {page === 'preservation' ? <PreservationPage /> : null}
             {page === 'enrichment' ? <EnrichmentJobsPage onSelectFile={handleSelectEvidenceFile} /> : null}
             {page === 'evidence' ? <DocumentEvidencePage fileId={selectedEvidenceFileId} /> : null}
+            {page === 'agent-console' ? (
+              <AgentConsolePage
+                onOpenReviewQueue={() => setPage('review')}
+                onOpenMemoryWorkspace={(scope) => {
+                  setSelectedMemoryWorkspaceScope(scope)
+                  setPage('memory-workspace')
+                }}
+              />
+            ) : null}
           </div>
         </section>
       </div>

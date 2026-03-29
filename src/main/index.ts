@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import { join } from 'node:path'
 import { app, BrowserWindow } from 'electron'
 import { registerArchiveIpc } from './ipc/archiveIpc'
+import { registerAgentIpc } from './ipc/agentIpc'
 import { registerContextPackIpc } from './ipc/contextPackIpc'
 import { registerPreservationIpc } from './ipc/preservationIpc'
 import { registerEnrichmentIpc } from './ipc/enrichmentIpc'
@@ -69,6 +70,7 @@ let approvedDraftProviderSendRetryRunner: ReturnType<typeof createApprovedDraftP
 app.whenReady().then(() => {
   const appPaths = ensureAppPaths(resolveAppDataRoot())
   registerArchiveIpc(appPaths)
+  registerAgentIpc(appPaths)
   registerContextPackIpc(appPaths)
   registerPreservationIpc(appPaths)
   registerEnrichmentIpc(appPaths)

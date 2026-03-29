@@ -266,6 +266,40 @@ npm run build
 - quote-backed evidence reads, advice-mode responses, and persona-request guardrails with reviewed draft sandbox flows
 - approved-draft publication, provider-send, hosted-share creation, hosted-share revoke, and replay-safe share-surface access from the same workspace
 
+### Five-Agent Runtime Baseline
+
+`Agent Console` adds one agent-facing surface on top of the existing local-first archive.
+
+- `orchestrator` delegates user goals into the safest matching role instead of bypassing existing services
+- `ingestion` plans imports, reruns enrichment, and summarizes document evidence
+- `review` summarizes queue pressure, suggests safe-group actions, and keeps destructive review actions confirmation-gated
+- `workspace` reuses `Memory Workspace`, compare, and approved-draft publication flows
+- `governance` records operational feedback, summarizes failed runs, and drafts policy versions without auto-activation
+
+Agent runs, agent messages, operational memories, and policy drafts are persisted in SQLite so the console can replay recent work without inventing a second source of truth.
+Approved truth remains review-gated: agents do not directly mutate approved fact tables, and high-risk review actions still require an explicit confirmation token.
+
+### Agent Traffic via LiteLLM
+
+Agent traffic still flows through the existing `LiteLLM` gateway and the same provider configuration:
+
+- `FORGETME_LITELLM_BASE_URL`
+- `FORGETME_DEFAULT_MODEL_PROVIDER`
+- `FORGETME_LITELLM_TIMEOUT_MS`
+- `FORGETME_LITELLM_RETRY_COUNT`
+- `SILICONFLOW_API_KEY`
+- `OPENROUTER_API_KEY`
+
+Optional role-scoped routing for `memory_dialogue` can use env vars such as `FORGETME_MODEL_MEMORY_DIALOGUE_WORKSPACE_SILICONFLOW`.
+The gateway also forwards agent metadata headers like role, run id, policy version, and memory profile so outbound model traffic stays auditable.
+
+### Five-Agent Verification
+
+```bash
+npm run test:unit -- tests/unit/main/agentRuntimeService.test.ts tests/unit/main/ingestionAgentService.test.ts tests/unit/main/reviewAgentService.test.ts tests/unit/main/workspaceAgentService.test.ts tests/unit/main/governanceAgentService.test.ts tests/unit/main/agentIpc.test.ts tests/unit/renderer/agentConsolePage.test.tsx
+npm run test:e2e:agent
+```
+
 ### Completion Verification
 
 ```bash

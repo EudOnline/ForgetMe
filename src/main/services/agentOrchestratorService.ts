@@ -19,7 +19,7 @@ const destructiveTaskKinds = new Set<AgentTaskKind>([
 
 const defaultTaskKindByRole: Record<'ingestion' | 'review' | 'workspace' | 'governance', AgentTaskKind> = {
   ingestion: 'ingestion.import_batch',
-  review: 'review.apply_safe_group',
+  review: 'review.summarize_queue',
   workspace: 'workspace.ask_memory',
   governance: 'governance.propose_policy_update'
 }

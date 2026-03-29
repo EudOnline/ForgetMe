@@ -15,6 +15,45 @@ function setupDatabase() {
 }
 
 describe('agent runtime service', () => {
+  it('routes orchestrator review summaries to the non-destructive queue summary task', async () => {
+    const db = setupDatabase()
+    const reviewAdapter: AgentAdapter = {
+      role: 'review',
+      canHandle: (taskKind) => taskKind === 'review.summarize_queue',
+      execute: async () => ({
+        messages: [
+          {
+            sender: 'tool',
+            content: 'Loaded pending review workbench items'
+          },
+          {
+            sender: 'agent',
+            content: '1 pending items across 1 conflict groups.'
+          }
+        ]
+      })
+    }
+
+    const runtime = createAgentRuntime({
+      db,
+      adapters: [reviewAdapter]
+    })
+
+    const result = await runtime.runTask({
+      prompt: 'Summarize the highest-priority pending review work',
+      role: 'orchestrator'
+    })
+    const detail = runtime.getRun({ runId: result.runId })
+
+    expect(result.status).toBe('completed')
+    expect(result.assignedRoles).toEqual(['orchestrator', 'review'])
+    expect(detail?.status).toBe('completed')
+    expect(detail?.errorMessage).toBeNull()
+    expect(detail?.messages.some((message) => message.content.includes('pending review workbench items'))).toBe(true)
+
+    db.close()
+  })
+
   it('creates a persisted run row and delegates orchestrator prompts to a role adapter', async () => {
     const db = setupDatabase()
     const workspaceAdapter: AgentAdapter = {

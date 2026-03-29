@@ -84,4 +84,39 @@ describe('preload archiveApi hosted share bridge', () => {
       sessionId: 'session-1'
     })
   })
+
+  it('exposes agent runtime methods through contextBridge', async () => {
+    await import('../../../src/preload/index')
+
+    expect(exposeInMainWorld).toHaveBeenCalledTimes(1)
+
+    const archiveApi = exposeInMainWorld.mock.calls[0]?.[1] as {
+      runAgentTask: (input: { prompt: string; role: 'orchestrator' }) => Promise<unknown>
+      listAgentRuns: (input: { role: 'review' }) => Promise<unknown>
+      getAgentRun: (input: { runId: string }) => Promise<unknown>
+      listAgentMemories: (input: { role: 'governance' }) => Promise<unknown>
+    }
+
+    await archiveApi.runAgentTask({
+      prompt: 'Summarize the highest-priority pending review work',
+      role: 'orchestrator'
+    })
+    await archiveApi.listAgentRuns({ role: 'review' })
+    await archiveApi.getAgentRun({ runId: 'run-1' })
+    await archiveApi.listAgentMemories({ role: 'governance' })
+
+    expect(invoke).toHaveBeenNthCalledWith(1, 'archive:runAgentTask', {
+      prompt: 'Summarize the highest-priority pending review work',
+      role: 'orchestrator'
+    })
+    expect(invoke).toHaveBeenNthCalledWith(2, 'archive:listAgentRuns', {
+      role: 'review'
+    })
+    expect(invoke).toHaveBeenNthCalledWith(3, 'archive:getAgentRun', {
+      runId: 'run-1'
+    })
+    expect(invoke).toHaveBeenNthCalledWith(4, 'archive:listAgentMemories', {
+      role: 'governance'
+    })
+  })
 })

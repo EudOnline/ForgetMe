@@ -52,6 +52,110 @@ describe('archiveApi preservation methods', () => {
   })
 })
 
+describe('archiveApi agent runtime methods', () => {
+  it('exposes agent runtime methods in the fallback API', async () => {
+    vi.stubGlobal('window', {})
+
+    const archiveApi = getArchiveApi()
+
+    await expect(archiveApi.runAgentTask({
+      prompt: 'Summarize the highest-priority pending review work',
+      role: 'orchestrator'
+    })).resolves.toEqual({
+      runId: '',
+      status: 'queued'
+    })
+    await expect(archiveApi.listAgentRuns({
+      role: 'review'
+    })).resolves.toEqual([])
+    await expect(archiveApi.getAgentRun({
+      runId: 'run-1'
+    })).resolves.toBeNull()
+    await expect(archiveApi.listAgentMemories({
+      role: 'governance'
+    })).resolves.toEqual([])
+  })
+
+  it('preserves renderer-provided agent runtime methods', async () => {
+    const runAgentTask = vi.fn().mockResolvedValue({
+      runId: 'run-1',
+      status: 'completed'
+    })
+    const listAgentRuns = vi.fn().mockResolvedValue([
+      {
+        runId: 'run-1',
+        role: 'orchestrator',
+        taskKind: 'review.summarize_queue',
+        status: 'completed',
+        prompt: 'Summarize the highest-priority pending review work',
+        confirmationToken: null,
+        policyVersion: null,
+        errorMessage: null,
+        createdAt: '2026-03-29T00:00:00.000Z',
+        updatedAt: '2026-03-29T00:00:00.000Z'
+      }
+    ])
+    const getAgentRun = vi.fn().mockResolvedValue({
+      runId: 'run-1',
+      role: 'orchestrator',
+      taskKind: 'review.summarize_queue',
+      status: 'completed',
+      prompt: 'Summarize the highest-priority pending review work',
+      confirmationToken: null,
+      policyVersion: null,
+      errorMessage: null,
+      createdAt: '2026-03-29T00:00:00.000Z',
+      updatedAt: '2026-03-29T00:00:00.000Z',
+      messages: [
+        {
+          messageId: 'message-1',
+          runId: 'run-1',
+          ordinal: 1,
+          sender: 'agent',
+          content: '1 pending items across 1 conflict groups.',
+          createdAt: '2026-03-29T00:00:00.000Z'
+        }
+      ]
+    })
+    const listAgentMemories = vi.fn().mockResolvedValue([
+      {
+        memoryId: 'memory-1',
+        role: 'governance',
+        memoryKey: 'governance.feedback',
+        memoryValue: 'Prefer queue summaries first.',
+        createdAt: '2026-03-29T00:00:00.000Z',
+        updatedAt: '2026-03-29T00:00:00.000Z'
+      }
+    ])
+
+    vi.stubGlobal('window', {
+      archiveApi: {
+        runAgentTask,
+        listAgentRuns,
+        getAgentRun,
+        listAgentMemories
+      }
+    })
+
+    const archiveApi = getArchiveApi()
+    const run = await archiveApi.runAgentTask({
+      prompt: 'Summarize the highest-priority pending review work',
+      role: 'orchestrator'
+    })
+    const runs = await archiveApi.listAgentRuns({ role: 'review' })
+    const detail = await archiveApi.getAgentRun({ runId: 'run-1' })
+    const memories = await archiveApi.listAgentMemories({ role: 'governance' })
+
+    expect(run).toEqual({
+      runId: 'run-1',
+      status: 'completed'
+    })
+    expect(runs[0]?.runId).toBe('run-1')
+    expect(detail?.messages[0]?.content).toContain('pending items')
+    expect(memories[0]?.memoryKey).toBe('governance.feedback')
+  })
+})
+
 describe('archiveApi dossier methods', () => {
   it('exposes person dossier reads in the fallback API', async () => {
     vi.stubGlobal('window', {})

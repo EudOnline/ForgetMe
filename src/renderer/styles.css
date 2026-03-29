@@ -756,3 +756,92 @@ input:focus, textarea:focus, select:focus {
   border-color: var(--fm-accent);
   box-shadow: 0 0 0 4px color-mix(in oklch, var(--fm-accent) 20%, transparent);
 }
+
+.fmAgentConsoleHeader {
+  margin-bottom: var(--fm-space-m);
+}
+
+.fmAgentConsoleLayout {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  gap: var(--fm-space-m);
+}
+
+.fmAgentHistory,
+.fmAgentCard {
+  background: var(--fm-paper-0);
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius-l);
+  box-shadow: var(--fm-shadow-1);
+  padding: var(--fm-space-m);
+}
+
+.fmAgentHistoryList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--fm-space-s);
+}
+
+.fmAgentRunItem {
+  width: 100%;
+  text-align: left;
+  display: grid;
+  gap: 6px;
+}
+
+.fmAgentRunPrompt {
+  font-family: var(--fm-font-display);
+  font-size: var(--fm-text-base);
+}
+
+.fmAgentRunMeta {
+  color: var(--fm-ink-1);
+  font-size: var(--fm-text-sm);
+}
+
+.fmAgentMain {
+  display: grid;
+  gap: var(--fm-space-m);
+}
+
+.fmAgentComposer {
+  display: grid;
+  gap: var(--fm-space-s);
+}
+
+.fmAgentField {
+  display: grid;
+  gap: 6px;
+}
+
+.fmAgentField textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.fmAgentConfirm {
+  margin-top: var(--fm-space-m);
+  padding-top: var(--fm-space-s);
+  border-top: 1px solid var(--fm-border);
+  display: grid;
+  gap: var(--fm-space-s);
+}
+
+.fmAgentActionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fm-space-s);
+}
+
+.fmAgentDetail {
+  display: grid;
+  gap: var(--fm-space-s);
+}
+
+@media (max-width: 960px) {
+  .fmAgentConsoleLayout {
+    grid-template-columns: 1fr;
+  }
+}
