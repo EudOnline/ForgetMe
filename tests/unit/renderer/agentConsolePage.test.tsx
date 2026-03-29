@@ -236,4 +236,100 @@ describe('AgentConsolePage', () => {
       })
     })
   })
+
+  it('picks files and submits a preflighted ingestion import through the agent runtime', async () => {
+    const selectImportFiles = vi.fn().mockResolvedValue([
+      '/tmp/chat.json',
+      '/tmp/unsupported.exe'
+    ])
+    const preflightImportBatch = vi.fn().mockResolvedValue({
+      items: [
+        {
+          sourcePath: '/tmp/chat.json',
+          fileName: 'chat.json',
+          extension: 'json',
+          normalizedFileName: 'chat.json',
+          importKindHint: 'chat',
+          isSupported: true,
+          status: 'supported'
+        },
+        {
+          sourcePath: '/tmp/unsupported.exe',
+          fileName: 'unsupported.exe',
+          extension: 'exe',
+          normalizedFileName: 'unsupported.exe',
+          importKindHint: 'unknown',
+          isSupported: false,
+          status: 'unsupported'
+        }
+      ],
+      summary: {
+        totalCount: 2,
+        supportedCount: 1,
+        unsupportedCount: 1
+      }
+    })
+    const createImportBatch = vi.fn().mockResolvedValue({
+      batchId: 'batch-1',
+      sourceLabel: 'Agent Console import',
+      createdAt: '2026-03-30T00:00:00.000Z',
+      files: [
+        {
+          fileId: 'file-1',
+          fileName: 'chat.json',
+          duplicateClass: 'unique',
+          parserStatus: 'parsed',
+          frozenAbsolutePath: '/tmp/frozen/chat.json'
+        }
+      ],
+      summary: {
+        frozenCount: 1,
+        parsedCount: 1,
+        duplicateCount: 0,
+        reviewCount: 0
+      }
+    })
+    const runAgentTask = vi.fn()
+    const listAgentRuns = vi.fn().mockResolvedValue([])
+    const getAgentRun = vi.fn().mockResolvedValue(null)
+
+    Object.assign(window, {
+      archiveApi: {
+        selectImportFiles,
+        preflightImportBatch,
+        createImportBatch,
+        listAgentRuns,
+        getAgentRun,
+        runAgentTask
+      }
+    })
+
+    render(<AgentConsolePage />)
+
+    fireEvent.change(screen.getByLabelText('Role override'), {
+      target: { value: 'ingestion' }
+    })
+    fireEvent.change(screen.getByLabelText('Agent prompt'), {
+      target: { value: 'Import these files into the archive' }
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Run agent task' }))
+    })
+
+    await waitFor(() => {
+      expect(selectImportFiles).toHaveBeenCalledTimes(1)
+    })
+    expect(preflightImportBatch).toHaveBeenCalledWith({
+      sourcePaths: ['/tmp/chat.json', '/tmp/unsupported.exe']
+    })
+    await waitFor(() => {
+      expect(createImportBatch).toHaveBeenCalledWith({
+        sourcePaths: ['/tmp/chat.json'],
+        sourceLabel: 'Agent Console import'
+      })
+    })
+    expect(runAgentTask).not.toHaveBeenCalled()
+    expect(screen.getByText('1 supported, 1 unsupported')).toBeInTheDocument()
+    expect(screen.getByText('Import batch batch-1 created with 1 imported files.')).toBeInTheDocument()
+  })
 })

@@ -4,6 +4,7 @@ import type {
   AgentRunDetail,
   AgentRunRecord,
   AgentTaskKind,
+  ImportPreflightResult,
   MemoryWorkspaceScope,
   RunAgentTaskInput,
   RunAgentTaskResult
@@ -25,6 +26,10 @@ const destructiveTaskKinds = new Set<AgentTaskKind>([
   'review.apply_safe_group',
   'review.apply_item_decision'
 ])
+
+function asErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
 
 function inferTaskKind(role: AgentRole, prompt: string): AgentTaskKind | undefined {
   const normalizedPrompt = prompt.toLowerCase()
@@ -91,6 +96,16 @@ function buildTaskInput(
   } as RunAgentTaskInput
 }
 
+function summarizeIngestionPreflight(
+  result: ImportPreflightResult,
+  t: (key: string, values?: Record<string, string | number>) => string
+) {
+  return t('agentConsole.ingestionPreflightSummary', {
+    supportedCount: result.summary.supportedCount,
+    unsupportedCount: result.summary.unsupportedCount
+  })
+}
+
 function summarizePrompt(prompt: string) {
   const trimmed = prompt.trim()
   if (trimmed.length <= 72) {
@@ -143,6 +158,8 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
   const [confirmationToken, setConfirmationToken] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [ingestionPreflightSummary, setIngestionPreflightSummary] = useState<string | null>(null)
+  const [ingestionResultMessage, setIngestionResultMessage] = useState<string | null>(null)
 
   const refreshRuns = async (preferredRunId?: string) => {
     const nextRuns = await archiveApi.listAgentRuns()
@@ -178,6 +195,13 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
     }
   }, [archiveApi, selectedRunId])
 
+  useEffect(() => {
+    if (role !== 'ingestion') {
+      setIngestionPreflightSummary(null)
+      setIngestionResultMessage(null)
+    }
+  }, [role])
+
   const executeTask = async (input: RunAgentTaskInput) => {
     setIsSubmitting(true)
     setErrorMessage(null)
@@ -196,6 +220,50 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
 
   const handleSubmit = async () => {
     const nextInput = buildTaskInput(prompt, role)
+    if (nextInput.role === 'ingestion' && nextInput.taskKind === 'ingestion.import_batch') {
+      setIsSubmitting(true)
+      setErrorMessage(null)
+      setIngestionPreflightSummary(null)
+      setIngestionResultMessage(null)
+
+      try {
+        const sourcePaths = await archiveApi.selectImportFiles()
+        if (sourcePaths.length === 0) {
+          return
+        }
+
+        const preflightResult = await archiveApi.preflightImportBatch({ sourcePaths })
+        setIngestionPreflightSummary(summarizeIngestionPreflight(preflightResult, t))
+
+        const supportedSourcePaths = preflightResult.items
+          .filter((item) => item.isSupported)
+          .map((item) => item.sourcePath)
+
+        if (supportedSourcePaths.length === 0) {
+          setErrorMessage(t('agentConsole.ingestionNoSupportedFiles'))
+          return
+        }
+
+        const createdBatch = await archiveApi.createImportBatch({
+          sourcePaths: supportedSourcePaths,
+          sourceLabel: t('agentConsole.ingestionSourceLabel')
+        })
+        const importedCount = createdBatch.summary?.frozenCount ?? supportedSourcePaths.length
+        setIngestionResultMessage(t('agentConsole.ingestionCompleted', {
+          batchId: createdBatch.batchId,
+          count: importedCount
+        }))
+        return
+      } catch (error) {
+        setErrorMessage(t('agentConsole.ingestionImportFailed', {
+          message: asErrorMessage(error)
+        }))
+        return
+      } finally {
+        setIsSubmitting(false)
+      }
+    }
+
     if ('taskKind' in nextInput && nextInput.taskKind && destructiveTaskKinds.has(nextInput.taskKind) && !('confirmationToken' in nextInput)) {
       setPendingSubmission({ input: nextInput })
       setErrorMessage(null)
@@ -326,6 +394,8 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
               </div>
             ) : null}
 
+            {ingestionPreflightSummary ? <div role="status">{ingestionPreflightSummary}</div> : null}
+            {ingestionResultMessage ? <div role="status">{ingestionResultMessage}</div> : null}
             {errorMessage ? <div role="alert">{errorMessage}</div> : null}
           </section>
 
