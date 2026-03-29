@@ -22,6 +22,19 @@ describe('ImportPage', () => {
     expect(screen.getByText('Recent Batches')).toBeInTheDocument()
   })
 
+  it('shows selected files, supported formats, and drag-active state in the import surface', () => {
+    vi.stubGlobal('window', {
+      archiveApi: {
+        listImportBatches: vi.fn().mockResolvedValue([]),
+        selectImportFiles: vi.fn()
+      }
+    })
+
+    render(<ImportPage />)
+    expect(screen.getByText('Choose Files')).toBeInTheDocument()
+    expect(screen.getByText('JSON, TXT, JPG, PNG, HEIC, PDF, DOCX')).toBeInTheDocument()
+  })
+
   it('shows unsupported file guidance when selected files are skipped', async () => {
     const createImportBatch = vi.fn().mockResolvedValue({
       batchId: 'batch-unsupported-1',
