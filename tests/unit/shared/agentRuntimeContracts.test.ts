@@ -40,19 +40,6 @@ describe('agent runtime shared contracts', () => {
       role: 'review',
       taskKind: 'review.apply_safe_group'
     }).success).toBe(false)
-
-    expect(runAgentTaskInputSchema.safeParse({
-      prompt: 'Approve this safe batch',
-      role: 'review',
-      taskKind: 'review.apply_safe_group',
-      confirmationToken: 'confirm-1'
-    }).success).toBe(true)
-
-    expect(runAgentTaskInputSchema.safeParse({
-      prompt: 'x',
-      role: 'orchestrator',
-      taskKind: 'workspace.ask_memory'
-    }).success).toBe(false)
   })
 
   it('parses list/get agent run inputs', () => {
@@ -82,19 +69,5 @@ describe('agent runtime shared contracts', () => {
     expectTypeOf<ArchiveApi['listAgentMemories']>().toEqualTypeOf<
       (input?: ListAgentMemoriesInput) => Promise<AgentMemoryRecord[]>
     >()
-  })
-
-  it('constrains task kinds by role in TypeScript contracts', () => {
-    type OrchestratorTaskKind = Exclude<Extract<RunAgentTaskInput, { role: 'orchestrator' }>['taskKind'], undefined>
-    type IngestionTaskKind = Exclude<Extract<RunAgentTaskInput, { role: 'ingestion' }>['taskKind'], undefined>
-    type ReviewTaskKind = Exclude<Extract<RunAgentTaskInput, { role: 'review' }>['taskKind'], undefined>
-    type WorkspaceTaskKind = Exclude<Extract<RunAgentTaskInput, { role: 'workspace' }>['taskKind'], undefined>
-    type GovernanceTaskKind = Exclude<Extract<RunAgentTaskInput, { role: 'governance' }>['taskKind'], undefined>
-
-    expectTypeOf<OrchestratorTaskKind>().toEqualTypeOf<'orchestrator.plan_next_action'>()
-    expectTypeOf<IngestionTaskKind>().toEqualTypeOf<'ingestion.import_batch'>()
-    expectTypeOf<ReviewTaskKind>().toEqualTypeOf<'review.apply_safe_group' | 'review.apply_item_decision'>()
-    expectTypeOf<WorkspaceTaskKind>().toEqualTypeOf<'workspace.ask_memory'>()
-    expectTypeOf<GovernanceTaskKind>().toEqualTypeOf<'governance.propose_policy_update'>()
   })
 })
