@@ -202,4 +202,42 @@ describe('agent runtime service', () => {
 
     db.close()
   })
+
+  it('infers review.apply_item_decision for approve/reject prompts with explicit review item ids', async () => {
+    const db = setupDatabase()
+    let delegatedTaskKind: AgentTaskKind | null = null
+    const reviewAdapter: AgentAdapter = {
+      role: 'review',
+      canHandle: (taskKind) => taskKind === 'review.apply_item_decision',
+      execute: async (context) => {
+        delegatedTaskKind = context.taskKind
+        return {
+          messages: [
+            {
+              sender: 'agent',
+              content: 'Applied review item decision for rq-1'
+            }
+          ]
+        }
+      }
+    }
+
+    const runtime = createAgentRuntime({
+      db,
+      adapters: [reviewAdapter]
+    })
+
+    const result = await runtime.runTask({
+      prompt: 'Approve review item rq-1',
+      role: 'orchestrator',
+      confirmationToken: 'confirm-item-rq-1'
+    })
+
+    expect(result.status).toBe('completed')
+    expect(result.targetRole).toBe('review')
+    expect(result.assignedRoles).toEqual(['orchestrator', 'review'])
+    expect(delegatedTaskKind).toBe('review.apply_item_decision')
+
+    db.close()
+  })
 })

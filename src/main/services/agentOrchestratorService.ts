@@ -26,6 +26,30 @@ const defaultTaskKindByRole: Record<'ingestion' | 'review' | 'workspace' | 'gove
   governance: 'governance.propose_policy_update'
 }
 
+function inferReviewTaskKindFromPrompt(prompt: string): AgentTaskKind | null {
+  const value = prompt.toLowerCase()
+  const hasItemId = /\brq-[a-z0-9-]+\b/.test(value)
+  const hasApproveVerb = /\bapprove(?:d|ing)?\b/.test(value)
+  const hasRejectVerb = /\breject(?:ed|ing)?\b/.test(value)
+
+  if (hasItemId && (hasApproveVerb || hasRejectVerb)) {
+    return 'review.apply_item_decision'
+  }
+
+  const hasSafeGroupPhrase = /\bsafe group\b/.test(value)
+  const hasGroupKey = /\bgroup-[a-z0-9-]+\b/.test(value)
+  const hasApplyVerb = /\bapply(?:ing)?\b/.test(value)
+  if ((hasSafeGroupPhrase || hasGroupKey) && (hasApplyVerb || hasApproveVerb)) {
+    return 'review.apply_safe_group'
+  }
+
+  if (/(review|queue|candidate)/.test(value) || hasItemId || hasSafeGroupPhrase || hasGroupKey) {
+    return 'review.summarize_queue'
+  }
+
+  return null
+}
+
 function inferTargetRoleFromPrompt(prompt: string): 'ingestion' | 'review' | 'workspace' | 'governance' {
   const value = prompt.toLowerCase()
 
@@ -33,7 +57,7 @@ function inferTargetRoleFromPrompt(prompt: string): 'ingestion' | 'review' | 'wo
     return 'governance'
   }
 
-  if (/(review|queue|candidate|approve|safe group)/.test(value)) {
+  if (inferReviewTaskKindFromPrompt(prompt)) {
     return 'review'
   }
 
@@ -75,9 +99,10 @@ function assertSafeDelegation(input: {
 
 function resolveAgentExecutionTarget(input: RunAgentTaskInput): Pick<AgentExecutionPlan, 'taskKind' | 'targetRole' | 'assignedRoles'> {
   if (input.role === 'orchestrator') {
+    const inferredReviewTaskKind = inferReviewTaskKindFromPrompt(input.prompt)
     const taskKind = input.taskKind && input.taskKind !== 'orchestrator.plan_next_action'
       ? input.taskKind
-      : defaultTaskKindByRole[inferTargetRoleFromPrompt(input.prompt)]
+      : inferredReviewTaskKind ?? defaultTaskKindByRole[inferTargetRoleFromPrompt(input.prompt)]
     const targetRole = roleForTaskKind(taskKind)
 
     return {

@@ -13,7 +13,7 @@ function setupDatabase() {
   return db
 }
 
-function createRunRecord(): AgentRunRecord {
+function createRunRecord(overrides: Partial<AgentRunRecord> = {}): AgentRunRecord {
   return {
     runId: 'run-1',
     role: 'review',
@@ -27,7 +27,8 @@ function createRunRecord(): AgentRunRecord {
     policyVersion: null,
     errorMessage: null,
     createdAt: '2026-03-29T00:00:00.000Z',
-    updatedAt: '2026-03-29T00:00:00.000Z'
+    updatedAt: '2026-03-29T00:00:00.000Z',
+    ...overrides
   }
 }
 
@@ -166,6 +167,113 @@ describe('review agent service', () => {
       assignedRoles: ['review']
     })).rejects.toThrow(/confirmation token/i)
     expect(approveSafeReviewGroup).not.toHaveBeenCalled()
+
+    db.close()
+  })
+
+  it('routes approve item prompts to approveReviewItem', async () => {
+    const db = setupDatabase()
+    const approveReviewItem = vi.fn().mockReturnValue({
+      status: 'approved',
+      journalId: 'journal-approve-1',
+      queueItemId: 'rq-1',
+      candidateId: 'candidate-1'
+    })
+    const rejectReviewItem = vi.fn()
+    const agent = createReviewAgentService({
+      approveReviewItem,
+      rejectReviewItem
+    })
+
+    const result = await agent.execute({
+      db,
+      run: createRunRecord({
+        taskKind: 'review.apply_item_decision'
+      }),
+      input: {
+        prompt: 'Approve review item rq-1',
+        role: 'review',
+        taskKind: 'review.apply_item_decision',
+        confirmationToken: 'confirm-item-approve'
+      },
+      taskKind: 'review.apply_item_decision',
+      assignedRoles: ['review']
+    })
+
+    expect(approveReviewItem).toHaveBeenCalledWith(db, {
+      queueItemId: 'rq-1',
+      actor: 'agent:review'
+    })
+    expect(rejectReviewItem).not.toHaveBeenCalled()
+    expect(result.messages?.at(-1)?.content).toContain('rq-1')
+
+    db.close()
+  })
+
+  it('routes reject item prompts to rejectReviewItem with a stable default note', async () => {
+    const db = setupDatabase()
+    const approveReviewItem = vi.fn()
+    const rejectReviewItem = vi.fn().mockReturnValue({
+      status: 'rejected',
+      journalId: 'journal-reject-1',
+      queueItemId: 'rq-2',
+      candidateId: 'candidate-2'
+    })
+    const agent = createReviewAgentService({
+      approveReviewItem,
+      rejectReviewItem
+    })
+
+    const result = await agent.execute({
+      db,
+      run: createRunRecord({
+        taskKind: 'review.apply_item_decision'
+      }),
+      input: {
+        prompt: 'Reject review item rq-2',
+        role: 'review',
+        taskKind: 'review.apply_item_decision',
+        confirmationToken: 'confirm-item-reject'
+      },
+      taskKind: 'review.apply_item_decision',
+      assignedRoles: ['review']
+    })
+
+    expect(rejectReviewItem).toHaveBeenCalledWith(db, {
+      queueItemId: 'rq-2',
+      actor: 'agent:review',
+      note: 'Rejected through Agent Console'
+    })
+    expect(approveReviewItem).not.toHaveBeenCalled()
+    expect(result.messages?.at(-1)?.content).toContain('rq-2')
+
+    db.close()
+  })
+
+  it('refuses to apply an item decision without an explicit confirmation token', async () => {
+    const db = setupDatabase()
+    const approveReviewItem = vi.fn()
+    const rejectReviewItem = vi.fn()
+    const agent = createReviewAgentService({
+      approveReviewItem,
+      rejectReviewItem
+    })
+
+    await expect(agent.execute({
+      db,
+      run: createRunRecord({
+        taskKind: 'review.apply_item_decision'
+      }),
+      input: {
+        prompt: 'Approve review item rq-1',
+        role: 'review',
+        taskKind: 'review.apply_item_decision'
+      },
+      taskKind: 'review.apply_item_decision',
+      assignedRoles: ['review']
+    })).rejects.toThrow(/confirmation token/i)
+    expect(approveReviewItem).not.toHaveBeenCalled()
+    expect(rejectReviewItem).not.toHaveBeenCalled()
 
     db.close()
   })

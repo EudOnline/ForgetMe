@@ -3,7 +3,11 @@ import type {
   ReviewWorkbenchListItem,
   SafeReviewGroupApprovalResult
 } from '../../../shared/archiveContracts'
-import { approveSafeReviewGroup } from '../reviewQueueService'
+import {
+  approveReviewItem,
+  approveSafeReviewGroup,
+  rejectReviewItem
+} from '../reviewQueueService'
 import {
   listReviewConflictGroups,
   listReviewWorkbenchItems
@@ -14,6 +18,8 @@ type ReviewAgentDependencies = {
   listReviewWorkbenchItems?: typeof listReviewWorkbenchItems
   listReviewConflictGroups?: typeof listReviewConflictGroups
   approveSafeReviewGroup?: typeof approveSafeReviewGroup
+  approveReviewItem?: typeof approveReviewItem
+  rejectReviewItem?: typeof rejectReviewItem
 }
 
 function extractGroupKey(prompt: string) {
@@ -29,12 +35,35 @@ function summarizeQueue(items: ReviewWorkbenchListItem[], groups: ReviewConflict
   return `${items.length} pending items across ${groups.length} conflict groups.`
 }
 
+function extractQueueItemId(prompt: string) {
+  const match = prompt.match(/\b(rq-[A-Za-z0-9-]+)\b/i)
+  if (!match) {
+    throw new Error('Missing queue item id in prompt')
+  }
+
+  return match[1] ?? match[0]
+}
+
+function inferItemDecision(prompt: string): 'approve' | 'reject' {
+  const value = prompt.toLowerCase()
+  if (/\bapprove(?:d|ing)?\b/.test(value)) {
+    return 'approve'
+  }
+  if (/\breject(?:ed|ing)?\b/.test(value)) {
+    return 'reject'
+  }
+
+  throw new Error('Missing approve/reject decision verb in prompt')
+}
+
 export function createReviewAgentService(
   dependencies: ReviewAgentDependencies = {}
 ): AgentAdapter {
   const readWorkbenchItems = dependencies.listReviewWorkbenchItems ?? listReviewWorkbenchItems
   const readConflictGroups = dependencies.listReviewConflictGroups ?? listReviewConflictGroups
   const approveGroup = dependencies.approveSafeReviewGroup ?? approveSafeReviewGroup
+  const approveItem = dependencies.approveReviewItem ?? approveReviewItem
+  const rejectItem = dependencies.rejectReviewItem ?? rejectReviewItem
 
   return {
     role: 'review',
@@ -109,8 +138,52 @@ export function createReviewAgentService(
             ]
           }
         }
-        case 'review.apply_item_decision':
-          throw new Error('review.apply_item_decision is not implemented yet')
+        case 'review.apply_item_decision': {
+          if (!context.input.confirmationToken) {
+            throw new Error('confirmation token required for review item actions')
+          }
+
+          const queueItemId = extractQueueItemId(context.input.prompt)
+          const decision = inferItemDecision(context.input.prompt)
+          if (decision === 'approve') {
+            const result = approveItem(context.db, {
+              queueItemId,
+              actor: 'agent:review'
+            })
+
+            return {
+              messages: [
+                {
+                  sender: 'tool',
+                  content: `Approved review item ${result.queueItemId}.`
+                },
+                {
+                  sender: 'agent',
+                  content: `Approved review item ${result.queueItemId}.`
+                }
+              ]
+            }
+          }
+
+          const result = rejectItem(context.db, {
+            queueItemId,
+            actor: 'agent:review',
+            note: 'Rejected through Agent Console'
+          })
+
+          return {
+            messages: [
+              {
+                sender: 'tool',
+                content: `Rejected review item ${result.queueItemId}.`
+              },
+              {
+                sender: 'agent',
+                content: `Rejected review item ${result.queueItemId}.`
+              }
+            ]
+          }
+        }
       }
 
       throw new Error(`Unsupported review task kind: ${context.taskKind}`)
