@@ -1427,8 +1427,15 @@ export type AgentRole =
 
 export type AgentTaskKindByRole = {
   orchestrator: 'orchestrator.plan_next_action'
-  ingestion: 'ingestion.import_batch'
-  review: 'review.apply_safe_group' | 'review.apply_item_decision'
+  ingestion:
+    | 'ingestion.import_batch'
+    | 'ingestion.rerun_enrichment'
+    | 'ingestion.summarize_document_evidence'
+  review:
+    | 'review.summarize_queue'
+    | 'review.suggest_safe_group_action'
+    | 'review.apply_safe_group'
+    | 'review.apply_item_decision'
   workspace: 'workspace.ask_memory'
   governance: 'governance.propose_policy_update'
 }

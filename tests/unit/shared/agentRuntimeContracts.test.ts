@@ -92,8 +92,15 @@ describe('agent runtime shared contracts', () => {
     type GovernanceTaskKind = Exclude<Extract<RunAgentTaskInput, { role: 'governance' }>['taskKind'], undefined>
 
     expectTypeOf<OrchestratorTaskKind>().toEqualTypeOf<'orchestrator.plan_next_action'>()
-    expectTypeOf<IngestionTaskKind>().toEqualTypeOf<'ingestion.import_batch'>()
-    expectTypeOf<ReviewTaskKind>().toEqualTypeOf<'review.apply_safe_group' | 'review.apply_item_decision'>()
+    expectTypeOf<IngestionTaskKind>().toEqualTypeOf<
+      'ingestion.import_batch' | 'ingestion.rerun_enrichment' | 'ingestion.summarize_document_evidence'
+    >()
+    expectTypeOf<ReviewTaskKind>().toEqualTypeOf<
+      'review.summarize_queue'
+      | 'review.suggest_safe_group_action'
+      | 'review.apply_safe_group'
+      | 'review.apply_item_decision'
+    >()
     expectTypeOf<WorkspaceTaskKind>().toEqualTypeOf<'workspace.ask_memory'>()
     expectTypeOf<GovernanceTaskKind>().toEqualTypeOf<'governance.propose_policy_update'>()
   })
