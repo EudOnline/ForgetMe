@@ -1459,6 +1459,9 @@ export type AgentRunRecord = {
   runId: string
   role: AgentRole
   taskKind: AgentTaskKind | null
+  targetRole: AgentRole | null
+  assignedRoles: AgentRole[]
+  latestAssistantResponse: string | null
   status: AgentRunStatus
   prompt: string
   confirmationToken: string | null
@@ -1510,6 +1513,9 @@ export type RunAgentTaskInput = {
 export type RunAgentTaskResult = {
   runId: string
   status: AgentRunStatus
+  targetRole: AgentRole | null
+  assignedRoles: AgentRole[]
+  latestAssistantResponse: string | null
 }
 
 export type ListAgentRunsInput = {

@@ -46,8 +46,13 @@ describe('agent runtime service', () => {
     const detail = runtime.getRun({ runId: result.runId })
 
     expect(result.status).toBe('completed')
+    expect(result.targetRole).toBe('review')
     expect(result.assignedRoles).toEqual(['orchestrator', 'review'])
+    expect(result.latestAssistantResponse).toBe('1 pending items across 1 conflict groups.')
     expect(detail?.status).toBe('completed')
+    expect(detail?.targetRole).toBe('review')
+    expect(detail?.assignedRoles).toEqual(['orchestrator', 'review'])
+    expect(detail?.latestAssistantResponse).toBe('1 pending items across 1 conflict groups.')
     expect(detail?.errorMessage).toBeNull()
     expect(detail?.messages.some((message) => message.content.includes('pending review workbench items'))).toBe(true)
 
@@ -87,8 +92,16 @@ describe('agent runtime service', () => {
 
     expect(runs).toHaveLength(1)
     expect(runs[0]?.role).toBe('orchestrator')
+    expect(runs[0]?.targetRole).toBe('workspace')
+    expect(runs[0]?.assignedRoles).toEqual(['orchestrator', 'workspace'])
+    expect(runs[0]?.latestAssistantResponse).toBe('Workspace answer ready')
     expect(result.status).toBe('completed')
+    expect(result.targetRole).toBe('workspace')
     expect(result.assignedRoles).toEqual(['orchestrator', 'workspace'])
+    expect(result.latestAssistantResponse).toBe('Workspace answer ready')
+    expect(detail?.targetRole).toBe('workspace')
+    expect(detail?.assignedRoles).toEqual(['orchestrator', 'workspace'])
+    expect(detail?.latestAssistantResponse).toBe('Workspace answer ready')
     expect(detail?.messages.map((item) => item.sender)).toEqual(
       expect.arrayContaining(['system', 'user', 'tool', 'agent'])
     )
@@ -111,8 +124,13 @@ describe('agent runtime service', () => {
     const detail = runtime.getRun({ runId: result.runId })
 
     expect(result.status).toBe('failed')
+    expect(result.targetRole).toBe('workspace')
     expect(result.assignedRoles).toEqual(['workspace'])
+    expect(result.latestAssistantResponse).toBeNull()
     expect(detail?.status).toBe('failed')
+    expect(detail?.targetRole).toBe('workspace')
+    expect(detail?.assignedRoles).toEqual(['workspace'])
+    expect(detail?.latestAssistantResponse).toBeNull()
     expect(detail?.errorMessage).toMatch(/no agent adapter/i)
     expect(detail?.messages.at(-1)?.sender).toBe('system')
 

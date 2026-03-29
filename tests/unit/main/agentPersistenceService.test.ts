@@ -8,7 +8,9 @@ import {
   createAgentPolicyVersion,
   createAgentRun,
   getAgentRun,
+  listAgentRuns,
   listAgentMemories,
+  updateAgentRunReplayMetadata,
   upsertAgentMemory
 } from '../../../src/main/services/agentPersistenceService'
 
@@ -70,6 +72,35 @@ describe('agent persistence service', () => {
     expect(memories).toHaveLength(1)
     expect(memories[0]?.memoryKey).toBe('review.safe_batch.rules')
     expect(memories[0]?.memoryValue).toBe('updated rules')
+
+    db.close()
+  })
+
+  it('lists and fetches persisted run replay metadata', () => {
+    const db = setupDatabase()
+
+    const run = createAgentRun(db, {
+      role: 'orchestrator',
+      taskKind: 'orchestrator.plan_next_action',
+      prompt: 'Summarize review queue pressure'
+    })
+
+    updateAgentRunReplayMetadata(db, {
+      runId: run.runId,
+      targetRole: 'review',
+      assignedRoles: ['orchestrator', 'review'],
+      latestAssistantResponse: '1 pending items across 1 conflict groups.'
+    })
+
+    const listedRuns = listAgentRuns(db)
+    const detail = getAgentRun(db, { runId: run.runId })
+
+    expect(listedRuns[0]?.targetRole).toBe('review')
+    expect(listedRuns[0]?.assignedRoles).toEqual(['orchestrator', 'review'])
+    expect(listedRuns[0]?.latestAssistantResponse).toBe('1 pending items across 1 conflict groups.')
+    expect(detail?.targetRole).toBe('review')
+    expect(detail?.assignedRoles).toEqual(['orchestrator', 'review'])
+    expect(detail?.latestAssistantResponse).toBe('1 pending items across 1 conflict groups.')
 
     db.close()
   })

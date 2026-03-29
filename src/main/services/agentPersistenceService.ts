@@ -18,6 +18,9 @@ type AgentRunRow = {
   id: string
   role: AgentRole
   taskKind: AgentTaskKind | null
+  targetRole: AgentRole | null
+  assignedRolesJson: string
+  latestAssistantResponse: string | null
   status: AgentRunStatus
   prompt: string
   confirmationToken: string | null
@@ -57,6 +60,9 @@ export type CreateAgentRunInput = {
   runId?: string
   role: AgentRole
   taskKind?: AgentTaskKind | null
+  targetRole?: AgentRole | null
+  assignedRoles?: AgentRole[]
+  latestAssistantResponse?: string | null
   prompt: string
   confirmationToken?: string | null
   status?: AgentRunStatus
@@ -78,11 +84,43 @@ function inTransaction<T>(db: ArchiveDatabase, callback: () => T) {
   }
 }
 
+const AGENT_ROLES: ReadonlySet<AgentRole> = new Set([
+  'orchestrator',
+  'ingestion',
+  'review',
+  'workspace',
+  'governance'
+])
+
+function parseAssignedRolesJson(value: string | null | undefined): AgentRole[] {
+  if (!value) {
+    return []
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+
+    return parsed.filter((item): item is AgentRole => typeof item === 'string' && AGENT_ROLES.has(item as AgentRole))
+  } catch {
+    return []
+  }
+}
+
+function serializeAssignedRoles(assignedRoles?: AgentRole[]) {
+  return JSON.stringify(assignedRoles ?? [])
+}
+
 function mapAgentRunRow(row: AgentRunRow): AgentRunRecord {
   return {
     runId: row.id,
     role: row.role,
     taskKind: row.taskKind,
+    targetRole: row.targetRole,
+    assignedRoles: parseAssignedRolesJson(row.assignedRolesJson),
+    latestAssistantResponse: row.latestAssistantResponse,
     status: row.status,
     prompt: row.prompt,
     confirmationToken: row.confirmationToken,
@@ -131,6 +169,9 @@ function loadAgentRunRow(db: ArchiveDatabase, runId: string) {
       id,
       role,
       task_kind as taskKind,
+      target_role as targetRole,
+      assigned_roles_json as assignedRolesJson,
+      latest_assistant_response as latestAssistantResponse,
       status,
       prompt,
       confirmation_token as confirmationToken,
@@ -186,12 +227,15 @@ export function createAgentRun(
 
   db.prepare(
     `insert into agent_runs (
-      id, role, task_kind, status, prompt, confirmation_token, policy_version, error_message, created_at, updated_at
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      id, role, task_kind, target_role, assigned_roles_json, latest_assistant_response, status, prompt, confirmation_token, policy_version, error_message, created_at, updated_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     runId,
     input.role,
     input.taskKind ?? null,
+    input.targetRole ?? null,
+    serializeAssignedRoles(input.assignedRoles),
+    input.latestAssistantResponse ?? null,
     input.status ?? 'queued',
     input.prompt,
     input.confirmationToken ?? null,
@@ -221,6 +265,34 @@ export function updateAgentRunStatus(db: ArchiveDatabase, input: {
   ).run(
     input.status,
     input.errorMessage ?? null,
+    updatedAt,
+    input.runId
+  )
+
+  const row = loadAgentRunRow(db, input.runId)
+  return row ? mapAgentRunRow(row) : null
+}
+
+export function updateAgentRunReplayMetadata(db: ArchiveDatabase, input: {
+  runId: string
+  targetRole: AgentRole | null
+  assignedRoles: AgentRole[]
+  latestAssistantResponse?: string | null
+  updatedAt?: string
+}): AgentRunRecord | null {
+  const updatedAt = input.updatedAt ?? new Date().toISOString()
+
+  db.prepare(
+    `update agent_runs
+     set target_role = ?,
+         assigned_roles_json = ?,
+         latest_assistant_response = ?,
+         updated_at = ?
+     where id = ?`
+  ).run(
+    input.targetRole,
+    serializeAssignedRoles(input.assignedRoles),
+    input.latestAssistantResponse ?? null,
     updatedAt,
     input.runId
   )
@@ -272,6 +344,9 @@ export function listAgentRuns(
       id,
       role,
       task_kind as taskKind,
+      target_role as targetRole,
+      assigned_roles_json as assignedRolesJson,
+      latest_assistant_response as latestAssistantResponse,
       status,
       prompt,
       confirmation_token as confirmationToken,

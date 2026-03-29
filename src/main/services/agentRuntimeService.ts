@@ -14,15 +14,14 @@ import {
   getAgentRun,
   listAgentMemories,
   listAgentRuns,
+  updateAgentRunReplayMetadata,
   updateAgentRunStatus
 } from './agentPersistenceService'
 import { planAgentExecution, summarizeAgentExecution } from './agentOrchestratorService'
 import type { AgentAdapter } from './agents/agentTypes'
 import type { ArchiveDatabase } from './db'
 
-export type AgentRuntimeRunResult = RunAgentTaskResult & {
-  assignedRoles: AgentRole[]
-}
+export type AgentRuntimeRunResult = RunAgentTaskResult
 
 export type AgentRuntime = {
   runTask(input: RunAgentTaskInput): Promise<AgentRuntimeRunResult>
@@ -74,6 +73,8 @@ export function createAgentRuntime(input: CreateAgentRuntimeInput): AgentRuntime
     async runTask(taskInput) {
       const run = createRuntimeRun(input.db, taskInput)
       let assignedRoles: AgentRole[] = [taskInput.role]
+      let targetRole: AgentRole | null = null
+      let latestAssistantResponse: string | null = null
 
       appendMessages(input.db, run.runId, [
         {
@@ -85,6 +86,14 @@ export function createAgentRuntime(input: CreateAgentRuntimeInput): AgentRuntime
       try {
         const plan = planAgentExecution(taskInput)
         assignedRoles = plan.assignedRoles
+        targetRole = plan.targetRole
+
+        updateAgentRunReplayMetadata(input.db, {
+          runId: run.runId,
+          targetRole,
+          assignedRoles,
+          latestAssistantResponse: null
+        })
 
         appendMessages(input.db, run.runId, plan.messages)
 
@@ -103,15 +112,27 @@ export function createAgentRuntime(input: CreateAgentRuntimeInput): AgentRuntime
 
         appendMessages(input.db, run.runId, result.messages ?? [])
 
-        const hasAgentMessage = (result.messages ?? []).some((message) => message.sender === 'agent')
-        if (!hasAgentMessage) {
+        const latestAgentMessage = [...(result.messages ?? [])]
+          .reverse()
+          .find((message) => message.sender === 'agent')
+        if (latestAgentMessage?.content) {
+          latestAssistantResponse = latestAgentMessage.content
+        } else {
+          latestAssistantResponse = summarizeAgentExecution(plan, result)
           appendMessages(input.db, run.runId, [
             {
               sender: 'agent',
-              content: summarizeAgentExecution(plan, result)
+              content: latestAssistantResponse
             }
           ])
         }
+
+        updateAgentRunReplayMetadata(input.db, {
+          runId: run.runId,
+          targetRole,
+          assignedRoles,
+          latestAssistantResponse
+        })
 
         updateAgentRunStatus(input.db, {
           runId: run.runId,
@@ -121,7 +142,9 @@ export function createAgentRuntime(input: CreateAgentRuntimeInput): AgentRuntime
         return {
           runId: run.runId,
           status: 'completed',
-          assignedRoles
+          targetRole,
+          assignedRoles,
+          latestAssistantResponse
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'agent runtime failed'
@@ -133,6 +156,13 @@ export function createAgentRuntime(input: CreateAgentRuntimeInput): AgentRuntime
           }
         ])
 
+        updateAgentRunReplayMetadata(input.db, {
+          runId: run.runId,
+          targetRole,
+          assignedRoles,
+          latestAssistantResponse
+        })
+
         updateAgentRunStatus(input.db, {
           runId: run.runId,
           status: 'failed',
@@ -142,7 +172,9 @@ export function createAgentRuntime(input: CreateAgentRuntimeInput): AgentRuntime
         return {
           runId: run.runId,
           status: 'failed',
-          assignedRoles
+          targetRole,
+          assignedRoles,
+          latestAssistantResponse
         }
       }
     },
