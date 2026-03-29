@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { AgentTaskKind, RunAgentTaskInput } from '../../../src/shared/archiveContracts'
+import type { AgentRunRecord, AgentTaskKind, RunAgentTaskInput } from '../../../src/shared/archiveContracts'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
 import { createAgentRuntime } from '../../../src/main/services/agentRuntimeService'
 import type { AgentAdapter } from '../../../src/main/services/agents/agentTypes'
@@ -133,6 +133,72 @@ describe('agent runtime service', () => {
     expect(detail?.latestAssistantResponse).toBeNull()
     expect(detail?.errorMessage).toMatch(/no agent adapter/i)
     expect(detail?.messages.at(-1)?.sender).toBe('system')
+
+    db.close()
+  })
+
+  it('persists attempted delegation metadata when planning fails safety checks', async () => {
+    const db = setupDatabase()
+    const runtime = createAgentRuntime({
+      db,
+      adapters: []
+    })
+
+    const result = await runtime.runTask({
+      prompt: 'Apply this safe group action now.',
+      role: 'orchestrator',
+      taskKind: 'review.apply_safe_group'
+    })
+    const detail = runtime.getRun({ runId: result.runId })
+
+    expect(result.status).toBe('failed')
+    expect(result.targetRole).toBe('review')
+    expect(result.assignedRoles).toEqual(['orchestrator', 'review'])
+    expect(result.latestAssistantResponse).toBeNull()
+    expect(detail?.status).toBe('failed')
+    expect(detail?.targetRole).toBe('review')
+    expect(detail?.assignedRoles).toEqual(['orchestrator', 'review'])
+    expect(detail?.latestAssistantResponse).toBeNull()
+    expect(detail?.errorMessage).toMatch(/confirmation token required/i)
+
+    db.close()
+  })
+
+  it('passes replay-metadata-synchronized run state into adapters', async () => {
+    const db = setupDatabase()
+    let adapterRun: AgentRunRecord | null = null
+    let adapterAssignedRoles: AgentRunRecord['assignedRoles'] = []
+    const workspaceAdapter: AgentAdapter = {
+      role: 'workspace',
+      canHandle: (taskKind) => taskKind === 'workspace.ask_memory',
+      execute: async (context) => {
+        adapterRun = context.run
+        adapterAssignedRoles = context.assignedRoles
+        return {
+          messages: [
+            {
+              sender: 'agent',
+              content: 'Workspace answer ready'
+            }
+          ]
+        }
+      }
+    }
+
+    const runtime = createAgentRuntime({
+      db,
+      adapters: [workspaceAdapter]
+    })
+
+    const result = await runtime.runTask({
+      prompt: 'Use the workspace to answer this archive question.',
+      role: 'orchestrator'
+    })
+
+    expect(result.status).toBe('completed')
+    expect(adapterRun?.targetRole).toBe('workspace')
+    expect(adapterRun?.assignedRoles).toEqual(['orchestrator', 'workspace'])
+    expect(adapterRun?.assignedRoles).toEqual(adapterAssignedRoles)
 
     db.close()
   })

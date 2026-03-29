@@ -281,21 +281,37 @@ export function updateAgentRunReplayMetadata(db: ArchiveDatabase, input: {
   updatedAt?: string
 }): AgentRunRecord | null {
   const updatedAt = input.updatedAt ?? new Date().toISOString()
+  const hasLatestAssistantResponse = Object.prototype.hasOwnProperty.call(input, 'latestAssistantResponse')
 
-  db.prepare(
-    `update agent_runs
-     set target_role = ?,
-         assigned_roles_json = ?,
-         latest_assistant_response = ?,
-         updated_at = ?
-     where id = ?`
-  ).run(
-    input.targetRole,
-    serializeAssignedRoles(input.assignedRoles),
-    input.latestAssistantResponse ?? null,
-    updatedAt,
-    input.runId
-  )
+  if (hasLatestAssistantResponse) {
+    db.prepare(
+      `update agent_runs
+       set target_role = ?,
+           assigned_roles_json = ?,
+           latest_assistant_response = ?,
+           updated_at = ?
+       where id = ?`
+    ).run(
+      input.targetRole,
+      serializeAssignedRoles(input.assignedRoles),
+      input.latestAssistantResponse ?? null,
+      updatedAt,
+      input.runId
+    )
+  } else {
+    db.prepare(
+      `update agent_runs
+       set target_role = ?,
+           assigned_roles_json = ?,
+           updated_at = ?
+       where id = ?`
+    ).run(
+      input.targetRole,
+      serializeAssignedRoles(input.assignedRoles),
+      updatedAt,
+      input.runId
+    )
+  }
 
   const row = loadAgentRunRow(db, input.runId)
   return row ? mapAgentRunRow(row) : null

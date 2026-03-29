@@ -12,6 +12,8 @@ export type AgentExecutionPlan = {
   messages: AgentAdapterMessage[]
 }
 
+export type AgentReplayMetadata = Pick<AgentExecutionPlan, 'targetRole' | 'assignedRoles'>
+
 const destructiveTaskKinds = new Set<AgentTaskKind>([
   'review.apply_safe_group',
   'review.apply_item_decision'
@@ -71,28 +73,17 @@ function assertSafeDelegation(input: {
   }
 }
 
-export function planAgentExecution(input: RunAgentTaskInput): AgentExecutionPlan {
+function resolveAgentExecutionTarget(input: RunAgentTaskInput): Pick<AgentExecutionPlan, 'taskKind' | 'targetRole' | 'assignedRoles'> {
   if (input.role === 'orchestrator') {
     const taskKind = input.taskKind && input.taskKind !== 'orchestrator.plan_next_action'
       ? input.taskKind
       : defaultTaskKindByRole[inferTargetRoleFromPrompt(input.prompt)]
     const targetRole = roleForTaskKind(taskKind)
 
-    assertSafeDelegation({
-      taskKind,
-      confirmationToken: input.confirmationToken
-    })
-
     return {
       taskKind,
       targetRole,
-      assignedRoles: targetRole === 'orchestrator' ? ['orchestrator'] : ['orchestrator', targetRole],
-      messages: [
-        {
-          sender: 'system',
-          content: `Orchestrator delegated ${taskKind} to ${targetRole}.`
-        }
-      ]
+      assignedRoles: targetRole === 'orchestrator' ? ['orchestrator'] : ['orchestrator', targetRole]
     }
   }
 
@@ -106,19 +97,39 @@ export function planAgentExecution(input: RunAgentTaskInput): AgentExecutionPlan
     throw new Error(`No task kind provided for role "${input.role}"`)
   }
 
-  assertSafeDelegation({
+  return {
     taskKind,
+    targetRole: input.role,
+    assignedRoles: [input.role]
+  }
+}
+
+export function inferAgentReplayMetadata(input: RunAgentTaskInput): AgentReplayMetadata {
+  const plan = resolveAgentExecutionTarget(input)
+  return {
+    targetRole: plan.targetRole,
+    assignedRoles: plan.assignedRoles
+  }
+}
+
+export function planAgentExecution(input: RunAgentTaskInput): AgentExecutionPlan {
+  const plan = resolveAgentExecutionTarget(input)
+
+  assertSafeDelegation({
+    taskKind: plan.taskKind,
     confirmationToken: input.confirmationToken
   })
 
   return {
-    taskKind,
-    targetRole: input.role,
-    assignedRoles: [input.role],
+    taskKind: plan.taskKind,
+    targetRole: plan.targetRole,
+    assignedRoles: plan.assignedRoles,
     messages: [
       {
         sender: 'system',
-        content: `Runtime executing ${taskKind} with ${input.role}.`
+        content: input.role === 'orchestrator'
+          ? `Orchestrator delegated ${plan.taskKind} to ${plan.targetRole}.`
+          : `Runtime executing ${plan.taskKind} with ${input.role}.`
       }
     ]
   }

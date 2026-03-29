@@ -105,6 +105,76 @@ describe('agent persistence service', () => {
     db.close()
   })
 
+  it('preserves latest assistant response when replay metadata update omits it', () => {
+    const db = setupDatabase()
+
+    const run = createAgentRun(db, {
+      role: 'orchestrator',
+      taskKind: 'orchestrator.plan_next_action',
+      targetRole: 'workspace',
+      assignedRoles: ['orchestrator', 'workspace'],
+      latestAssistantResponse: 'Initial workspace answer',
+      prompt: 'Answer with workspace context'
+    })
+
+    const updated = updateAgentRunReplayMetadata(db, {
+      runId: run.runId,
+      targetRole: 'review',
+      assignedRoles: ['orchestrator', 'review']
+    })
+    const detail = getAgentRun(db, { runId: run.runId })
+
+    expect(updated?.targetRole).toBe('review')
+    expect(updated?.assignedRoles).toEqual(['orchestrator', 'review'])
+    expect(updated?.latestAssistantResponse).toBe('Initial workspace answer')
+    expect(detail?.latestAssistantResponse).toBe('Initial workspace answer')
+
+    db.close()
+  })
+
+  it('reads default replay metadata for rows inserted without replay columns', () => {
+    const db = setupDatabase()
+    const runId = 'legacy-run-without-replay-columns'
+    const now = new Date().toISOString()
+
+    db.prepare(
+      `insert into agent_runs (
+        id,
+        role,
+        task_kind,
+        status,
+        prompt,
+        confirmation_token,
+        policy_version,
+        error_message,
+        created_at,
+        updated_at
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      runId,
+      'workspace',
+      'workspace.ask_memory',
+      'queued',
+      'Legacy row with no replay metadata',
+      null,
+      null,
+      null,
+      now,
+      now
+    )
+
+    const listed = listAgentRuns(db)
+    const detail = getAgentRun(db, { runId })
+
+    expect(listed[0]?.runId).toBe(runId)
+    expect(listed[0]?.assignedRoles).toEqual([])
+    expect(listed[0]?.latestAssistantResponse).toBeNull()
+    expect(detail?.assignedRoles).toEqual([])
+    expect(detail?.latestAssistantResponse).toBeNull()
+
+    db.close()
+  })
+
   it('appends policy versions instead of mutating prior ones', () => {
     const db = setupDatabase()
 

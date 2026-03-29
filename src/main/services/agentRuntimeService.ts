@@ -17,7 +17,11 @@ import {
   updateAgentRunReplayMetadata,
   updateAgentRunStatus
 } from './agentPersistenceService'
-import { planAgentExecution, summarizeAgentExecution } from './agentOrchestratorService'
+import {
+  inferAgentReplayMetadata,
+  planAgentExecution,
+  summarizeAgentExecution
+} from './agentOrchestratorService'
 import type { AgentAdapter } from './agents/agentTypes'
 import type { ArchiveDatabase } from './db'
 
@@ -71,10 +75,18 @@ function appendMessages(db: ArchiveDatabase, runId: string, messages: Array<{ se
 export function createAgentRuntime(input: CreateAgentRuntimeInput): AgentRuntime {
   return {
     async runTask(taskInput) {
-      const run = createRuntimeRun(input.db, taskInput)
+      let run = createRuntimeRun(input.db, taskInput)
       let assignedRoles: AgentRole[] = [taskInput.role]
       let targetRole: AgentRole | null = null
       let latestAssistantResponse: string | null = null
+
+      try {
+        const replayMetadata = inferAgentReplayMetadata(taskInput)
+        assignedRoles = replayMetadata.assignedRoles
+        targetRole = replayMetadata.targetRole
+      } catch {
+        // Keep defaults for invalid inputs where delegation cannot be inferred.
+      }
 
       appendMessages(input.db, run.runId, [
         {
@@ -88,12 +100,15 @@ export function createAgentRuntime(input: CreateAgentRuntimeInput): AgentRuntime
         assignedRoles = plan.assignedRoles
         targetRole = plan.targetRole
 
-        updateAgentRunReplayMetadata(input.db, {
+        const replayRun = updateAgentRunReplayMetadata(input.db, {
           runId: run.runId,
           targetRole,
           assignedRoles,
           latestAssistantResponse: null
         })
+        if (replayRun) {
+          run = replayRun
+        }
 
         appendMessages(input.db, run.runId, plan.messages)
 
@@ -127,12 +142,15 @@ export function createAgentRuntime(input: CreateAgentRuntimeInput): AgentRuntime
           ])
         }
 
-        updateAgentRunReplayMetadata(input.db, {
+        const finalizedRun = updateAgentRunReplayMetadata(input.db, {
           runId: run.runId,
           targetRole,
           assignedRoles,
           latestAssistantResponse
         })
+        if (finalizedRun) {
+          run = finalizedRun
+        }
 
         updateAgentRunStatus(input.db, {
           runId: run.runId,
@@ -156,12 +174,15 @@ export function createAgentRuntime(input: CreateAgentRuntimeInput): AgentRuntime
           }
         ])
 
-        updateAgentRunReplayMetadata(input.db, {
+        const replayRun = updateAgentRunReplayMetadata(input.db, {
           runId: run.runId,
           targetRole,
           assignedRoles,
           latestAssistantResponse
         })
+        if (replayRun) {
+          run = replayRun
+        }
 
         updateAgentRunStatus(input.db, {
           runId: run.runId,
