@@ -2,11 +2,17 @@ import { dialog, ipcMain } from 'electron'
 import path from 'node:path'
 import type { AppPaths } from '../services/appPaths'
 import { createImportBatch, getImportBatch, listImportBatches } from '../services/importBatchService'
-import { batchIdSchema, createImportBatchInputSchema } from '../../shared/ipcSchemas'
+import { buildImportPreflight } from '../services/importPreflightService'
+import {
+  batchIdSchema,
+  createImportBatchInputSchema,
+  importPreflightInputSchema
+} from '../../shared/ipcSchemas'
 import { SUPPORTED_IMPORT_FILTER_EXTENSIONS, SUPPORTED_IMPORT_FILTER_LABEL } from '../../shared/archiveTypes'
 
 export function registerArchiveIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:selectImportFiles')
+  ipcMain.removeHandler('archive:preflightImportBatch')
   ipcMain.removeHandler('archive:createImportBatch')
   ipcMain.removeHandler('archive:listImportBatches')
   ipcMain.removeHandler('archive:getImportBatch')
@@ -27,6 +33,11 @@ export function registerArchiveIpc(appPaths: AppPaths) {
   ipcMain.handle('archive:createImportBatch', async (_event, payload) => {
     const input = createImportBatchInputSchema.parse(payload)
     return createImportBatch({ appPaths, ...input })
+  })
+
+  ipcMain.handle('archive:preflightImportBatch', async (_event, payload) => {
+    const input = importPreflightInputSchema.parse(payload)
+    return buildImportPreflight({ appPaths, ...input })
   })
 
   ipcMain.handle('archive:listImportBatches', async () => {

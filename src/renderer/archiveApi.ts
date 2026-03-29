@@ -17,6 +17,7 @@ import type {
   ExportApprovedPersonaDraftResult,
   GroupContextPack,
   ImportBatchSummary,
+  ImportPreflightResult,
   PersonDossier,
   PersonContextPack,
   CanonicalPersonSummary,
@@ -65,6 +66,7 @@ const fallbackApi: ArchiveApi = {
   createBackupExport: async (_input: { destinationRoot: string; encryptionPassword?: string }) => null as BackupExportResult | null,
   restoreBackupExport: async (_input: { exportRoot: string; targetRoot: string; overwrite?: boolean; encryptionPassword?: string }) => null as RestoreRunResult | null,
   runRecoveryDrill: async (_input: { exportRoot: string; targetRoot: string; overwrite?: boolean; encryptionPassword?: string }) => null as RestoreRunResult | null,
+  preflightImportBatch: async (_input: { sourcePaths: string[] }) => ({ items: [], summary: { totalCount: 0, supportedCount: 0, unsupportedCount: 0 } }) as ImportPreflightResult,
   createImportBatch: async (_input: CreateImportBatchInput) => ({ batchId: '', sourceLabel: '', createdAt: '', files: [] }),
   runAgentTask: async (_input: RunAgentTaskInput) => ({
     runId: '',
@@ -177,6 +179,7 @@ function createIpcArchiveApi(): ArchiveApi | null {
     createBackupExport: (input) => ipcRenderer.invoke('archive:createBackupExport', input),
     restoreBackupExport: (input) => ipcRenderer.invoke('archive:restoreBackupExport', input),
     runRecoveryDrill: (input) => ipcRenderer.invoke('archive:runRecoveryDrill', input),
+    preflightImportBatch: (input) => ipcRenderer.invoke('archive:preflightImportBatch', input),
     createImportBatch: (input) => ipcRenderer.invoke('archive:createImportBatch', input),
     runAgentTask: (input) => ipcRenderer.invoke('archive:runAgentTask', input),
     listAgentRuns: (input) => ipcRenderer.invoke('archive:listAgentRuns', input),

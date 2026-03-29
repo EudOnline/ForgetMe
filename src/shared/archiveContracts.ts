@@ -1418,6 +1418,27 @@ export type CreateImportBatchInput = {
   sourceLabel: string
 }
 
+export type ImportPreflightItem = {
+  sourcePath: string
+  fileName: string
+  extension: string
+  normalizedFileName: string
+  importKindHint: 'chat' | 'image' | 'document' | 'unknown'
+  isSupported: boolean
+  status: 'supported' | 'unsupported' | 'duplicate_candidate'
+}
+
+export type ImportPreflightSummary = {
+  totalCount: number
+  supportedCount: number
+  unsupportedCount: number
+}
+
+export type ImportPreflightResult = {
+  items: ImportPreflightItem[]
+  summary: ImportPreflightSummary
+}
+
 export type AgentRole =
   | 'orchestrator'
   | 'ingestion'
@@ -1542,6 +1563,7 @@ export interface ArchiveApi {
   restoreBackupExport: (input: { exportRoot: string; targetRoot: string; overwrite?: boolean; encryptionPassword?: string }) => Promise<RestoreRunResult | null>
   runRecoveryDrill: (input: { exportRoot: string; targetRoot: string; overwrite?: boolean; encryptionPassword?: string }) => Promise<RestoreRunResult | null>
   createImportBatch: (input: CreateImportBatchInput) => Promise<ImportBatchSummary>
+  preflightImportBatch: (input: { sourcePaths: string[] }) => Promise<ImportPreflightResult>
   runAgentTask: (input: RunAgentTaskInput) => Promise<RunAgentTaskResult>
   listAgentRuns: (input?: ListAgentRunsInput) => Promise<AgentRunRecord[]>
   getAgentRun: (input: GetAgentRunInput) => Promise<AgentRunDetail | null>

@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { relationshipLabelInputSchema, reviewActionSchema } from '../../../src/shared/ipcSchemas'
+import {
+  importPreflightInputSchema,
+  relationshipLabelInputSchema,
+  reviewActionSchema
+} from '../../../src/shared/ipcSchemas'
 
 describe('phase-two IPC schemas', () => {
+  it('accepts a non-empty file path list', () => {
+    expect(importPreflightInputSchema.parse({ sourcePaths: ['/tmp/chat.txt'] })).toBeTruthy()
+  })
+
   it('accepts approve and undo review actions', () => {
     expect(reviewActionSchema.parse({ action: 'approve', queueItemId: 'rq-1' })).toBeTruthy()
     expect(reviewActionSchema.parse({ action: 'undo', journalId: 'dj-1' })).toBeTruthy()

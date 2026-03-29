@@ -6,6 +6,10 @@ export const createImportBatchInputSchema = z.object({
   sourceLabel: z.string().min(1)
 })
 
+export const importPreflightInputSchema = z.object({
+  sourcePaths: z.array(z.string()).min(1)
+})
+
 export const batchIdSchema = z.object({
   batchId: z.string().min(1)
 })

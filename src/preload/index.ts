@@ -10,6 +10,7 @@ const archiveApi: ArchiveApi = {
   createBackupExport: (input) => ipcRenderer.invoke('archive:createBackupExport', input),
   restoreBackupExport: (input) => ipcRenderer.invoke('archive:restoreBackupExport', input),
   runRecoveryDrill: (input) => ipcRenderer.invoke('archive:runRecoveryDrill', input),
+  preflightImportBatch: (input) => ipcRenderer.invoke('archive:preflightImportBatch', input),
   createImportBatch: (input) => ipcRenderer.invoke('archive:createImportBatch', input),
   runAgentTask: (input) => ipcRenderer.invoke('archive:runAgentTask', input),
   listAgentRuns: (input) => ipcRenderer.invoke('archive:listAgentRuns', input),
