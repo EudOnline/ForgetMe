@@ -93,7 +93,9 @@ describe('registerAgentIpc', () => {
       runTask: vi.fn().mockResolvedValue({
         runId: 'run-1',
         status: 'completed',
-        assignedRoles: ['orchestrator', 'review']
+        targetRole: 'review',
+        assignedRoles: ['orchestrator', 'review'],
+        latestAssistantResponse: '1 pending items across 1 conflict groups.'
       }),
       listRuns: vi.fn(),
       getRun: vi.fn(),
@@ -136,7 +138,9 @@ describe('registerAgentIpc', () => {
     expect(result).toEqual({
       runId: 'run-1',
       status: 'completed',
-      assignedRoles: ['orchestrator', 'review']
+      targetRole: 'review',
+      assignedRoles: ['orchestrator', 'review'],
+      latestAssistantResponse: '1 pending items across 1 conflict groups.'
     })
     expect(close).toHaveBeenCalled()
   })
@@ -151,6 +155,9 @@ describe('registerAgentIpc', () => {
           runId: 'run-1',
           role: 'review',
           taskKind: 'review.summarize_queue',
+          targetRole: 'review',
+          assignedRoles: ['orchestrator', 'review'],
+          latestAssistantResponse: '1 pending items across 1 conflict groups.',
           status: 'completed',
           prompt: 'Summarize queue',
           confirmationToken: null,
@@ -164,6 +171,9 @@ describe('registerAgentIpc', () => {
         runId: 'run-1',
         role: 'review',
         taskKind: 'review.summarize_queue',
+        targetRole: 'review',
+        assignedRoles: ['orchestrator', 'review'],
+        latestAssistantResponse: '1 pending items across 1 conflict groups.',
         status: 'completed',
         prompt: 'Summarize queue',
         confirmationToken: null,
@@ -204,11 +214,17 @@ describe('registerAgentIpc', () => {
     expect(runs).toEqual([
       expect.objectContaining({
         runId: 'run-1',
-        role: 'review'
+        role: 'review',
+        targetRole: 'review',
+        assignedRoles: ['orchestrator', 'review'],
+        latestAssistantResponse: '1 pending items across 1 conflict groups.'
       })
     ])
     expect(detail).toEqual(expect.objectContaining({
       runId: 'run-1',
+      targetRole: 'review',
+      assignedRoles: ['orchestrator', 'review'],
+      latestAssistantResponse: '1 pending items across 1 conflict groups.',
       messages: []
     }))
     expect(memories).toEqual([

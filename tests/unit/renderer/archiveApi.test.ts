@@ -63,7 +63,10 @@ describe('archiveApi agent runtime methods', () => {
       role: 'orchestrator'
     })).resolves.toEqual({
       runId: '',
-      status: 'queued'
+      status: 'queued',
+      targetRole: null,
+      assignedRoles: [],
+      latestAssistantResponse: null
     })
     await expect(archiveApi.listAgentRuns({
       role: 'review'
@@ -79,13 +82,19 @@ describe('archiveApi agent runtime methods', () => {
   it('preserves renderer-provided agent runtime methods', async () => {
     const runAgentTask = vi.fn().mockResolvedValue({
       runId: 'run-1',
-      status: 'completed'
+      status: 'completed',
+      targetRole: 'review',
+      assignedRoles: ['orchestrator', 'review'],
+      latestAssistantResponse: '1 pending items across 1 conflict groups.'
     })
     const listAgentRuns = vi.fn().mockResolvedValue([
       {
         runId: 'run-1',
         role: 'orchestrator',
         taskKind: 'review.summarize_queue',
+        targetRole: 'review',
+        assignedRoles: ['orchestrator', 'review'],
+        latestAssistantResponse: '1 pending items across 1 conflict groups.',
         status: 'completed',
         prompt: 'Summarize the highest-priority pending review work',
         confirmationToken: null,
@@ -99,6 +108,9 @@ describe('archiveApi agent runtime methods', () => {
       runId: 'run-1',
       role: 'orchestrator',
       taskKind: 'review.summarize_queue',
+      targetRole: 'review',
+      assignedRoles: ['orchestrator', 'review'],
+      latestAssistantResponse: '1 pending items across 1 conflict groups.',
       status: 'completed',
       prompt: 'Summarize the highest-priority pending review work',
       confirmationToken: null,
@@ -148,9 +160,18 @@ describe('archiveApi agent runtime methods', () => {
 
     expect(run).toEqual({
       runId: 'run-1',
-      status: 'completed'
+      status: 'completed',
+      targetRole: 'review',
+      assignedRoles: ['orchestrator', 'review'],
+      latestAssistantResponse: '1 pending items across 1 conflict groups.'
     })
     expect(runs[0]?.runId).toBe('run-1')
+    expect(runs[0]?.targetRole).toBe('review')
+    expect(runs[0]?.assignedRoles).toEqual(['orchestrator', 'review'])
+    expect(runs[0]?.latestAssistantResponse).toBe('1 pending items across 1 conflict groups.')
+    expect(detail?.targetRole).toBe('review')
+    expect(detail?.assignedRoles).toEqual(['orchestrator', 'review'])
+    expect(detail?.latestAssistantResponse).toBe('1 pending items across 1 conflict groups.')
     expect(detail?.messages[0]?.content).toContain('pending items')
     expect(memories[0]?.memoryKey).toBe('governance.feedback')
   })

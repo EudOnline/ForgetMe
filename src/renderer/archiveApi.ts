@@ -66,7 +66,13 @@ const fallbackApi: ArchiveApi = {
   restoreBackupExport: async (_input: { exportRoot: string; targetRoot: string; overwrite?: boolean; encryptionPassword?: string }) => null as RestoreRunResult | null,
   runRecoveryDrill: async (_input: { exportRoot: string; targetRoot: string; overwrite?: boolean; encryptionPassword?: string }) => null as RestoreRunResult | null,
   createImportBatch: async (_input: CreateImportBatchInput) => ({ batchId: '', sourceLabel: '', createdAt: '', files: [] }),
-  runAgentTask: async (_input: RunAgentTaskInput) => ({ runId: '', status: 'queued' as const }) as RunAgentTaskResult,
+  runAgentTask: async (_input: RunAgentTaskInput) => ({
+    runId: '',
+    status: 'queued' as const,
+    targetRole: null,
+    assignedRoles: [],
+    latestAssistantResponse: null
+  }) as RunAgentTaskResult,
   listAgentRuns: async (_input?: ListAgentRunsInput) => [] as AgentRunRecord[],
   getAgentRun: async (_input: GetAgentRunInput) => null as AgentRunDetail | null,
   listAgentMemories: async (_input?: ListAgentMemoriesInput) => [] as AgentMemoryRecord[],

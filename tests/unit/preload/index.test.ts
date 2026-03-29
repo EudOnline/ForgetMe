@@ -90,6 +90,58 @@ describe('preload archiveApi hosted share bridge', () => {
 
     expect(exposeInMainWorld).toHaveBeenCalledTimes(1)
 
+    invoke
+      .mockResolvedValueOnce({
+        runId: 'run-1',
+        status: 'completed',
+        targetRole: 'review',
+        assignedRoles: ['orchestrator', 'review'],
+        latestAssistantResponse: '1 pending items across 1 conflict groups.'
+      })
+      .mockResolvedValueOnce([
+        {
+          runId: 'run-1',
+          role: 'review',
+          taskKind: 'review.summarize_queue',
+          targetRole: 'review',
+          assignedRoles: ['orchestrator', 'review'],
+          latestAssistantResponse: '1 pending items across 1 conflict groups.',
+          status: 'completed',
+          prompt: 'Summarize the highest-priority pending review work',
+          confirmationToken: null,
+          policyVersion: null,
+          errorMessage: null,
+          createdAt: '2026-03-29T00:00:00.000Z',
+          updatedAt: '2026-03-29T00:00:00.000Z'
+        }
+      ])
+      .mockResolvedValueOnce({
+        runId: 'run-1',
+        role: 'review',
+        taskKind: 'review.summarize_queue',
+        targetRole: 'review',
+        assignedRoles: ['orchestrator', 'review'],
+        latestAssistantResponse: '1 pending items across 1 conflict groups.',
+        status: 'completed',
+        prompt: 'Summarize the highest-priority pending review work',
+        confirmationToken: null,
+        policyVersion: null,
+        errorMessage: null,
+        createdAt: '2026-03-29T00:00:00.000Z',
+        updatedAt: '2026-03-29T00:00:00.000Z',
+        messages: []
+      })
+      .mockResolvedValueOnce([
+        {
+          memoryId: 'memory-1',
+          role: 'governance',
+          memoryKey: 'governance.feedback',
+          memoryValue: 'Prefer queue summaries first.',
+          createdAt: '2026-03-29T00:00:00.000Z',
+          updatedAt: '2026-03-29T00:00:00.000Z'
+        }
+      ])
+
     const archiveApi = exposeInMainWorld.mock.calls[0]?.[1] as {
       runAgentTask: (input: { prompt: string; role: 'orchestrator' }) => Promise<unknown>
       listAgentRuns: (input: { role: 'review' }) => Promise<unknown>
@@ -97,13 +149,42 @@ describe('preload archiveApi hosted share bridge', () => {
       listAgentMemories: (input: { role: 'governance' }) => Promise<unknown>
     }
 
-    await archiveApi.runAgentTask({
+    const runResult = await archiveApi.runAgentTask({
       prompt: 'Summarize the highest-priority pending review work',
       role: 'orchestrator'
     })
-    await archiveApi.listAgentRuns({ role: 'review' })
-    await archiveApi.getAgentRun({ runId: 'run-1' })
-    await archiveApi.listAgentMemories({ role: 'governance' })
+    const runs = await archiveApi.listAgentRuns({ role: 'review' })
+    const detail = await archiveApi.getAgentRun({ runId: 'run-1' })
+    const memories = await archiveApi.listAgentMemories({ role: 'governance' })
+
+    expect(runResult).toEqual({
+      runId: 'run-1',
+      status: 'completed',
+      targetRole: 'review',
+      assignedRoles: ['orchestrator', 'review'],
+      latestAssistantResponse: '1 pending items across 1 conflict groups.'
+    })
+    expect(runs).toEqual([
+      expect.objectContaining({
+        runId: 'run-1',
+        targetRole: 'review',
+        assignedRoles: ['orchestrator', 'review'],
+        latestAssistantResponse: '1 pending items across 1 conflict groups.'
+      })
+    ])
+    expect(detail).toEqual(expect.objectContaining({
+      runId: 'run-1',
+      targetRole: 'review',
+      assignedRoles: ['orchestrator', 'review'],
+      latestAssistantResponse: '1 pending items across 1 conflict groups.',
+      messages: []
+    }))
+    expect(memories).toEqual([
+      expect.objectContaining({
+        memoryId: 'memory-1',
+        role: 'governance'
+      })
+    ])
 
     expect(invoke).toHaveBeenNthCalledWith(1, 'archive:runAgentTask', {
       prompt: 'Summarize the highest-priority pending review work',
