@@ -38,7 +38,19 @@ describe('ImportPage', () => {
 
     render(<ImportPage />)
     expect(screen.getByText('Choose Files')).toBeInTheDocument()
-    expect(screen.getByText('JSON, TXT, JPG, PNG, HEIC, PDF, DOCX')).toBeInTheDocument()
+    expect(screen.getByText('JSON, TXT, JPG, JPEG, PNG, HEIC, PDF, DOCX')).toBeInTheDocument()
+
+    const dropSurface = screen.getByText('Import Workbench').closest('.fmImportDropzoneSurface')
+    expect(dropSurface).not.toBeNull()
+    expect(dropSurface).toHaveAttribute('data-drag-active', 'false')
+
+    fireEvent.dragEnter(dropSurface as HTMLElement)
+    expect(dropSurface).toHaveAttribute('data-drag-active', 'true')
+    expect(screen.getByText('Release to add files to this import selection.')).toBeInTheDocument()
+
+    fireEvent.dragLeave(dropSurface as HTMLElement)
+    expect(dropSurface).toHaveAttribute('data-drag-active', 'false')
+    expect(screen.getByText('Drag files here to queue them before import.')).toBeInTheDocument()
   })
 
   it('updates selected file rows and count from dropped files', () => {
@@ -166,6 +178,58 @@ describe('ImportPage', () => {
       sourceLabel: 'queued.json'
     })
     expect(selectImportFiles).not.toHaveBeenCalled()
+  })
+
+  it('keeps dropzone inert while import is disabled in progress', async () => {
+    let resolveCreateImportBatch: ((value: unknown) => void) | undefined
+    const createImportBatch = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveCreateImportBatch = resolve
+        })
+    )
+
+    vi.stubGlobal('window', {
+      archiveApi: {
+        listImportBatches: vi.fn().mockResolvedValue([]),
+        selectImportFiles: vi.fn(),
+        createImportBatch
+      }
+    })
+
+    render(<ImportPage />)
+
+    const dropSurface = screen.getByText('Import Workbench').closest('.fmImportDropzoneSurface')
+    expect(dropSurface).not.toBeNull()
+
+    const queuedFile = makeFileWithPath('queued.json', '/tmp/queued.json', 'application/json')
+    fireEvent.drop(dropSurface as HTMLElement, {
+      dataTransfer: { files: [queuedFile] }
+    })
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose Files' }))
+    expect(screen.getByRole('button', { name: 'Choose Files' })).toBeDisabled()
+
+    fireEvent.dragEnter(dropSurface as HTMLElement)
+    expect(dropSurface).toHaveAttribute('data-drag-active', 'false')
+
+    const extraFile = makeFileWithPath('extra.json', '/tmp/extra.json', 'application/json')
+    fireEvent.drop(dropSurface as HTMLElement, {
+      dataTransfer: { files: [extraFile] }
+    })
+    expect(screen.queryByText('extra.json')).not.toBeInTheDocument()
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+
+    resolveCreateImportBatch?.({
+      batchId: 'batch-disabled-1',
+      sourceLabel: 'queued.json',
+      createdAt: '2026-03-29T00:00:00.000Z',
+      files: []
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
   })
 
   it('shows unsupported file guidance when selected files are skipped', async () => {

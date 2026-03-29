@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent } from 'react'
+import { SUPPORTED_IMPORT_EXTENSIONS } from '../../shared/archiveTypes'
 import { useI18n } from '../i18n'
 
 export type SelectedImportFile = {
@@ -49,8 +50,18 @@ export function ImportDropzone(props: ImportDropzoneProps) {
   const dragDepthRef = useRef(0)
   const [isDragActive, setIsDragActive] = useState(false)
   const [internalSelectedFiles, setInternalSelectedFiles] = useState<SelectedImportFile[]>([])
+  const supportedExtensionList = SUPPORTED_IMPORT_EXTENSIONS.join(',')
+  const supportedFormatsLabel = SUPPORTED_IMPORT_EXTENSIONS.map((extension) => extension.slice(1).toUpperCase()).join(', ')
 
   const selectedFiles = props.selectedFiles ?? internalSelectedFiles
+  const isDisabled = props.disabled === true
+
+  useEffect(() => {
+    if (isDisabled) {
+      dragDepthRef.current = 0
+      setIsDragActive(false)
+    }
+  }, [isDisabled])
 
   const updateSelectedFiles = (nextFiles: SelectedImportFile[]) => {
     if (props.selectedFiles === undefined) {
@@ -60,6 +71,9 @@ export function ImportDropzone(props: ImportDropzoneProps) {
   }
 
   const addFiles = (incomingFiles: SelectedImportFile[]) => {
+    if (isDisabled) {
+      return
+    }
     if (incomingFiles.length === 0) {
       return
     }
@@ -67,6 +81,10 @@ export function ImportDropzone(props: ImportDropzoneProps) {
   }
 
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    if (isDisabled) {
+      event.target.value = ''
+      return
+    }
     addFiles(toSelectedFiles(event.target.files))
     event.target.value = ''
   }
@@ -74,6 +92,9 @@ export function ImportDropzone(props: ImportDropzoneProps) {
   const handleDragEnter = (event: DragEvent<HTMLElement>) => {
     event.preventDefault()
     event.stopPropagation()
+    if (isDisabled) {
+      return
+    }
     dragDepthRef.current += 1
     setIsDragActive(true)
   }
@@ -86,6 +107,9 @@ export function ImportDropzone(props: ImportDropzoneProps) {
   const handleDragLeave = (event: DragEvent<HTMLElement>) => {
     event.preventDefault()
     event.stopPropagation()
+    if (isDisabled) {
+      return
+    }
     dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
     if (dragDepthRef.current === 0) {
       setIsDragActive(false)
@@ -95,6 +119,9 @@ export function ImportDropzone(props: ImportDropzoneProps) {
   const handleDrop = (event: DragEvent<HTMLElement>) => {
     event.preventDefault()
     event.stopPropagation()
+    if (isDisabled) {
+      return
+    }
     dragDepthRef.current = 0
     setIsDragActive(false)
     addFiles(toSelectedFiles(event.dataTransfer.files))
@@ -112,7 +139,7 @@ export function ImportDropzone(props: ImportDropzoneProps) {
       >
         <div className="fmImportDropzoneHeader">
           <h2>{t('import.surface.title')}</h2>
-          <p>{t('import.supportedFormats')}</p>
+          <p>{t('import.supportedFormatsLabel', { formats: supportedFormatsLabel })}</p>
         </div>
         <div className="fmImportDropzoneActions">
           <button
@@ -142,7 +169,7 @@ export function ImportDropzone(props: ImportDropzoneProps) {
             hidden
             multiple
             onChange={handleInputChange}
-            accept=".json,.txt,.jpg,.jpeg,.png,.heic,.pdf,.docx"
+            accept={supportedExtensionList}
           />
         </div>
         <p className="fmImportDropzoneHint">
