@@ -60,6 +60,7 @@ function outcomeTitle(importedCount: number, t: ReturnType<typeof useI18n>['t'])
 export function ImportPage(props: {
   onSelectBatch?: (batchId: string) => void
   onBatchesUpdated?: (batches: ImportBatchSummary[]) => void
+  onOpenReviewQueue?: () => void
 }) {
   const { t } = useI18n()
   const archiveApi = useMemo(() => getArchiveApi(), [])
@@ -294,6 +295,16 @@ export function ImportPage(props: {
             >
               {t('import.outcome.viewBatchDetail')}
             </button>
+            {importOutcome.reviewCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  props.onOpenReviewQueue?.()
+                }}
+              >
+                {t('agentConsole.openReviewQueue')}
+              </button>
+            ) : null}
             <button type="button" onClick={handleImportMore}>
               {t('import.outcome.importMore')}
             </button>

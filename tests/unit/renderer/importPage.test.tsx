@@ -285,6 +285,7 @@ describe('ImportPage', () => {
 
   it('shows import outcome summary and next actions after a completed import', async () => {
     const onSelectBatch = vi.fn()
+    const onOpenReviewQueue = vi.fn()
     const createdBatch = {
       batchId: 'batch-result-1',
       sourceLabel: '3 files',
@@ -359,7 +360,7 @@ describe('ImportPage', () => {
       }
     })
 
-    render(<ImportPage onSelectBatch={onSelectBatch} />)
+    render(<ImportPage onSelectBatch={onSelectBatch} onOpenReviewQueue={onOpenReviewQueue} />)
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Choose Files' }))
@@ -379,10 +380,14 @@ describe('ImportPage', () => {
     expect(screen.getByText('Skipped / Unsupported: 1')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'View Batch Detail' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Import More' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open Review Queue' })).toBeInTheDocument()
     expect(screen.getByText('Imported 3 · Parsed 2 · Duplicates 1 · Review 1')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'View Batch Detail' }))
     expect(onSelectBatch).toHaveBeenCalledWith('batch-result-1')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open Review Queue' }))
+    expect(onOpenReviewQueue).toHaveBeenCalledTimes(1)
 
     fireEvent.click(screen.getByRole('button', { name: 'Import More' }))
     expect(screen.queryByText('Imported 3 files')).not.toBeInTheDocument()

@@ -254,7 +254,13 @@ export default function App() {
 
         <section className="fmContent" data-page={page} aria-label="Content">
           <div className="fmContentInner">
-            {page === 'import' ? <ImportPage onSelectBatch={handleSelectBatch} onBatchesUpdated={setBatches} /> : null}
+            {page === 'import' ? (
+              <ImportPage
+                onSelectBatch={handleSelectBatch}
+                onBatchesUpdated={setBatches}
+                onOpenReviewQueue={() => setPage('review')}
+              />
+            ) : null}
             {page === 'batches' ? <BatchListPage batches={batches} onSelectBatch={handleSelectBatch} /> : null}
             {page === 'detail' ? <BatchDetailPage batch={selectedBatch} /> : null}
             {page === 'search' ? <SearchPage /> : null}
