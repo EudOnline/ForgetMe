@@ -14,6 +14,39 @@ describe('ImportPage', () => {
     return file
   }
 
+  function makePreflightItem(input: {
+    fileName: string
+    sourcePath: string
+    status: 'supported' | 'unsupported' | 'duplicate_candidate'
+    importKindHint?: 'chat' | 'image' | 'document' | 'unknown'
+  }) {
+    const extensionIndex = input.fileName.lastIndexOf('.')
+    const extension = extensionIndex >= 0 ? input.fileName.slice(extensionIndex).toLowerCase() : ''
+
+    return {
+      sourcePath: input.sourcePath,
+      fileName: input.fileName,
+      extension,
+      normalizedFileName: input.fileName.toLowerCase(),
+      importKindHint: input.importKindHint ?? 'chat',
+      isSupported: input.status !== 'unsupported',
+      status: input.status
+    }
+  }
+
+  function makePreflightResult(
+    items: Array<ReturnType<typeof makePreflightItem>>
+  ) {
+    return {
+      items,
+      summary: {
+        totalCount: items.length,
+        supportedCount: items.filter((item) => item.isSupported).length,
+        unsupportedCount: items.filter((item) => !item.isSupported).length
+      }
+    }
+  }
+
   it('shows the import action and latest batches', () => {
     vi.stubGlobal('window', {
       archiveApi: {
@@ -53,11 +86,22 @@ describe('ImportPage', () => {
     expect(screen.getByText('Drag files here to queue them before import.')).toBeInTheDocument()
   })
 
-  it('updates selected file rows and count from dropped files', () => {
+  it('updates selected file rows and count from dropped files', async () => {
+    const preflightImportBatch = vi.fn().mockResolvedValue(
+      makePreflightResult([
+        makePreflightItem({
+          fileName: 'queue-chat.json',
+          sourcePath: '/tmp/queue-chat.json',
+          status: 'supported'
+        })
+      ])
+    )
+
     vi.stubGlobal('window', {
       archiveApi: {
         listImportBatches: vi.fn().mockResolvedValue([]),
-        selectImportFiles: vi.fn()
+        selectImportFiles: vi.fn(),
+        preflightImportBatch
       }
     })
 
@@ -67,10 +111,13 @@ describe('ImportPage', () => {
     expect(dropSurface).not.toBeNull()
 
     const droppedFile = makeFileWithPath('queue-chat.json', '/tmp/queue-chat.json', 'application/json')
-    fireEvent.drop(dropSurface as HTMLElement, {
-      dataTransfer: {
-        files: [droppedFile]
-      }
+    await act(async () => {
+      fireEvent.drop(dropSurface as HTMLElement, {
+        dataTransfer: {
+          files: [droppedFile]
+        }
+      })
+      await Promise.resolve()
     })
 
     expect(screen.getByText('1 selected')).toBeInTheDocument()
@@ -78,10 +125,23 @@ describe('ImportPage', () => {
   })
 
   it('supports remove-one and clear-all actions on queued files', () => {
+    const preflightImportBatch = vi.fn().mockImplementation(async (input: { sourcePaths: string[] }) =>
+      makePreflightResult(
+        input.sourcePaths.map((sourcePath) =>
+          makePreflightItem({
+            fileName: sourcePath.split('/').at(-1) ?? sourcePath,
+            sourcePath,
+            status: 'supported'
+          })
+        )
+      )
+    )
+
     vi.stubGlobal('window', {
       archiveApi: {
         listImportBatches: vi.fn().mockResolvedValue([]),
-        selectImportFiles: vi.fn()
+        selectImportFiles: vi.fn(),
+        preflightImportBatch
       }
     })
 
@@ -107,12 +167,24 @@ describe('ImportPage', () => {
     expect(screen.getByText('No files selected yet.')).toBeInTheDocument()
   })
 
-  it('does not start batch creation on drop alone', () => {
+  it('does not start batch creation on drop alone', async () => {
     const createImportBatch = vi.fn()
+    const preflightImportBatch = vi.fn().mockResolvedValue(
+      makePreflightResult([
+        makePreflightItem({
+          fileName: 'queued.pdf',
+          sourcePath: '/tmp/queued.pdf',
+          status: 'supported',
+          importKindHint: 'document'
+        })
+      ])
+    )
+
     vi.stubGlobal('window', {
       archiveApi: {
         listImportBatches: vi.fn().mockResolvedValue([]),
         selectImportFiles: vi.fn(),
+        preflightImportBatch,
         createImportBatch
       }
     })
@@ -123,19 +195,22 @@ describe('ImportPage', () => {
     expect(dropSurface).not.toBeNull()
 
     const droppedFile = makeFileWithPath('queued.pdf', '/tmp/queued.pdf', 'application/pdf')
-    fireEvent.drop(dropSurface as HTMLElement, {
-      dataTransfer: {
-        files: [droppedFile]
-      }
+    await act(async () => {
+      fireEvent.drop(dropSurface as HTMLElement, {
+        dataTransfer: {
+          files: [droppedFile]
+        }
+      })
+      await Promise.resolve()
     })
 
     expect(createImportBatch).not.toHaveBeenCalled()
   })
 
-  it('uses queued selection for import confirmation without reopening picker when queue exists', async () => {
+  it('uses queued selection for import confirmation and summarizes multi-file source labels', async () => {
     const createImportBatch = vi.fn().mockResolvedValue({
       batchId: 'batch-queued-1',
-      sourceLabel: 'queued.json',
+      sourceLabel: '2 files',
       createdAt: '2026-03-29T00:00:00.000Z',
       files: [
         {
@@ -144,15 +219,37 @@ describe('ImportPage', () => {
           duplicateClass: 'unique',
           parserStatus: 'parsed',
           frozenAbsolutePath: '/tmp/queued.json'
+        },
+        {
+          fileId: 'file-queued-2',
+          fileName: 'queued-two.txt',
+          duplicateClass: 'unique',
+          parserStatus: 'parsed',
+          frozenAbsolutePath: '/tmp/queued-two.txt'
         }
       ]
     })
     const selectImportFiles = vi.fn().mockResolvedValue(['/tmp/from-picker.json'])
+    const preflightImportBatch = vi.fn().mockResolvedValue(
+      makePreflightResult([
+        makePreflightItem({
+          fileName: 'queued.json',
+          sourcePath: '/tmp/queued.json',
+          status: 'supported'
+        }),
+        makePreflightItem({
+          fileName: 'queued-two.txt',
+          sourcePath: '/tmp/queued-two.txt',
+          status: 'supported'
+        })
+      ])
+    )
 
     vi.stubGlobal('window', {
       archiveApi: {
         listImportBatches: vi.fn().mockResolvedValue([]),
         selectImportFiles,
+        preflightImportBatch,
         createImportBatch
       }
     })
@@ -163,19 +260,25 @@ describe('ImportPage', () => {
     expect(dropSurface).not.toBeNull()
 
     const droppedFile = makeFileWithPath('queued.json', '/tmp/queued.json', 'application/json')
+    const secondDroppedFile = makeFileWithPath('queued-two.txt', '/tmp/queued-two.txt', 'text/plain')
     fireEvent.drop(dropSurface as HTMLElement, {
       dataTransfer: {
-        files: [droppedFile]
+        files: [droppedFile, secondDroppedFile]
       }
     })
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Choose Files' }))
+      await Promise.resolve()
+    })
+    expect(await screen.findByText('2 supported, 0 unsupported')).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Import Supported Files' }))
       await Promise.resolve()
     })
     expect(createImportBatch).toHaveBeenCalledWith({
-      sourcePaths: ['/tmp/queued.json'],
-      sourceLabel: 'queued.json'
+      sourcePaths: ['/tmp/queued.json', '/tmp/queued-two.txt'],
+      sourceLabel: '2 files'
     })
     expect(selectImportFiles).not.toHaveBeenCalled()
   })
@@ -188,11 +291,21 @@ describe('ImportPage', () => {
           resolveCreateImportBatch = resolve
         })
     )
+    const preflightImportBatch = vi.fn().mockResolvedValue(
+      makePreflightResult([
+        makePreflightItem({
+          fileName: 'queued.json',
+          sourcePath: '/tmp/queued.json',
+          status: 'supported'
+        })
+      ])
+    )
 
     vi.stubGlobal('window', {
       archiveApi: {
         listImportBatches: vi.fn().mockResolvedValue([]),
         selectImportFiles: vi.fn(),
+        preflightImportBatch,
         createImportBatch
       }
     })
@@ -208,7 +321,9 @@ describe('ImportPage', () => {
     })
     expect(screen.getByText('1 selected')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Choose Files' }))
+    expect(await screen.findByText('1 supported, 0 unsupported')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Import Supported Files' }))
     expect(screen.getByRole('button', { name: 'Choose Files' })).toBeDisabled()
 
     fireEvent.dragEnter(dropSurface as HTMLElement)
@@ -232,38 +347,65 @@ describe('ImportPage', () => {
     })
   })
 
-  it('shows unsupported file guidance when selected files are skipped', async () => {
+  it('runs preflight before batch creation and only imports supported files after confirmation', async () => {
     const createImportBatch = vi.fn().mockResolvedValue({
-      batchId: 'batch-unsupported-1',
-      sourceLabel: 'unsupported.exe',
+      batchId: 'batch-supported-only-1',
+      sourceLabel: 'chat.txt',
       createdAt: '2026-03-18T12:00:00.000Z',
       files: [
         {
-          fileId: 'file-unsupported-1',
-          fileName: 'unsupported.exe',
+          fileId: 'file-supported-1',
+          fileName: 'chat.txt',
           duplicateClass: 'unique',
-          parserStatus: 'failed',
-          frozenAbsolutePath: '/tmp/frozen-unsupported.exe'
+          parserStatus: 'parsed',
+          frozenAbsolutePath: '/tmp/frozen-chat.txt'
         }
       ]
     })
+    const preflightImportBatch = vi.fn().mockResolvedValue(
+      makePreflightResult([
+        makePreflightItem({
+          fileName: 'chat.txt',
+          sourcePath: '/tmp/chat.txt',
+          status: 'supported'
+        }),
+        makePreflightItem({
+          fileName: 'unsupported.exe',
+          sourcePath: '/tmp/unsupported.exe',
+          status: 'unsupported',
+          importKindHint: 'unknown'
+        })
+      ])
+    )
 
     vi.stubGlobal('window', {
       archiveApi: {
         listImportBatches: vi.fn().mockResolvedValue([]),
-        selectImportFiles: vi.fn().mockResolvedValue(['/tmp/unsupported.exe']),
+        selectImportFiles: vi.fn().mockResolvedValue(['/tmp/chat.txt', '/tmp/unsupported.exe']),
+        preflightImportBatch,
         createImportBatch
       }
     })
 
     render(<ImportPage />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Choose Files' }))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Choose Files' }))
+      await Promise.resolve()
+    })
 
-    const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('This file type is not supported and was skipped.')
-    expect(alert).toHaveTextContent('unsupported.exe')
-    expect(createImportBatch).toHaveBeenCalled()
+    expect(await screen.findByText('1 supported, 1 unsupported')).toBeInTheDocument()
+    expect(screen.getByText('Unsupported files: unsupported.exe')).toBeInTheDocument()
+    expect(createImportBatch).not.toHaveBeenCalled()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Import Supported Files' }))
+      await Promise.resolve()
+    })
+    expect(createImportBatch).toHaveBeenCalledWith({
+      sourcePaths: ['/tmp/chat.txt'],
+      sourceLabel: 'chat.txt'
+    })
   })
 
   it('shows files-skipped guidance when a supported file fails parsing after batch creation', async () => {
@@ -281,11 +423,21 @@ describe('ImportPage', () => {
         }
       ]
     })
+    const preflightImportBatch = vi.fn().mockResolvedValue(
+      makePreflightResult([
+        makePreflightItem({
+          fileName: 'chat.txt',
+          sourcePath: '/tmp/chat.txt',
+          status: 'supported'
+        })
+      ])
+    )
 
     vi.stubGlobal('window', {
       archiveApi: {
         listImportBatches: vi.fn().mockResolvedValue([]),
         selectImportFiles: vi.fn().mockResolvedValue(['/tmp/chat.txt']),
+        preflightImportBatch,
         createImportBatch
       }
     })
@@ -293,6 +445,8 @@ describe('ImportPage', () => {
     render(<ImportPage />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Choose Files' }))
+    await screen.findByText('1 supported, 0 unsupported')
+    fireEvent.click(screen.getByRole('button', { name: 'Import Supported Files' }))
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('Some files could not be imported and were skipped.')
@@ -301,10 +455,21 @@ describe('ImportPage', () => {
   })
 
   it('shows a safe import failure summary with raw error detail', async () => {
+    const preflightImportBatch = vi.fn().mockResolvedValue(
+      makePreflightResult([
+        makePreflightItem({
+          fileName: 'chat.txt',
+          sourcePath: '/tmp/chat.txt',
+          status: 'supported'
+        })
+      ])
+    )
+
     vi.stubGlobal('window', {
       archiveApi: {
         listImportBatches: vi.fn().mockResolvedValue([]),
         selectImportFiles: vi.fn().mockResolvedValue(['/tmp/chat.txt']),
+        preflightImportBatch,
         createImportBatch: vi.fn().mockRejectedValue(new Error('EACCES: permission denied, open /tmp/chat.txt'))
       }
     })
@@ -312,6 +477,8 @@ describe('ImportPage', () => {
     render(<ImportPage />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Choose Files' }))
+    await screen.findByText('1 supported, 0 unsupported')
+    fireEvent.click(screen.getByRole('button', { name: 'Import Supported Files' }))
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('Some files could not be imported and were skipped.')

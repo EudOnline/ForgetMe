@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import type { ImportBatchSummary } from '../../shared/archiveContracts'
-import { isSupportedImportExtension } from '../../shared/archiveTypes'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { ImportBatchSummary, ImportPreflightResult } from '../../shared/archiveContracts'
 import { getArchiveApi } from '../archiveApi'
 import { useI18n } from '../i18n'
 import { BatchListPage } from './BatchListPage'
@@ -11,19 +10,35 @@ function basename(filePath: string) {
   return filePath.split(/[/\\]/).filter(Boolean).at(-1) ?? filePath
 }
 
-function extension(filePath: string) {
-  const fileName = basename(filePath)
-  const lastDotIndex = fileName.lastIndexOf('.')
-  return lastDotIndex >= 0 ? fileName.slice(lastDotIndex).toLowerCase() : ''
-}
-
-function looksUnsupported(filePath: string) {
-  const ext = extension(filePath)
-  return !isSupportedImportExtension(ext)
-}
-
 function asErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
+}
+
+function toSelectedImportFile(filePath: string): SelectedImportFile {
+  return {
+    id: filePath,
+    name: basename(filePath),
+    path: filePath
+  }
+}
+
+function dedupeSelectedFiles(files: SelectedImportFile[]) {
+  const seenPaths = new Set<string>()
+  return files.filter((file) => {
+    if (seenPaths.has(file.path)) {
+      return false
+    }
+    seenPaths.add(file.path)
+    return true
+  })
+}
+
+function buildSourceLabel(sourcePaths: string[], multipleLabel: string) {
+  if (sourcePaths.length <= 1) {
+    return sourcePaths[0] ? basename(sourcePaths[0]) : ''
+  }
+
+  return multipleLabel
 }
 
 export function ImportPage(props: {
@@ -33,13 +48,15 @@ export function ImportPage(props: {
   const { t } = useI18n()
   const archiveApi = useMemo(() => getArchiveApi(), [])
   const [batches, setBatches] = useState<ImportBatchSummary[]>([])
-  const [isImporting, setIsImporting] = useState(false)
+  const [phase, setPhase] = useState<'idle' | 'selected' | 'preflight_ready' | 'importing' | 'completed' | 'error'>('idle')
   const [selectedFiles, setSelectedFiles] = useState<SelectedImportFile[]>([])
+  const [preflightResult, setPreflightResult] = useState<ImportPreflightResult | null>(null)
   const [importStatus, setImportStatus] = useState<{
     kind: 'error'
     summary: string
     detail?: string
   } | null>(null)
+  const skipEmptySelectionResetRef = useRef(false)
 
   useEffect(() => {
     void archiveApi.listImportBatches().then((nextBatches) => {
@@ -50,63 +67,172 @@ export function ImportPage(props: {
     })
   }, [archiveApi, props.onBatchesUpdated])
 
-  const handleImport = async () => {
-    setIsImporting(true)
-    setImportStatus(null)
-    try {
-      const sourcePaths =
-        selectedFiles.length > 0 ? selectedFiles.map((file) => file.path) : await archiveApi.selectImportFiles()
-      if (sourcePaths.length > 0) {
-        const sourceLabel = basename(sourcePaths[0])
-        const createdBatch = await archiveApi.createImportBatch({ sourcePaths, sourceLabel })
-        const nextBatches = await archiveApi.listImportBatches()
-        setBatches(nextBatches)
-        props.onBatchesUpdated?.(nextBatches)
-        if (selectedFiles.length > 0) {
-          setSelectedFiles([])
-        }
+  useEffect(() => {
+    if (selectedFiles.length === 0) {
+      if (skipEmptySelectionResetRef.current) {
+        skipEmptySelectionResetRef.current = false
+        return
+      }
 
-        const unsupportedFiles = sourcePaths.filter((filePath) => looksUnsupported(filePath)).map((filePath) => basename(filePath))
-        if (unsupportedFiles.length > 0) {
-          setImportStatus({
-            kind: 'error',
-            summary: t('import.feedback.unsupportedSkipped'),
-            detail: t('import.feedback.skippedFilesDetail', { files: unsupportedFiles.join(', ') })
-          })
+      setPreflightResult(null)
+      setImportStatus(null)
+      setPhase('idle')
+      return
+    }
+
+    let cancelled = false
+    setImportStatus(null)
+    setPreflightResult(null)
+    setPhase('selected')
+
+    void archiveApi
+      .preflightImportBatch({ sourcePaths: selectedFiles.map((file) => file.path) })
+      .then((result) => {
+        if (cancelled) {
           return
         }
 
-        const failedFiles = (createdBatch.files ?? [])
-          .filter((file) => file.parserStatus !== 'parsed')
-          .map((file) => file.fileName)
-        if (failedFiles.length > 0) {
-          setImportStatus({
-            kind: 'error',
-            summary: t('import.feedback.filesSkipped'),
-            detail: t('import.feedback.skippedFilesDetail', { files: failedFiles.join(', ') })
-          })
+        setPreflightResult(result)
+        setPhase('preflight_ready')
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return
         }
+
+        setPhase('error')
+        setImportStatus({
+          kind: 'error',
+          summary: t('import.feedback.preflightFailed'),
+          detail: t('import.feedback.rawDetail', { message: asErrorMessage(error) })
+        })
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [archiveApi, selectedFiles, t])
+
+  const handleChooseFiles = async () => {
+    if (phase === 'importing') {
+      return
+    }
+
+    const sourcePaths = await archiveApi.selectImportFiles()
+    if (sourcePaths.length === 0) {
+      return
+    }
+
+    setSelectedFiles((currentFiles) => dedupeSelectedFiles([...currentFiles, ...sourcePaths.map(toSelectedImportFile)]))
+  }
+
+  const handleImport = async () => {
+    if (!preflightResult) {
+      return
+    }
+
+    const supportedSourcePaths = preflightResult.items
+      .filter((item) => item.isSupported)
+      .map((item) => item.sourcePath)
+
+    if (supportedSourcePaths.length === 0) {
+      return
+    }
+
+    setPhase('importing')
+    setImportStatus(null)
+    try {
+      const sourceLabel = buildSourceLabel(
+        supportedSourcePaths,
+        t('import.preflight.sourceLabelMultiple', { count: supportedSourcePaths.length })
+      )
+      const createdBatch = await archiveApi.createImportBatch({ sourcePaths: supportedSourcePaths, sourceLabel })
+      const nextBatches = await archiveApi.listImportBatches()
+      setBatches(nextBatches)
+      props.onBatchesUpdated?.(nextBatches)
+
+      skipEmptySelectionResetRef.current = true
+      setSelectedFiles([])
+
+      const failedFiles = (createdBatch.files ?? [])
+        .filter((file) => file.parserStatus !== 'parsed')
+        .map((file) => file.fileName)
+      if (failedFiles.length > 0) {
+        setPhase('error')
+        setImportStatus({
+          kind: 'error',
+          summary: t('import.feedback.filesSkipped'),
+          detail: t('import.feedback.skippedFilesDetail', { files: failedFiles.join(', ') })
+        })
+        return
       }
+
+      setPhase('completed')
     } catch (error) {
+      setPhase('error')
       setImportStatus({
         kind: 'error',
         summary: t('import.feedback.filesSkipped'),
         detail: t('import.feedback.rawDetail', { message: asErrorMessage(error) })
       })
-    } finally {
-      setIsImporting(false)
     }
   }
+
+  const unsupportedItems = preflightResult?.items.filter((item) => item.status === 'unsupported') ?? []
+  const duplicateCandidateCount =
+    preflightResult?.items.filter((item) => item.status === 'duplicate_candidate').length ?? 0
+  const canConfirmImport =
+    preflightResult !== null && preflightResult.summary.supportedCount > 0 && phase !== 'selected' && phase !== 'completed'
 
   return (
     <section>
       <h1>{t('import.title')}</h1>
       <ImportDropzone
-        onImport={handleImport}
-        disabled={isImporting}
+        onImport={() => {
+          void handleChooseFiles()
+        }}
+        disabled={phase === 'importing'}
         selectedFiles={selectedFiles}
-        onSelectedFilesChange={setSelectedFiles}
+        onSelectedFilesChange={(nextFiles) => {
+          setSelectedFiles(dedupeSelectedFiles(nextFiles))
+        }}
       />
+      {selectedFiles.length > 0 || preflightResult ? (
+        <section aria-label={t('import.preflight.title')}>
+          <h2>{t('import.preflight.title')}</h2>
+          {phase === 'selected' ? <p>{t('common.loading')}</p> : null}
+          {preflightResult ? (
+            <>
+              <p>
+                {t('import.preflight.summary', {
+                  supportedCount: preflightResult.summary.supportedCount,
+                  unsupportedCount: preflightResult.summary.unsupportedCount
+                })}
+              </p>
+              {unsupportedItems.length > 0 ? (
+                <p>{t('import.preflight.unsupportedDetail', { files: unsupportedItems.map((item) => item.fileName).join(', ') })}</p>
+              ) : null}
+              {duplicateCandidateCount > 0 ? (
+                <p>{t('import.preflight.duplicateCandidates', { count: duplicateCandidateCount })}</p>
+              ) : null}
+              {canConfirmImport ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleImport()
+                  }}
+                  disabled={phase === 'importing'}
+                >
+                  {t('import.preflight.confirmImport')}
+                </button>
+              ) : null}
+              {phase === 'preflight_ready' && preflightResult.summary.supportedCount === 0 ? (
+                <p>{t('import.preflight.noSupported')}</p>
+              ) : null}
+            </>
+          ) : null}
+        </section>
+      ) : null}
       {importStatus ? (
         <div role="alert">
           <p>{importStatus.summary}</p>
