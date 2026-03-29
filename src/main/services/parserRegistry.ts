@@ -3,7 +3,11 @@ import { parseChatJson } from './parsers/chatJsonParser'
 import { parseTextChat } from './parsers/textChatParser'
 import { parseImage } from './parsers/imageParser'
 import { parseDocument } from './parsers/documentParser'
-import { SUPPORTED_IMPORT_EXTENSIONS } from '../../shared/archiveTypes'
+import {
+  SUPPORTED_DOCUMENT_IMPORT_EXTENSIONS,
+  SUPPORTED_IMAGE_IMPORT_EXTENSIONS,
+  SUPPORTED_IMPORT_EXTENSIONS
+} from '../../shared/archiveTypes'
 
 export async function parseFrozenFile(filePath: string, options?: { preferredKind?: 'chat' | 'document' }) {
   const extension = path.extname(filePath).toLowerCase()
@@ -19,11 +23,11 @@ export async function parseFrozenFile(filePath: string, options?: { preferredKin
     return parseTextChat(filePath)
   }
 
-  if (['.jpg', '.jpeg', '.png', '.heic'].includes(extension)) {
+  if (SUPPORTED_IMAGE_IMPORT_EXTENSIONS.includes(extension as (typeof SUPPORTED_IMAGE_IMPORT_EXTENSIONS)[number])) {
     return parseImage(filePath)
   }
 
-  if (['.pdf', '.docx', '.txt'].includes(extension)) {
+  if (SUPPORTED_DOCUMENT_IMPORT_EXTENSIONS.includes(extension as (typeof SUPPORTED_DOCUMENT_IMPORT_EXTENSIONS)[number])) {
     return parseDocument(filePath)
   }
 

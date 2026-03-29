@@ -3,7 +3,7 @@ import path from 'node:path'
 import type { AppPaths } from '../services/appPaths'
 import { createImportBatch, getImportBatch, listImportBatches } from '../services/importBatchService'
 import { batchIdSchema, createImportBatchInputSchema } from '../../shared/ipcSchemas'
-import { SUPPORTED_IMPORT_FILTER_EXTENSIONS } from '../../shared/archiveTypes'
+import { SUPPORTED_IMPORT_FILTER_EXTENSIONS, SUPPORTED_IMPORT_FILTER_LABEL } from '../../shared/archiveTypes'
 
 export function registerArchiveIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:selectImportFiles')
@@ -18,7 +18,7 @@ export function registerArchiveIpc(appPaths: AppPaths) {
 
     const result = await dialog.showOpenDialog({
       properties: ['openFile', 'multiSelections'],
-      filters: [{ name: 'Supported imports', extensions: [...SUPPORTED_IMPORT_FILTER_EXTENSIONS] }]
+      filters: [{ name: SUPPORTED_IMPORT_FILTER_LABEL, extensions: [...SUPPORTED_IMPORT_FILTER_EXTENSIONS] }]
     })
 
     return result.canceled ? [] : result.filePaths
