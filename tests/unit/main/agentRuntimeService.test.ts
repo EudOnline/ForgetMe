@@ -1,0 +1,82 @@
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { describe, expect, it } from 'vitest'
+import type { AgentTaskKind, RunAgentTaskInput } from '../../../src/shared/archiveContracts'
+import { openDatabase, runMigrations } from '../../../src/main/services/db'
+import { createAgentRuntime } from '../../../src/main/services/agentRuntimeService'
+import type { AgentAdapter } from '../../../src/main/services/agents/agentTypes'
+
+function setupDatabase() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-agent-runtime-service-'))
+  const db = openDatabase(path.join(root, 'archive.sqlite'))
+  runMigrations(db)
+  return db
+}
+
+describe('agent runtime service', () => {
+  it('creates a persisted run row and delegates orchestrator prompts to a role adapter', async () => {
+    const db = setupDatabase()
+    const workspaceAdapter: AgentAdapter = {
+      role: 'workspace',
+      canHandle: (taskKind) => taskKind === 'workspace.ask_memory',
+      execute: async () => ({
+        messages: [
+          {
+            sender: 'tool',
+            content: 'Loaded workspace context cards'
+          },
+          {
+            sender: 'agent',
+            content: 'Workspace answer ready'
+          }
+        ]
+      })
+    }
+
+    const runtime = createAgentRuntime({
+      db,
+      adapters: [workspaceAdapter]
+    })
+
+    const result = await runtime.runTask({
+      prompt: 'Use the workspace to answer this archive question.',
+      role: 'orchestrator'
+    })
+    const runs = runtime.listRuns()
+    const detail = runtime.getRun({ runId: result.runId })
+
+    expect(runs).toHaveLength(1)
+    expect(runs[0]?.role).toBe('orchestrator')
+    expect(result.status).toBe('completed')
+    expect(result.assignedRoles).toEqual(['orchestrator', 'workspace'])
+    expect(detail?.messages.map((item) => item.sender)).toEqual(
+      expect.arrayContaining(['system', 'user', 'tool', 'agent'])
+    )
+
+    db.close()
+  })
+
+  it('fails cleanly when no adapter can handle the task kind', async () => {
+    const db = setupDatabase()
+    const runtime = createAgentRuntime({
+      db,
+      adapters: []
+    })
+
+    const result = await runtime.runTask({
+      prompt: 'Try an unknown task',
+      role: 'workspace',
+      taskKind: 'workspace.unknown' as AgentTaskKind
+    } as RunAgentTaskInput)
+    const detail = runtime.getRun({ runId: result.runId })
+
+    expect(result.status).toBe('failed')
+    expect(result.assignedRoles).toEqual(['workspace'])
+    expect(detail?.status).toBe('failed')
+    expect(detail?.errorMessage).toMatch(/no agent adapter/i)
+    expect(detail?.messages.at(-1)?.sender).toBe('system')
+
+    db.close()
+  })
+})
