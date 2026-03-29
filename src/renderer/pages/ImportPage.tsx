@@ -5,6 +5,7 @@ import { getArchiveApi } from '../archiveApi'
 import { useI18n } from '../i18n'
 import { BatchListPage } from './BatchListPage'
 import { ImportDropzone } from '../components/ImportDropzone'
+import type { SelectedImportFile } from '../components/ImportDropzone'
 
 function basename(filePath: string) {
   return filePath.split(/[/\\]/).filter(Boolean).at(-1) ?? filePath
@@ -33,6 +34,7 @@ export function ImportPage(props: {
   const archiveApi = useMemo(() => getArchiveApi(), [])
   const [batches, setBatches] = useState<ImportBatchSummary[]>([])
   const [isImporting, setIsImporting] = useState(false)
+  const [selectedFiles, setSelectedFiles] = useState<SelectedImportFile[]>([])
   const [importStatus, setImportStatus] = useState<{
     kind: 'error'
     summary: string
@@ -52,13 +54,17 @@ export function ImportPage(props: {
     setIsImporting(true)
     setImportStatus(null)
     try {
-      const sourcePaths = await archiveApi.selectImportFiles()
+      const sourcePaths =
+        selectedFiles.length > 0 ? selectedFiles.map((file) => file.path) : await archiveApi.selectImportFiles()
       if (sourcePaths.length > 0) {
         const sourceLabel = basename(sourcePaths[0])
         const createdBatch = await archiveApi.createImportBatch({ sourcePaths, sourceLabel })
         const nextBatches = await archiveApi.listImportBatches()
         setBatches(nextBatches)
         props.onBatchesUpdated?.(nextBatches)
+        if (selectedFiles.length > 0) {
+          setSelectedFiles([])
+        }
 
         const unsupportedFiles = sourcePaths.filter((filePath) => looksUnsupported(filePath)).map((filePath) => basename(filePath))
         if (unsupportedFiles.length > 0) {
@@ -95,7 +101,12 @@ export function ImportPage(props: {
   return (
     <section>
       <h1>{t('import.title')}</h1>
-      <ImportDropzone onImport={handleImport} disabled={isImporting} />
+      <ImportDropzone
+        onImport={handleImport}
+        disabled={isImporting}
+        selectedFiles={selectedFiles}
+        onSelectedFilesChange={setSelectedFiles}
+      />
       {importStatus ? (
         <div role="alert">
           <p>{importStatus.summary}</p>

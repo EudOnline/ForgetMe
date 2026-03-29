@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { fireEvent, render, screen } from './testing-library'
+import { act, fireEvent, render, screen } from './testing-library'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ImportPage } from '../../../src/renderer/pages/ImportPage'
 
@@ -8,6 +8,12 @@ afterEach(() => {
 })
 
 describe('ImportPage', () => {
+  function makeFileWithPath(fileName: string, filePath: string, fileType = 'application/octet-stream') {
+    const file = new File(['file-body'], fileName, { type: fileType })
+    Object.defineProperty(file, 'path', { value: filePath, configurable: true })
+    return file
+  }
+
   it('shows the import action and latest batches', () => {
     vi.stubGlobal('window', {
       archiveApi: {
@@ -33,6 +39,133 @@ describe('ImportPage', () => {
     render(<ImportPage />)
     expect(screen.getByText('Choose Files')).toBeInTheDocument()
     expect(screen.getByText('JSON, TXT, JPG, PNG, HEIC, PDF, DOCX')).toBeInTheDocument()
+  })
+
+  it('updates selected file rows and count from dropped files', () => {
+    vi.stubGlobal('window', {
+      archiveApi: {
+        listImportBatches: vi.fn().mockResolvedValue([]),
+        selectImportFiles: vi.fn()
+      }
+    })
+
+    render(<ImportPage />)
+
+    const dropSurface = screen.getByText('Import Workbench').closest('.fmImportDropzoneSurface')
+    expect(dropSurface).not.toBeNull()
+
+    const droppedFile = makeFileWithPath('queue-chat.json', '/tmp/queue-chat.json', 'application/json')
+    fireEvent.drop(dropSurface as HTMLElement, {
+      dataTransfer: {
+        files: [droppedFile]
+      }
+    })
+
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+    expect(screen.getByText('queue-chat.json')).toBeInTheDocument()
+  })
+
+  it('supports remove-one and clear-all actions on queued files', () => {
+    vi.stubGlobal('window', {
+      archiveApi: {
+        listImportBatches: vi.fn().mockResolvedValue([]),
+        selectImportFiles: vi.fn()
+      }
+    })
+
+    render(<ImportPage />)
+
+    const dropSurface = screen.getByText('Import Workbench').closest('.fmImportDropzoneSurface')
+    expect(dropSurface).not.toBeNull()
+
+    const fileOne = makeFileWithPath('one.txt', '/tmp/one.txt', 'text/plain')
+    const fileTwo = makeFileWithPath('two.txt', '/tmp/two.txt', 'text/plain')
+    fireEvent.drop(dropSurface as HTMLElement, {
+      dataTransfer: {
+        files: [fileOne, fileTwo]
+      }
+    })
+
+    expect(screen.getByText('2 selected')).toBeInTheDocument()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[0])
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Selection' }))
+    expect(screen.getByText('0 selected')).toBeInTheDocument()
+    expect(screen.getByText('No files selected yet.')).toBeInTheDocument()
+  })
+
+  it('does not start batch creation on drop alone', () => {
+    const createImportBatch = vi.fn()
+    vi.stubGlobal('window', {
+      archiveApi: {
+        listImportBatches: vi.fn().mockResolvedValue([]),
+        selectImportFiles: vi.fn(),
+        createImportBatch
+      }
+    })
+
+    render(<ImportPage />)
+
+    const dropSurface = screen.getByText('Import Workbench').closest('.fmImportDropzoneSurface')
+    expect(dropSurface).not.toBeNull()
+
+    const droppedFile = makeFileWithPath('queued.pdf', '/tmp/queued.pdf', 'application/pdf')
+    fireEvent.drop(dropSurface as HTMLElement, {
+      dataTransfer: {
+        files: [droppedFile]
+      }
+    })
+
+    expect(createImportBatch).not.toHaveBeenCalled()
+  })
+
+  it('uses queued selection for import confirmation without reopening picker when queue exists', async () => {
+    const createImportBatch = vi.fn().mockResolvedValue({
+      batchId: 'batch-queued-1',
+      sourceLabel: 'queued.json',
+      createdAt: '2026-03-29T00:00:00.000Z',
+      files: [
+        {
+          fileId: 'file-queued-1',
+          fileName: 'queued.json',
+          duplicateClass: 'unique',
+          parserStatus: 'parsed',
+          frozenAbsolutePath: '/tmp/queued.json'
+        }
+      ]
+    })
+    const selectImportFiles = vi.fn().mockResolvedValue(['/tmp/from-picker.json'])
+
+    vi.stubGlobal('window', {
+      archiveApi: {
+        listImportBatches: vi.fn().mockResolvedValue([]),
+        selectImportFiles,
+        createImportBatch
+      }
+    })
+
+    render(<ImportPage />)
+
+    const dropSurface = screen.getByText('Import Workbench').closest('.fmImportDropzoneSurface')
+    expect(dropSurface).not.toBeNull()
+
+    const droppedFile = makeFileWithPath('queued.json', '/tmp/queued.json', 'application/json')
+    fireEvent.drop(dropSurface as HTMLElement, {
+      dataTransfer: {
+        files: [droppedFile]
+      }
+    })
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Choose Files' }))
+      await Promise.resolve()
+    })
+    expect(createImportBatch).toHaveBeenCalledWith({
+      sourcePaths: ['/tmp/queued.json'],
+      sourceLabel: 'queued.json'
+    })
+    expect(selectImportFiles).not.toHaveBeenCalled()
   })
 
   it('shows unsupported file guidance when selected files are skipped', async () => {

@@ -2,9 +2,10 @@ import { useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent } from 'react'
 import { useI18n } from '../i18n'
 
-type SelectedImportFile = {
+export type SelectedImportFile = {
   id: string
   name: string
+  path: string
 }
 
 type ImportDropzoneProps = {
@@ -18,10 +19,20 @@ function toSelectedFiles(fileList: FileList | null): SelectedImportFile[] {
   if (!fileList) {
     return []
   }
-  return Array.from(fileList).map((file) => ({
-    id: `${file.name}:${file.size}:${file.lastModified}`,
-    name: file.name
-  }))
+  return Array.from(fileList)
+    .map((file) => {
+      const rawPath = (file as File & { path?: string }).path
+      const sourcePath = typeof rawPath === 'string' ? rawPath : null
+      if (!sourcePath) {
+        return null
+      }
+      return {
+        id: `${sourcePath}:${file.lastModified}:${file.size}`,
+        name: file.name,
+        path: sourcePath
+      }
+    })
+    .filter((file): file is SelectedImportFile => file !== null)
 }
 
 function mergeSelectedFiles(existing: SelectedImportFile[], incoming: SelectedImportFile[]): SelectedImportFile[] {
