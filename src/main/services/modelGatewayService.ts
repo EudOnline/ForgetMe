@@ -1,3 +1,5 @@
+import type { AgentRole } from '../../shared/archiveContracts'
+
 export type ModelTaskType = 'document_ocr' | 'image_understanding' | 'chat_screenshot' | 'memory_dialogue'
 export type ModelProvider = 'siliconflow' | 'openrouter'
 
@@ -54,6 +56,10 @@ function modelEnvName(taskType: ModelTaskType, provider: ModelProvider) {
   return `FORGETME_MODEL_${taskType.toUpperCase()}_${provider.toUpperCase()}`
 }
 
+function roleScopedModelEnvName(taskType: ModelTaskType, agentRole: AgentRole, provider: ModelProvider) {
+  return `FORGETME_MODEL_${taskType.toUpperCase()}_${agentRole.toUpperCase()}_${provider.toUpperCase()}`
+}
+
 function parsePositiveInteger(value: string | undefined, fallback: number) {
   const parsed = Number.parseInt(value ?? '', 10)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
@@ -62,12 +68,20 @@ function parsePositiveInteger(value: string | undefined, fallback: number) {
 export function resolveModelRoute(input: {
   taskType: ModelTaskType
   preferredProvider?: ModelProvider
+  agentRole?: AgentRole
+  runId?: string
+  policyVersion?: string
+  memoryProfile?: string
 }) {
   const provider = normalizeProvider(input.preferredProvider ?? process.env.FORGETME_DEFAULT_MODEL_PROVIDER)
   const baseURL = process.env.FORGETME_LITELLM_BASE_URL ?? DEFAULT_LITELLM_BASE_URL
   const timeoutMs = parsePositiveInteger(process.env.FORGETME_LITELLM_TIMEOUT_MS, DEFAULT_TIMEOUT_MS)
   const retryCount = parsePositiveInteger(process.env.FORGETME_LITELLM_RETRY_COUNT, DEFAULT_RETRY_COUNT)
-  const model = process.env[modelEnvName(input.taskType, provider)] ?? defaultModelForTask(input.taskType, provider)
+  const model = (
+    input.agentRole && input.taskType === 'memory_dialogue'
+      ? process.env[roleScopedModelEnvName(input.taskType, input.agentRole, provider)]
+      : undefined
+  ) ?? process.env[modelEnvName(input.taskType, provider)] ?? defaultModelForTask(input.taskType, provider)
   const apiKeyEnvName = apiKeyEnvNameForProvider(provider)
 
   return {
@@ -79,7 +93,11 @@ export function resolveModelRoute(input: {
     apiKeyEnvName,
     headers: {
       'x-forgetme-provider': provider,
-      'x-forgetme-task-type': input.taskType
+      'x-forgetme-task-type': input.taskType,
+      ...(input.agentRole ? { 'x-forgetme-agent-role': input.agentRole } : {}),
+      ...(input.runId ? { 'x-forgetme-run-id': input.runId } : {}),
+      ...(input.policyVersion ? { 'x-forgetme-policy-version': input.policyVersion } : {}),
+      ...(input.memoryProfile ? { 'x-forgetme-memory-profile': input.memoryProfile } : {})
     }
   } satisfies ModelRoute
 }
