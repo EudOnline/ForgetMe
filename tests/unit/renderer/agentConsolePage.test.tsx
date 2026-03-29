@@ -60,6 +60,8 @@ describe('AgentConsolePage', () => {
         listImportBatches: vi.fn().mockResolvedValue([]),
         listAgentRuns: vi.fn().mockResolvedValue([]),
         getAgentRun: vi.fn().mockResolvedValue(null),
+        listAgentMemories: vi.fn().mockResolvedValue([]),
+        listAgentPolicyVersions: vi.fn().mockResolvedValue([]),
         runAgentTask: vi.fn().mockResolvedValue({
           runId: '',
           status: 'queued',
@@ -126,12 +128,33 @@ describe('AgentConsolePage', () => {
         }
       ]
     }))
+    const listAgentMemories = vi.fn().mockResolvedValue([
+      {
+        memoryId: 'memory-1',
+        role: 'review',
+        memoryKey: 'review.queue.summary',
+        memoryValue: 'Escalate duplicate conflict groups first.',
+        createdAt: '2026-03-29T00:00:00.000Z',
+        updatedAt: '2026-03-29T00:00:05.000Z'
+      }
+    ])
+    const listAgentPolicyVersions = vi.fn().mockResolvedValue([
+      {
+        policyVersionId: 'policy-1',
+        role: 'review',
+        policyKey: 'governance.review.policy',
+        policyBody: 'Require confirmation tokens for destructive review actions.',
+        createdAt: '2026-03-29T00:00:06.000Z'
+      }
+    ])
 
     Object.assign(window, {
       archiveApi: {
         listAgentRuns,
         getAgentRun,
-        runAgentTask
+        runAgentTask,
+        listAgentMemories,
+        listAgentPolicyVersions
       }
     })
 
@@ -157,8 +180,16 @@ describe('AgentConsolePage', () => {
     expect(screen.getByText('Target role: review')).toBeInTheDocument()
     expect(screen.getByText('Compared with previous review run')).toBeInTheDocument()
     expect(screen.getByText('Message timeline')).toBeInTheDocument()
+    expect(screen.getByText('Operational memory')).toBeInTheDocument()
+    expect(screen.getByText('Policy history')).toBeInTheDocument()
+    expect(screen.getByText('review.queue.summary')).toBeInTheDocument()
+    expect(screen.getByText('Escalate duplicate conflict groups first.')).toBeInTheDocument()
+    expect(screen.getByText('governance.review.policy')).toBeInTheDocument()
+    expect(screen.getByText('Require confirmation tokens for destructive review actions.')).toBeInTheDocument()
     expect(screen.getByText('tool')).toBeInTheDocument()
     expect(screen.getByText('agent')).toBeInTheDocument()
+    expect(listAgentMemories).toHaveBeenCalledWith({ role: 'review' })
+    expect(listAgentPolicyVersions).toHaveBeenCalledWith({ role: 'review' })
   })
 
   it('shows a confirmation affordance before resubmitting destructive review actions', async () => {
@@ -201,7 +232,9 @@ describe('AgentConsolePage', () => {
       archiveApi: {
         listAgentRuns,
         getAgentRun,
-        runAgentTask
+        runAgentTask,
+        listAgentMemories: vi.fn().mockResolvedValue([]),
+        listAgentPolicyVersions: vi.fn().mockResolvedValue([])
       }
     })
 
@@ -300,7 +333,9 @@ describe('AgentConsolePage', () => {
         createImportBatch,
         listAgentRuns,
         getAgentRun,
-        runAgentTask
+        runAgentTask,
+        listAgentMemories: vi.fn().mockResolvedValue([]),
+        listAgentPolicyVersions: vi.fn().mockResolvedValue([])
       }
     })
 

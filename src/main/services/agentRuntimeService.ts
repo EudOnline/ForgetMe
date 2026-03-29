@@ -1,9 +1,11 @@
 import type {
   AgentRole,
+  AgentPolicyVersionRecord,
   AgentRunDetail,
   AgentRunRecord,
   GetAgentRunInput,
   ListAgentMemoriesInput,
+  ListAgentPolicyVersionsInput,
   ListAgentRunsInput,
   RunAgentTaskInput,
   RunAgentTaskResult
@@ -13,6 +15,7 @@ import {
   createAgentRun,
   getAgentRun,
   listAgentMemories,
+  listAgentPolicyVersions,
   listAgentRuns,
   updateAgentRunReplayMetadata,
   updateAgentRunStatus
@@ -32,6 +35,7 @@ export type AgentRuntime = {
   listRuns(input?: ListAgentRunsInput): AgentRunRecord[]
   getRun(input: GetAgentRunInput): AgentRunDetail | null
   listMemories(input?: ListAgentMemoriesInput): ReturnType<typeof listAgentMemories>
+  listPolicyVersions(input?: ListAgentPolicyVersionsInput): AgentPolicyVersionRecord[]
 }
 
 type CreateAgentRuntimeInput = {
@@ -207,6 +211,9 @@ export function createAgentRuntime(input: CreateAgentRuntimeInput): AgentRuntime
     },
     listMemories(memoryInput = {}) {
       return listAgentMemories(input.db, memoryInput)
+    },
+    listPolicyVersions(policyInput = {}) {
+      return listAgentPolicyVersions(input.db, policyInput)
     }
   }
 }

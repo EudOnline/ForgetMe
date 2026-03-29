@@ -77,6 +77,9 @@ describe('archiveApi agent runtime methods', () => {
     await expect(archiveApi.listAgentMemories({
       role: 'governance'
     })).resolves.toEqual([])
+    await expect(archiveApi.listAgentPolicyVersions({
+      role: 'governance'
+    })).resolves.toEqual([])
   })
 
   it('preserves renderer-provided agent runtime methods', async () => {
@@ -139,13 +142,23 @@ describe('archiveApi agent runtime methods', () => {
         updatedAt: '2026-03-29T00:00:00.000Z'
       }
     ])
+    const listAgentPolicyVersions = vi.fn().mockResolvedValue([
+      {
+        policyVersionId: 'policy-1',
+        role: 'governance',
+        policyKey: 'governance.review.policy',
+        policyBody: 'Prefer queue summaries first.',
+        createdAt: '2026-03-29T00:00:01.000Z'
+      }
+    ])
 
     vi.stubGlobal('window', {
       archiveApi: {
         runAgentTask,
         listAgentRuns,
         getAgentRun,
-        listAgentMemories
+        listAgentMemories,
+        listAgentPolicyVersions
       }
     })
 
@@ -157,6 +170,7 @@ describe('archiveApi agent runtime methods', () => {
     const runs = await archiveApi.listAgentRuns({ role: 'review' })
     const detail = await archiveApi.getAgentRun({ runId: 'run-1' })
     const memories = await archiveApi.listAgentMemories({ role: 'governance' })
+    const policyVersions = await archiveApi.listAgentPolicyVersions({ role: 'governance' })
 
     expect(run).toEqual({
       runId: 'run-1',
@@ -174,6 +188,7 @@ describe('archiveApi agent runtime methods', () => {
     expect(detail?.latestAssistantResponse).toBe('1 pending items across 1 conflict groups.')
     expect(detail?.messages[0]?.content).toContain('pending items')
     expect(memories[0]?.memoryKey).toBe('governance.feedback')
+    expect(policyVersions[0]?.policyKey).toBe('governance.review.policy')
   })
 })
 

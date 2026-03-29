@@ -130,6 +130,11 @@ export const listAgentMemoriesInputSchema = z.object({
   memoryKey: z.string().min(1).optional()
 }).optional().default({})
 
+export const listAgentPolicyVersionsInputSchema = z.object({
+  role: agentRoleSchema.optional(),
+  policyKey: z.string().min(1).optional()
+}).optional().default({})
+
 export const memoryWorkspaceScopeSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('global')

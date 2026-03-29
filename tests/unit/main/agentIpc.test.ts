@@ -99,7 +99,8 @@ describe('registerAgentIpc', () => {
       }),
       listRuns: vi.fn(),
       getRun: vi.fn(),
-      listMemories: vi.fn()
+      listMemories: vi.fn(),
+      listPolicyVersions: vi.fn()
     }
 
     openDatabase.mockReturnValue(db)
@@ -115,6 +116,7 @@ describe('registerAgentIpc', () => {
     expect(handlerMap.has('archive:listAgentRuns')).toBe(true)
     expect(handlerMap.has('archive:getAgentRun')).toBe(true)
     expect(handlerMap.has('archive:listAgentMemories')).toBe(true)
+    expect(handlerMap.has('archive:listAgentPolicyVersions')).toBe(true)
 
     const result = await handlerMap.get('archive:runAgentTask')?.({}, {
       prompt: 'Summarize the highest-priority pending review work',
@@ -192,6 +194,15 @@ describe('registerAgentIpc', () => {
           createdAt: '2026-03-29T00:00:00.000Z',
           updatedAt: '2026-03-29T00:00:00.000Z'
         }
+      ]),
+      listPolicyVersions: vi.fn().mockReturnValue([
+        {
+          policyVersionId: 'policy-1',
+          role: 'governance',
+          policyKey: 'governance.review.policy',
+          policyBody: 'Always summarize recent failures before proposing a new policy.',
+          createdAt: '2026-03-29T00:00:02.000Z'
+        }
       ])
     }
 
@@ -207,10 +218,18 @@ describe('registerAgentIpc', () => {
     const runs = await handlerMap.get('archive:listAgentRuns')?.({}, { role: 'review', limit: 5 })
     const detail = await handlerMap.get('archive:getAgentRun')?.({}, { runId: 'run-1' })
     const memories = await handlerMap.get('archive:listAgentMemories')?.({}, { role: 'governance' })
+    const policyVersions = await handlerMap.get('archive:listAgentPolicyVersions')?.({}, {
+      role: 'governance',
+      policyKey: 'governance.review.policy'
+    })
 
     expect(runtime.listRuns).toHaveBeenCalledWith({ role: 'review', limit: 5 })
     expect(runtime.getRun).toHaveBeenCalledWith({ runId: 'run-1' })
     expect(runtime.listMemories).toHaveBeenCalledWith({ role: 'governance' })
+    expect(runtime.listPolicyVersions).toHaveBeenCalledWith({
+      role: 'governance',
+      policyKey: 'governance.review.policy'
+    })
     expect(runs).toEqual([
       expect.objectContaining({
         runId: 'run-1',
@@ -233,6 +252,13 @@ describe('registerAgentIpc', () => {
         role: 'governance'
       })
     ])
-    expect(close).toHaveBeenCalledTimes(3)
+    expect(policyVersions).toEqual([
+      expect.objectContaining({
+        policyVersionId: 'policy-1',
+        role: 'governance',
+        policyKey: 'governance.review.policy'
+      })
+    ])
+    expect(close).toHaveBeenCalledTimes(4)
   })
 })

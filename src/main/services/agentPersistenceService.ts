@@ -10,6 +10,7 @@ import type {
   AgentTaskKind,
   GetAgentRunInput,
   ListAgentMemoriesInput,
+  ListAgentPolicyVersionsInput,
   ListAgentRunsInput
 } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
@@ -506,4 +507,34 @@ export function createAgentPolicyVersion(db: ArchiveDatabase, input: {
   ).get(policyVersionId) as AgentPolicyVersionRow | undefined
 
   return mapAgentPolicyVersionRow(row!)
+}
+
+export function listAgentPolicyVersions(
+  db: ArchiveDatabase,
+  input: ListAgentPolicyVersionsInput = {}
+): AgentPolicyVersionRecord[] {
+  const rows = db.prepare(
+    `select
+      id,
+      role,
+      policy_key as policyKey,
+      policy_body as policyBody,
+      created_at as createdAt
+     from agent_policy_versions
+     order by created_at desc, id asc`
+  ).all() as AgentPolicyVersionRow[]
+
+  return rows
+    .filter((row) => {
+      if (input.role && row.role !== input.role) {
+        return false
+      }
+
+      if (input.policyKey && row.policyKey !== input.policyKey) {
+        return false
+      }
+
+      return true
+    })
+    .map(mapAgentPolicyVersionRow)
 }

@@ -3,6 +3,7 @@ import { ipcMain } from 'electron'
 import {
   getAgentRunInputSchema,
   listAgentMemoriesInputSchema,
+  listAgentPolicyVersionsInputSchema,
   listAgentRunsInputSchema,
   runAgentTaskInputSchema
 } from '../../shared/ipcSchemas'
@@ -59,6 +60,7 @@ export function registerAgentIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:listAgentRuns')
   ipcMain.removeHandler('archive:getAgentRun')
   ipcMain.removeHandler('archive:listAgentMemories')
+  ipcMain.removeHandler('archive:listAgentPolicyVersions')
 
   ipcMain.handle('archive:runAgentTask', async (_event, payload) => {
     const input = runAgentTaskInputSchema.parse(payload) as RunAgentTaskInput
@@ -78,5 +80,10 @@ export function registerAgentIpc(appPaths: AppPaths) {
   ipcMain.handle('archive:listAgentMemories', async (_event, payload) => {
     const input = listAgentMemoriesInputSchema.parse(payload)
     return withArchiveAgentRuntime(appPaths, (runtime) => runtime.listMemories(input))
+  })
+
+  ipcMain.handle('archive:listAgentPolicyVersions', async (_event, payload) => {
+    const input = listAgentPolicyVersionsInputSchema.parse(payload)
+    return withArchiveAgentRuntime(appPaths, (runtime) => runtime.listPolicyVersions(input))
   })
 }

@@ -10,6 +10,7 @@ import {
   getAgentRun,
   listAgentRuns,
   listAgentMemories,
+  listAgentPolicyVersions,
   updateAgentRunReplayMetadata,
   upsertAgentMemory
 } from '../../../src/main/services/agentPersistenceService'
@@ -199,6 +200,56 @@ describe('agent persistence service', () => {
     ).all('governance') as Array<{ policyBody: string }>
 
     expect(rows.map((row) => row.policyBody)).toEqual(['version 1', 'version 2'])
+
+    db.close()
+  })
+
+  it('lists policy versions newest-first with optional role and policy-key filters', () => {
+    const db = setupDatabase()
+
+    createAgentPolicyVersion(db, {
+      policyVersionId: 'policy-1',
+      role: 'governance',
+      policyKey: 'governance.review.policy',
+      policyBody: 'version 1',
+      createdAt: '2026-03-29T00:00:00.000Z'
+    })
+    createAgentPolicyVersion(db, {
+      policyVersionId: 'policy-2',
+      role: 'governance',
+      policyKey: 'governance.review.policy',
+      policyBody: 'version 2',
+      createdAt: '2026-03-29T00:00:02.000Z'
+    })
+    createAgentPolicyVersion(db, {
+      policyVersionId: 'policy-3',
+      role: 'review',
+      policyKey: 'review.safe_batch.policy',
+      policyBody: 'review policy',
+      createdAt: '2026-03-29T00:00:01.000Z'
+    })
+
+    const allPolicies = listAgentPolicyVersions(db)
+    const governancePolicies = listAgentPolicyVersions(db, {
+      role: 'governance'
+    })
+    const keyedPolicies = listAgentPolicyVersions(db, {
+      policyKey: 'governance.review.policy'
+    })
+
+    expect(allPolicies.map((item) => item.policyVersionId)).toEqual([
+      'policy-2',
+      'policy-3',
+      'policy-1'
+    ])
+    expect(governancePolicies.map((item) => item.policyVersionId)).toEqual([
+      'policy-2',
+      'policy-1'
+    ])
+    expect(keyedPolicies.map((item) => item.policyBody)).toEqual([
+      'version 2',
+      'version 1'
+    ])
 
     db.close()
   })

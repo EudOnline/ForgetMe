@@ -1554,6 +1554,11 @@ export type ListAgentMemoriesInput = {
   memoryKey?: string
 }
 
+export type ListAgentPolicyVersionsInput = {
+  role?: AgentRole
+  policyKey?: string
+}
+
 export interface ArchiveApi {
   selectImportFiles: () => Promise<string[]>
   selectBackupExportDestination: () => Promise<string | null>
@@ -1568,6 +1573,7 @@ export interface ArchiveApi {
   listAgentRuns: (input?: ListAgentRunsInput) => Promise<AgentRunRecord[]>
   getAgentRun: (input: GetAgentRunInput) => Promise<AgentRunDetail | null>
   listAgentMemories: (input?: ListAgentMemoriesInput) => Promise<AgentMemoryRecord[]>
+  listAgentPolicyVersions: (input?: ListAgentPolicyVersionsInput) => Promise<AgentPolicyVersionRecord[]>
   listImportBatches: () => Promise<ImportBatchSummary[]>
   getImportBatch: (batchId: string) => Promise<ImportBatchSummary | null>
   searchArchive: (input: { query?: string; fileKinds?: string[]; batchId?: string; duplicateClass?: string; personName?: string }) => Promise<ArchiveSearchResult[]>

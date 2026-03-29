@@ -1,11 +1,13 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import type {
   AgentMemoryRecord,
+  AgentPolicyVersionRecord,
   AgentRunDetail,
   AgentRunRecord,
   ArchiveApi,
   GetAgentRunInput,
   ListAgentMemoriesInput,
+  ListAgentPolicyVersionsInput,
   ListAgentRunsInput,
   RunAgentTaskInput,
   RunAgentTaskResult
@@ -13,6 +15,7 @@ import type {
 import {
   getAgentRunInputSchema,
   listAgentMemoriesInputSchema,
+  listAgentPolicyVersionsInputSchema,
   listAgentRunsInputSchema,
   runAgentTaskInputSchema
 } from '../../../src/shared/ipcSchemas'
@@ -67,6 +70,11 @@ describe('agent runtime shared contracts', () => {
     expect(listAgentMemoriesInputSchema.safeParse({
       role: 'workspace'
     }).success).toBe(true)
+
+    expect(listAgentPolicyVersionsInputSchema.safeParse({
+      role: 'governance',
+      policyKey: 'governance.review.policy'
+    }).success).toBe(true)
   })
 
   it('extends ArchiveApi with agent-runtime methods', () => {
@@ -81,6 +89,9 @@ describe('agent runtime shared contracts', () => {
     >()
     expectTypeOf<ArchiveApi['listAgentMemories']>().toEqualTypeOf<
       (input?: ListAgentMemoriesInput) => Promise<AgentMemoryRecord[]>
+    >()
+    expectTypeOf<ArchiveApi['listAgentPolicyVersions']>().toEqualTypeOf<
+      (input?: ListAgentPolicyVersionsInput) => Promise<AgentPolicyVersionRecord[]>
     >()
   })
 

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type {
+  AgentMemoryRecord,
+  AgentPolicyVersionRecord,
   AgentRole,
   AgentRunDetail,
   AgentRunRecord,
@@ -160,6 +162,10 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [ingestionPreflightSummary, setIngestionPreflightSummary] = useState<string | null>(null)
   const [ingestionResultMessage, setIngestionResultMessage] = useState<string | null>(null)
+  const [operationalMemories, setOperationalMemories] = useState<AgentMemoryRecord[]>([])
+  const [policyVersions, setPolicyVersions] = useState<AgentPolicyVersionRecord[]>([])
+  const [operationalStateError, setOperationalStateError] = useState<string | null>(null)
+  const [isOperationalStateLoading, setIsOperationalStateLoading] = useState(false)
 
   const refreshRuns = async (preferredRunId?: string) => {
     const nextRuns = await archiveApi.listAgentRuns()
@@ -201,6 +207,42 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
       setIngestionResultMessage(null)
     }
   }, [role])
+
+  const operationalStateRole = selectedRunDetail?.targetRole ?? selectedRunDetail?.role ?? role
+
+  useEffect(() => {
+    let cancelled = false
+    setIsOperationalStateLoading(true)
+    setOperationalStateError(null)
+
+    Promise.all([
+      archiveApi.listAgentMemories({ role: operationalStateRole }),
+      archiveApi.listAgentPolicyVersions({ role: operationalStateRole })
+    ]).then(([nextMemories, nextPolicyVersions]) => {
+      if (cancelled) {
+        return
+      }
+
+      setOperationalMemories(nextMemories)
+      setPolicyVersions(nextPolicyVersions)
+    }).catch((error: unknown) => {
+      if (cancelled) {
+        return
+      }
+
+      setOperationalMemories([])
+      setPolicyVersions([])
+      setOperationalStateError(asErrorMessage(error))
+    }).finally(() => {
+      if (!cancelled) {
+        setIsOperationalStateLoading(false)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [archiveApi, operationalStateRole])
 
   const executeTask = async (input: RunAgentTaskInput) => {
     setIsSubmitting(true)
@@ -433,6 +475,44 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
                     <p>{comparisonRun.latestAssistantResponse ?? t('agentConsole.latestAssistantResponseEmpty')}</p>
                   </div>
                 ) : null}
+
+                <div className="fmAgentOperationalState">
+                  <h3>{t('agentConsole.operationalMemoryTitle')}</h3>
+                  {isOperationalStateLoading ? (
+                    <p>{t('common.loading')}</p>
+                  ) : operationalStateError ? (
+                    <p>{t('agentConsole.operationalStateLoadFailed', { message: operationalStateError })}</p>
+                  ) : operationalMemories.length === 0 ? (
+                    <p>{t('agentConsole.operationalMemoryEmpty', { role: operationalStateRole })}</p>
+                  ) : (
+                    <ul className="fmAgentOperationalList">
+                      {operationalMemories.map((memory) => (
+                        <li key={memory.memoryId}>
+                          <strong>{memory.memoryKey}</strong>
+                          <p>{memory.memoryValue}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  <h3>{t('agentConsole.policyHistoryTitle')}</h3>
+                  {isOperationalStateLoading ? (
+                    <p>{t('common.loading')}</p>
+                  ) : operationalStateError ? (
+                    <p>{t('agentConsole.operationalStateLoadFailed', { message: operationalStateError })}</p>
+                  ) : policyVersions.length === 0 ? (
+                    <p>{t('agentConsole.policyHistoryEmpty', { role: operationalStateRole })}</p>
+                  ) : (
+                    <ul className="fmAgentOperationalList">
+                      {policyVersions.map((policyVersion) => (
+                        <li key={policyVersion.policyVersionId}>
+                          <strong>{policyVersion.policyKey}</strong>
+                          <p>{policyVersion.policyBody}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
 
                 <AgentRunTimeline
                   title={t('agentConsole.messageTimelineTitle')}

@@ -141,12 +141,22 @@ describe('preload archiveApi hosted share bridge', () => {
           updatedAt: '2026-03-29T00:00:00.000Z'
         }
       ])
+      .mockResolvedValueOnce([
+        {
+          policyVersionId: 'policy-1',
+          role: 'governance',
+          policyKey: 'governance.review.policy',
+          policyBody: 'Prefer queue summaries first.',
+          createdAt: '2026-03-29T00:00:01.000Z'
+        }
+      ])
 
     const archiveApi = exposeInMainWorld.mock.calls[0]?.[1] as {
       runAgentTask: (input: { prompt: string; role: 'orchestrator' }) => Promise<unknown>
       listAgentRuns: (input: { role: 'review' }) => Promise<unknown>
       getAgentRun: (input: { runId: string }) => Promise<unknown>
       listAgentMemories: (input: { role: 'governance' }) => Promise<unknown>
+      listAgentPolicyVersions: (input: { role: 'governance'; policyKey: string }) => Promise<unknown>
     }
 
     const runResult = await archiveApi.runAgentTask({
@@ -156,6 +166,10 @@ describe('preload archiveApi hosted share bridge', () => {
     const runs = await archiveApi.listAgentRuns({ role: 'review' })
     const detail = await archiveApi.getAgentRun({ runId: 'run-1' })
     const memories = await archiveApi.listAgentMemories({ role: 'governance' })
+    const policyVersions = await archiveApi.listAgentPolicyVersions({
+      role: 'governance',
+      policyKey: 'governance.review.policy'
+    })
 
     expect(runResult).toEqual({
       runId: 'run-1',
@@ -185,6 +199,13 @@ describe('preload archiveApi hosted share bridge', () => {
         role: 'governance'
       })
     ])
+    expect(policyVersions).toEqual([
+      expect.objectContaining({
+        policyVersionId: 'policy-1',
+        role: 'governance',
+        policyKey: 'governance.review.policy'
+      })
+    ])
 
     expect(invoke).toHaveBeenNthCalledWith(1, 'archive:runAgentTask', {
       prompt: 'Summarize the highest-priority pending review work',
@@ -198,6 +219,10 @@ describe('preload archiveApi hosted share bridge', () => {
     })
     expect(invoke).toHaveBeenNthCalledWith(4, 'archive:listAgentMemories', {
       role: 'governance'
+    })
+    expect(invoke).toHaveBeenNthCalledWith(5, 'archive:listAgentPolicyVersions', {
+      role: 'governance',
+      policyKey: 'governance.review.policy'
     })
   })
 })

@@ -16,6 +16,7 @@ const archiveApi: ArchiveApi = {
   listAgentRuns: (input) => ipcRenderer.invoke('archive:listAgentRuns', input),
   getAgentRun: (input) => ipcRenderer.invoke('archive:getAgentRun', input),
   listAgentMemories: (input) => ipcRenderer.invoke('archive:listAgentMemories', input),
+  listAgentPolicyVersions: (input) => ipcRenderer.invoke('archive:listAgentPolicyVersions', input),
   listImportBatches: () => ipcRenderer.invoke('archive:listImportBatches'),
   getImportBatch: (batchId) => ipcRenderer.invoke('archive:getImportBatch', { batchId }),
   searchArchive: (input) => ipcRenderer.invoke('archive:search', input),
