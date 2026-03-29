@@ -41,6 +41,22 @@ function buildSourceLabel(sourcePaths: string[], multipleLabel: string) {
   return multipleLabel
 }
 
+function getBatchCounts(batch: ImportBatchSummary) {
+  return {
+    importedCount: batch.summary?.frozenCount ?? batch.files?.length ?? 0,
+    parsedCount: batch.summary?.parsedCount ?? batch.files?.filter((file) => file.parserStatus === 'parsed').length ?? 0,
+    duplicateCount:
+      batch.summary?.duplicateCount ?? batch.files?.filter((file) => file.duplicateClass === 'duplicate_exact').length ?? 0,
+    reviewCount: batch.summary?.reviewCount ?? 0
+  }
+}
+
+function outcomeTitle(importedCount: number, t: ReturnType<typeof useI18n>['t']) {
+  return importedCount === 1
+    ? t('import.outcome.titleSingle')
+    : t('import.outcome.titleMultiple', { count: importedCount })
+}
+
 export function ImportPage(props: {
   onSelectBatch?: (batchId: string) => void
   onBatchesUpdated?: (batches: ImportBatchSummary[]) => void
@@ -55,6 +71,14 @@ export function ImportPage(props: {
     kind: 'error'
     summary: string
     detail?: string
+  } | null>(null)
+  const [importOutcome, setImportOutcome] = useState<{
+    batch: ImportBatchSummary
+    importedCount: number
+    parsedCount: number
+    duplicateCount: number
+    reviewCount: number
+    skippedCount: number
   } | null>(null)
   const skipEmptySelectionResetRef = useRef(false)
 
@@ -81,6 +105,7 @@ export function ImportPage(props: {
     }
 
     let cancelled = false
+    setImportOutcome(null)
     setImportStatus(null)
     setPreflightResult(null)
     setPhase('selected')
@@ -151,12 +176,19 @@ export function ImportPage(props: {
       setBatches(nextBatches)
       props.onBatchesUpdated?.(nextBatches)
 
-      skipEmptySelectionResetRef.current = true
-      setSelectedFiles([])
-
       const failedFiles = (createdBatch.files ?? [])
         .filter((file) => file.parserStatus !== 'parsed')
         .map((file) => file.fileName)
+      const counts = getBatchCounts(createdBatch)
+      setImportOutcome({
+        batch: createdBatch,
+        ...counts,
+        skippedCount: preflightResult.summary.unsupportedCount + failedFiles.length
+      })
+      setPreflightResult(null)
+      skipEmptySelectionResetRef.current = true
+      setSelectedFiles([])
+
       if (failedFiles.length > 0) {
         setPhase('error')
         setImportStatus({
@@ -176,6 +208,13 @@ export function ImportPage(props: {
         detail: t('import.feedback.rawDetail', { message: asErrorMessage(error) })
       })
     }
+  }
+
+  const handleImportMore = () => {
+    setImportOutcome(null)
+    setPreflightResult(null)
+    setImportStatus(null)
+    setPhase('idle')
   }
 
   const unsupportedItems = preflightResult?.items.filter((item) => item.status === 'unsupported') ?? []
@@ -238,6 +277,28 @@ export function ImportPage(props: {
           <p>{importStatus.summary}</p>
           {importStatus.detail ? <p>{importStatus.detail}</p> : null}
         </div>
+      ) : null}
+      {importOutcome ? (
+        <section aria-label={t('import.outcome.sectionTitle')}>
+          <h2>{outcomeTitle(importOutcome.importedCount, t)}</h2>
+          <p>{t('import.outcome.parsed', { count: importOutcome.parsedCount })}</p>
+          <p>{t('import.outcome.duplicates', { count: importOutcome.duplicateCount })}</p>
+          <p>{t('import.outcome.reviewQueue', { count: importOutcome.reviewCount })}</p>
+          <p>{t('import.outcome.skipped', { count: importOutcome.skippedCount })}</p>
+          <div>
+            <button
+              type="button"
+              onClick={() => {
+                props.onSelectBatch?.(importOutcome.batch.batchId)
+              }}
+            >
+              {t('import.outcome.viewBatchDetail')}
+            </button>
+            <button type="button" onClick={handleImportMore}>
+              {t('import.outcome.importMore')}
+            </button>
+          </div>
+        </section>
       ) : null}
       <BatchListPage batches={batches} onSelectBatch={props.onSelectBatch} />
     </section>

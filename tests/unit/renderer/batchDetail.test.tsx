@@ -46,6 +46,11 @@ describe('BatchDetail', () => {
 
     expect(screen.getByText('Exact duplicates')).toBeInTheDocument()
     expect(screen.getByText('Skipped imports')).toBeInTheDocument()
+    expect(screen.getByText('Batch Summary')).toBeInTheDocument()
+    expect(screen.getByText('Imported: 4')).toBeInTheDocument()
+    expect(screen.getByText('Parsed: 3')).toBeInTheDocument()
+    expect(screen.getByText('Duplicates: 1')).toBeInTheDocument()
+    expect(screen.getByText('Review Queue: 1')).toBeInTheDocument()
     expect(screen.getByText('duplicate-chat-b.json')).toBeInTheDocument()
     expect(screen.getByText('fixture-unsupported.exe')).toBeInTheDocument()
   })

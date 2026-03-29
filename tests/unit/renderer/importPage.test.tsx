@@ -283,6 +283,111 @@ describe('ImportPage', () => {
     expect(selectImportFiles).not.toHaveBeenCalled()
   })
 
+  it('shows import outcome summary and next actions after a completed import', async () => {
+    const onSelectBatch = vi.fn()
+    const createdBatch = {
+      batchId: 'batch-result-1',
+      sourceLabel: '3 files',
+      createdAt: '2026-03-29T09:00:00.000Z',
+      summary: {
+        frozenCount: 3,
+        parsedCount: 2,
+        duplicateCount: 1,
+        reviewCount: 1
+      },
+      files: [
+        {
+          fileId: 'file-result-1',
+          fileName: 'chat.txt',
+          duplicateClass: 'unique',
+          parserStatus: 'parsed',
+          frozenAbsolutePath: '/tmp/chat.txt'
+        },
+        {
+          fileId: 'file-result-2',
+          fileName: 'photo.jpg',
+          duplicateClass: 'duplicate_exact',
+          parserStatus: 'parsed',
+          frozenAbsolutePath: '/tmp/photo.jpg'
+        },
+        {
+          fileId: 'file-result-3',
+          fileName: 'memo.pdf',
+          duplicateClass: 'unique',
+          parserStatus: 'parsed',
+          frozenAbsolutePath: '/tmp/memo.pdf'
+        }
+      ]
+    }
+    const listImportBatches = vi.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([createdBatch])
+    const preflightImportBatch = vi.fn().mockResolvedValue(
+      makePreflightResult([
+        makePreflightItem({
+          fileName: 'chat.txt',
+          sourcePath: '/tmp/chat.txt',
+          status: 'supported'
+        }),
+        makePreflightItem({
+          fileName: 'photo.jpg',
+          sourcePath: '/tmp/photo.jpg',
+          status: 'supported',
+          importKindHint: 'image'
+        }),
+        makePreflightItem({
+          fileName: 'memo.pdf',
+          sourcePath: '/tmp/memo.pdf',
+          status: 'supported',
+          importKindHint: 'document'
+        }),
+        makePreflightItem({
+          fileName: 'tool.exe',
+          sourcePath: '/tmp/tool.exe',
+          status: 'unsupported',
+          importKindHint: 'unknown'
+        })
+      ])
+    )
+
+    vi.stubGlobal('window', {
+      archiveApi: {
+        listImportBatches,
+        selectImportFiles: vi.fn().mockResolvedValue(['/tmp/chat.txt', '/tmp/photo.jpg', '/tmp/memo.pdf', '/tmp/tool.exe']),
+        preflightImportBatch,
+        createImportBatch: vi.fn().mockResolvedValue(createdBatch)
+      }
+    })
+
+    render(<ImportPage onSelectBatch={onSelectBatch} />)
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Choose Files' }))
+      await Promise.resolve()
+    })
+    expect(await screen.findByText('3 supported, 1 unsupported')).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Import Supported Files' }))
+      await Promise.resolve()
+    })
+
+    expect(await screen.findByText('Imported 3 files')).toBeInTheDocument()
+    expect(screen.getByText('Parsed: 2')).toBeInTheDocument()
+    expect(screen.getByText('Duplicates: 1')).toBeInTheDocument()
+    expect(screen.getByText('Review Queue: 1')).toBeInTheDocument()
+    expect(screen.getByText('Skipped / Unsupported: 1')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'View Batch Detail' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Import More' })).toBeInTheDocument()
+    expect(screen.getByText('Imported 3 · Parsed 2 · Duplicates 1 · Review 1')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'View Batch Detail' }))
+    expect(onSelectBatch).toHaveBeenCalledWith('batch-result-1')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Import More' }))
+    expect(screen.queryByText('Imported 3 files')).not.toBeInTheDocument()
+  })
+
   it('keeps dropzone inert while import is disabled in progress', async () => {
     let resolveCreateImportBatch: ((value: unknown) => void) | undefined
     const createImportBatch = vi.fn().mockImplementation(
