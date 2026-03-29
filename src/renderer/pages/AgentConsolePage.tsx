@@ -5,25 +5,16 @@ import type {
   AgentRunRecord,
   AgentTaskKind,
   MemoryWorkspaceScope,
-  RunAgentTaskInput
+  RunAgentTaskInput,
+  RunAgentTaskResult
 } from '../../shared/archiveContracts'
 import { getArchiveApi } from '../archiveApi'
+import { AgentRunTimeline } from '../components/AgentRunTimeline'
 import { useI18n } from '../i18n'
 
 type AgentConsolePageProps = {
   onOpenReviewQueue?: () => void
   onOpenMemoryWorkspace?: (scope: MemoryWorkspaceScope) => void
-}
-
-type AgentConsoleRunMeta = {
-  assignedRoles?: AgentRole[]
-  latestAssistantResponse?: string
-}
-
-type AgentConsoleRunResult = {
-  runId: string
-  status: string
-  assignedRoles?: AgentRole[]
 }
 
 type PendingSubmission = {
@@ -100,14 +91,6 @@ function buildTaskInput(
   } as RunAgentTaskInput
 }
 
-function getLatestAssistantResponse(detail: AgentRunDetail | null) {
-  if (!detail) {
-    return null
-  }
-
-  return [...detail.messages].reverse().find((message) => message.sender === 'agent')?.content ?? null
-}
-
 function summarizePrompt(prompt: string) {
   const trimmed = prompt.trim()
   if (trimmed.length <= 72) {
@@ -117,16 +100,35 @@ function summarizePrompt(prompt: string) {
   return `${trimmed.slice(0, 69)}...`
 }
 
-function inferDisplayRoles(detail: AgentRunDetail | null, runMeta: AgentConsoleRunMeta | undefined) {
-  if (runMeta?.assignedRoles?.length) {
-    return runMeta.assignedRoles
-  }
-
-  if (!detail) {
+function inferDisplayRoles(run: Pick<AgentRunRecord, 'role' | 'assignedRoles'> | AgentRunDetail | null) {
+  if (!run) {
     return []
   }
 
-  return [detail.role]
+  if (run.assignedRoles.length) {
+    return run.assignedRoles
+  }
+
+  return [run.role]
+}
+
+function getComparisonRole(run: Pick<AgentRunRecord, 'role' | 'targetRole'>) {
+  return run.targetRole ?? run.role
+}
+
+function findPreviousComparableRun(
+  runs: AgentRunRecord[],
+  selectedRun: AgentRunDetail | null
+) {
+  if (!selectedRun) {
+    return null
+  }
+
+  const selectedIndex = runs.findIndex((run) => run.runId === selectedRun.runId)
+  const comparisonRole = getComparisonRole(selectedRun)
+  const candidateRuns = selectedIndex >= 0 ? runs.slice(selectedIndex + 1) : runs
+
+  return candidateRuns.find((run) => getComparisonRole(run) === comparisonRole) ?? null
 }
 
 export function AgentConsolePage(props: AgentConsolePageProps) {
@@ -137,7 +139,6 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
   const [runs, setRuns] = useState<AgentRunRecord[]>([])
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [selectedRunDetail, setSelectedRunDetail] = useState<AgentRunDetail | null>(null)
-  const [runMetaById, setRunMetaById] = useState<Record<string, AgentConsoleRunMeta>>({})
   const [pendingSubmission, setPendingSubmission] = useState<PendingSubmission | null>(null)
   const [confirmationToken, setConfirmationToken] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -166,18 +167,6 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
       }
 
       setSelectedRunDetail(detail)
-      const latestAssistantResponse = getLatestAssistantResponse(detail)
-      if (!detail || !latestAssistantResponse) {
-        return
-      }
-
-      setRunMetaById((current) => ({
-        ...current,
-        [detail.runId]: {
-          ...current[detail.runId],
-          latestAssistantResponse
-        }
-      }))
     }).catch((error: unknown) => {
       if (!cancelled) {
         setErrorMessage(error instanceof Error ? error.message : String(error))
@@ -194,16 +183,7 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
     setErrorMessage(null)
 
     try {
-      const result = await archiveApi.runAgentTask(input) as AgentConsoleRunResult
-      if (result.assignedRoles?.length) {
-        setRunMetaById((current) => ({
-          ...current,
-          [result.runId]: {
-            ...current[result.runId],
-            assignedRoles: result.assignedRoles
-          }
-        }))
-      }
+      const result = await archiveApi.runAgentTask(input) as RunAgentTaskResult
       await refreshRuns(result.runId)
       setPendingSubmission(null)
       setConfirmationToken('')
@@ -236,9 +216,10 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
     } as RunAgentTaskInput)
   }
 
-  const selectedRunMeta = selectedRunId ? runMetaById[selectedRunId] : undefined
-  const latestAssistantResponse = selectedRunMeta?.latestAssistantResponse ?? getLatestAssistantResponse(selectedRunDetail)
-  const displayRoles = inferDisplayRoles(selectedRunDetail, selectedRunMeta)
+  const latestAssistantResponse = selectedRunDetail?.latestAssistantResponse ?? null
+  const displayRoles = inferDisplayRoles(selectedRunDetail)
+  const comparisonRun = findPreviousComparableRun(runs, selectedRunDetail)
+  const comparisonRole = selectedRunDetail ? getComparisonRole(selectedRunDetail) : null
   const openReviewVisible = selectedRunDetail?.taskKind?.startsWith('review.') || displayRoles.includes('review')
   const openWorkspaceVisible = selectedRunDetail?.taskKind?.startsWith('workspace.') || displayRoles.includes('workspace')
 
@@ -257,7 +238,7 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
           ) : (
             <ul className="fmAgentHistoryList">
               {runs.map((run) => {
-                const runMeta = runMetaById[run.runId]
+                const runRoles = inferDisplayRoles(run)
                 return (
                   <li key={run.runId}>
                     <button
@@ -268,11 +249,11 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
                     >
                       <span className="fmAgentRunPrompt">{summarizePrompt(run.prompt)}</span>
                       <span className="fmAgentRunMeta">{t('agentConsole.statusLine', { status: run.status })}</span>
-                      {runMeta?.assignedRoles?.length ? (
-                        <span className="fmAgentRunMeta">{t('agentConsole.assignedRolesLine', { roles: runMeta.assignedRoles.join(', ') })}</span>
+                      {runRoles.length ? (
+                        <span className="fmAgentRunMeta">{t('agentConsole.assignedRolesLine', { roles: runRoles.join(', ') })}</span>
                       ) : null}
-                      {runMeta?.latestAssistantResponse ? (
-                        <span className="fmAgentRunMeta">{runMeta.latestAssistantResponse}</span>
+                      {run.latestAssistantResponse ? (
+                        <span className="fmAgentRunMeta">{run.latestAssistantResponse}</span>
                       ) : null}
                     </button>
                   </li>
@@ -354,6 +335,7 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
               <div className="fmAgentDetail">
                 <p>{t('agentConsole.statusLine', { status: selectedRunDetail.status })}</p>
                 <p>{t('agentConsole.assignedRolesLine', { roles: displayRoles.join(', ') || t('common.none') })}</p>
+                <p>{t('agentConsole.targetRoleLine', { role: selectedRunDetail.targetRole ?? selectedRunDetail.role })}</p>
 
                 {(openReviewVisible || openWorkspaceVisible) ? (
                   <div className="fmAgentActionRow">
@@ -372,6 +354,21 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
 
                 <h3>{t('agentConsole.latestAssistantResponseTitle')}</h3>
                 <p>{latestAssistantResponse ?? t('agentConsole.latestAssistantResponseEmpty')}</p>
+
+                {comparisonRun && comparisonRole ? (
+                  <div className="fmAgentCompare">
+                    <h3>{t('agentConsole.comparedWithPreviousRun', { role: comparisonRole })}</h3>
+                    <p>{t('agentConsole.statusLine', { status: comparisonRun.status })}</p>
+                    <p>{t('agentConsole.assignedRolesLine', { roles: inferDisplayRoles(comparisonRun).join(', ') || t('common.none') })}</p>
+                    <p>{comparisonRun.latestAssistantResponse ?? t('agentConsole.latestAssistantResponseEmpty')}</p>
+                  </div>
+                ) : null}
+
+                <AgentRunTimeline
+                  title={t('agentConsole.messageTimelineTitle')}
+                  emptyLabel={t('agentConsole.messageTimelineEmpty')}
+                  messages={selectedRunDetail.messages}
+                />
               </div>
             ) : (
               <p>{t('agentConsole.detailEmpty')}</p>

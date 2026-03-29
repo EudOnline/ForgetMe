@@ -840,6 +840,48 @@ input:focus, textarea:focus, select:focus {
   gap: var(--fm-space-s);
 }
 
+.fmAgentCompare,
+.fmAgentTimeline {
+  display: grid;
+  gap: var(--fm-space-xs);
+  padding-top: var(--fm-space-s);
+  border-top: 1px solid var(--fm-border);
+}
+
+.fmAgentTimelineList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--fm-space-s);
+}
+
+.fmAgentTimelineItem {
+  display: grid;
+  gap: 6px;
+  padding: var(--fm-space-s);
+  border: 1px solid color-mix(in oklch, var(--fm-border) 82%, var(--fm-accent) 18%);
+  border-radius: var(--fm-radius-m);
+  background: color-mix(in oklch, var(--fm-paper-0) 88%, var(--fm-accent-soft) 12%);
+}
+
+.fmAgentTimelineSender {
+  width: fit-content;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--fm-accent) 14%, white 86%);
+  color: var(--fm-ink-1);
+  font-size: var(--fm-text-xs);
+  text-transform: lowercase;
+  letter-spacing: 0.08em;
+}
+
+.fmAgentTimelineContent {
+  margin: 0;
+  color: var(--fm-ink-0);
+  white-space: pre-wrap;
+}
+
 @media (max-width: 960px) {
   .fmAgentConsoleLayout {
     grid-template-columns: 1fr;

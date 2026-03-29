@@ -8,7 +8,10 @@ function buildRunRecord(overrides?: Partial<Record<string, unknown>>) {
   return {
     runId: 'run-1',
     role: 'orchestrator',
-    taskKind: null,
+    taskKind: 'review.summarize_queue',
+    targetRole: 'review',
+    assignedRoles: ['orchestrator', 'review'],
+    latestAssistantResponse: '1 pending items across 1 conflict groups.',
     status: 'completed',
     prompt: 'Summarize the highest-priority pending review work',
     confirmationToken: null,
@@ -57,7 +60,13 @@ describe('AgentConsolePage', () => {
         listImportBatches: vi.fn().mockResolvedValue([]),
         listAgentRuns: vi.fn().mockResolvedValue([]),
         getAgentRun: vi.fn().mockResolvedValue(null),
-        runAgentTask: vi.fn().mockResolvedValue({ runId: '', status: 'queued' })
+        runAgentTask: vi.fn().mockResolvedValue({
+          runId: '',
+          status: 'queued',
+          targetRole: null,
+          assignedRoles: [],
+          latestAssistantResponse: null
+        })
       }
     })
 
@@ -68,16 +77,55 @@ describe('AgentConsolePage', () => {
     expect(await screen.findByRole('heading', { name: 'Agent Console' })).toBeInTheDocument()
   })
 
-  it('submits prompts and renders run status, assigned roles, and the latest assistant response', async () => {
+  it('renders persisted replay metadata, a chronological timeline, and a previous-run comparison', async () => {
+    const currentRun = buildRunRecord()
+    const previousComparableRun = buildRunRecord({
+      runId: 'run-0',
+      createdAt: '2026-03-28T23:50:00.000Z',
+      updatedAt: '2026-03-28T23:50:00.000Z',
+      latestAssistantResponse: '0 pending items across 0 conflict groups.'
+    })
     const runAgentTask = vi.fn().mockResolvedValue({
       runId: 'run-1',
       status: 'completed',
-      assignedRoles: ['orchestrator', 'review']
+      targetRole: null,
+      assignedRoles: [],
+      latestAssistantResponse: null
     })
-    const listAgentRuns = vi.fn().mockResolvedValue([
-      buildRunRecord()
-    ])
-    const getAgentRun = vi.fn().mockResolvedValue(buildRunDetail())
+    const listAgentRuns = vi.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        currentRun,
+        previousComparableRun
+      ])
+    const getAgentRun = vi.fn().mockResolvedValue(buildRunDetail({
+      messages: [
+        {
+          messageId: 'message-1',
+          runId: 'run-1',
+          ordinal: 1,
+          sender: 'system',
+          content: 'Orchestrator delegated review.summarize_queue to review.',
+          createdAt: '2026-03-29T00:00:00.000Z'
+        },
+        {
+          messageId: 'message-2',
+          runId: 'run-1',
+          ordinal: 2,
+          sender: 'tool',
+          content: 'Loaded 1 pending workbench items and 1 conflict groups.',
+          createdAt: '2026-03-29T00:00:00.500Z'
+        },
+        {
+          messageId: 'message-3',
+          runId: 'run-1',
+          ordinal: 3,
+          sender: 'agent',
+          content: '1 pending items across 1 conflict groups.',
+          createdAt: '2026-03-29T00:00:01.000Z'
+        }
+      ]
+    }))
 
     Object.assign(window, {
       archiveApi: {
@@ -106,19 +154,29 @@ describe('AgentConsolePage', () => {
     expect((await screen.findAllByText('Status: completed')).length).toBeGreaterThan(0)
     expect(screen.getAllByText('Assigned roles: orchestrator, review').length).toBeGreaterThan(0)
     expect(screen.getAllByText('1 pending items across 1 conflict groups.').length).toBeGreaterThan(0)
+    expect(screen.getByText('Target role: review')).toBeInTheDocument()
+    expect(screen.getByText('Compared with previous review run')).toBeInTheDocument()
+    expect(screen.getByText('Message timeline')).toBeInTheDocument()
+    expect(screen.getByText('tool')).toBeInTheDocument()
+    expect(screen.getByText('agent')).toBeInTheDocument()
   })
 
   it('shows a confirmation affordance before resubmitting destructive review actions', async () => {
     const runAgentTask = vi.fn().mockResolvedValue({
       runId: 'run-apply-1',
       status: 'completed',
-      assignedRoles: ['review']
+      targetRole: 'review',
+      assignedRoles: ['review'],
+      latestAssistantResponse: 'Applied safe group group-ready with 2 items.'
     })
     const listAgentRuns = vi.fn().mockResolvedValue([
       buildRunRecord({
         runId: 'run-apply-1',
         role: 'review',
         taskKind: 'review.apply_safe_group',
+        targetRole: 'review',
+        assignedRoles: ['review'],
+        latestAssistantResponse: 'Applied safe group group-ready with 2 items.',
         prompt: 'Approve safe group group-ready'
       })
     ])
