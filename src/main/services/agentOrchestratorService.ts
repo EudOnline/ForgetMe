@@ -26,9 +26,11 @@ const defaultTaskKindByRole: Record<'ingestion' | 'review' | 'workspace' | 'gove
   governance: 'governance.propose_policy_update'
 }
 
+const reviewQueueItemIdPattern = /\b(?:rq-[a-z0-9-]+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/i
+
 function inferReviewTaskKindFromPrompt(prompt: string): AgentTaskKind | null {
   const value = prompt.toLowerCase()
-  const hasItemId = /\brq-[a-z0-9-]+\b/.test(value)
+  const hasItemId = reviewQueueItemIdPattern.test(value)
   const hasApproveVerb = /\bapprove(?:d|ing)?\b/.test(value)
   const hasRejectVerb = /\breject(?:ed|ing)?\b/.test(value)
 

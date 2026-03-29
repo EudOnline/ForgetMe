@@ -210,6 +210,46 @@ describe('review agent service', () => {
     db.close()
   })
 
+  it('routes uuid-based approve item prompts to approveReviewItem', async () => {
+    const db = setupDatabase()
+    const queueItemId = '123e4567-e89b-12d3-a456-426614174000'
+    const approveReviewItem = vi.fn().mockReturnValue({
+      status: 'approved',
+      journalId: 'journal-approve-uuid-1',
+      queueItemId,
+      candidateId: 'candidate-uuid-1'
+    })
+    const rejectReviewItem = vi.fn()
+    const agent = createReviewAgentService({
+      approveReviewItem,
+      rejectReviewItem
+    })
+
+    const result = await agent.execute({
+      db,
+      run: createRunRecord({
+        taskKind: 'review.apply_item_decision'
+      }),
+      input: {
+        prompt: `Approve review item ${queueItemId}`,
+        role: 'review',
+        taskKind: 'review.apply_item_decision',
+        confirmationToken: 'confirm-item-approve-uuid'
+      },
+      taskKind: 'review.apply_item_decision',
+      assignedRoles: ['review']
+    })
+
+    expect(approveReviewItem).toHaveBeenCalledWith(db, {
+      queueItemId,
+      actor: 'agent:review'
+    })
+    expect(rejectReviewItem).not.toHaveBeenCalled()
+    expect(result.messages?.at(-1)?.content).toContain(queueItemId)
+
+    db.close()
+  })
+
   it('routes reject item prompts to rejectReviewItem with a stable default note', async () => {
     const db = setupDatabase()
     const approveReviewItem = vi.fn()

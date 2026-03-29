@@ -22,6 +22,8 @@ type ReviewAgentDependencies = {
   rejectReviewItem?: typeof rejectReviewItem
 }
 
+const reviewQueueItemIdPattern = /\b(?:rq-[A-Za-z0-9-]+|[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})\b/i
+
 function extractGroupKey(prompt: string) {
   const match = prompt.match(/\b(group-[A-Za-z0-9-]+)\b/i)
   if (!match) {
@@ -36,7 +38,7 @@ function summarizeQueue(items: ReviewWorkbenchListItem[], groups: ReviewConflict
 }
 
 function extractQueueItemId(prompt: string) {
-  const match = prompt.match(/\b(rq-[A-Za-z0-9-]+)\b/i)
+  const match = prompt.match(reviewQueueItemIdPattern)
   if (!match) {
     throw new Error('Missing queue item id in prompt')
   }
