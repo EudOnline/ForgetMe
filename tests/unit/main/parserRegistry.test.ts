@@ -50,4 +50,21 @@ describe('parseFrozenFile', () => {
       expect(docx.summary.previewText).toContain('ForgetMe')
     }
   })
+
+  it('routes .txt to document parser when preferred kind is document', async () => {
+    const textDoc = await parseFrozenFile(path.resolve('tests/fixtures/imports/sample-chat.txt'), {
+      preferredKind: 'document'
+    })
+
+    expect(textDoc.kind).toBe('document')
+    if (textDoc.kind === 'document') {
+      expect(textDoc.summary.previewText).toContain('Alice: Hey Bob')
+    }
+  })
+
+  it('throws for unsupported extensions', async () => {
+    await expect(parseFrozenFile(path.resolve('tests/fixtures/imports/sample-data.zip'))).rejects.toThrow(
+      'Unsupported file type: .zip'
+    )
+  })
 })

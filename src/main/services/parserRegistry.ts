@@ -4,14 +4,14 @@ import { parseTextChat } from './parsers/textChatParser'
 import { parseImage } from './parsers/imageParser'
 import { parseDocument } from './parsers/documentParser'
 import {
+  isSupportedImportExtension,
   SUPPORTED_DOCUMENT_IMPORT_EXTENSIONS,
-  SUPPORTED_IMAGE_IMPORT_EXTENSIONS,
-  SUPPORTED_IMPORT_EXTENSIONS
+  SUPPORTED_IMAGE_IMPORT_EXTENSIONS
 } from '../../shared/archiveTypes'
 
 export async function parseFrozenFile(filePath: string, options?: { preferredKind?: 'chat' | 'document' }) {
   const extension = path.extname(filePath).toLowerCase()
-  if (!SUPPORTED_IMPORT_EXTENSIONS.includes(extension as (typeof SUPPORTED_IMPORT_EXTENSIONS)[number])) {
+  if (!isSupportedImportExtension(extension)) {
     throw new Error(`Unsupported file type: ${extension}`)
   }
 

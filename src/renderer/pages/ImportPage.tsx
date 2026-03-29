@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ImportBatchSummary } from '../../shared/archiveContracts'
-import { SUPPORTED_IMPORT_EXTENSIONS } from '../../shared/archiveTypes'
+import { isSupportedImportExtension } from '../../shared/archiveTypes'
 import { getArchiveApi } from '../archiveApi'
 import { useI18n } from '../i18n'
 import { BatchListPage } from './BatchListPage'
 import { ImportDropzone } from '../components/ImportDropzone'
-
-const SUPPORTED_IMPORT_EXTENSION_SET = new Set(SUPPORTED_IMPORT_EXTENSIONS)
 
 function basename(filePath: string) {
   return filePath.split(/[/\\]/).filter(Boolean).at(-1) ?? filePath
@@ -20,7 +18,7 @@ function extension(filePath: string) {
 
 function looksUnsupported(filePath: string) {
   const ext = extension(filePath)
-  return ext.length > 0 && !SUPPORTED_IMPORT_EXTENSION_SET.has(ext as (typeof SUPPORTED_IMPORT_EXTENSIONS)[number])
+  return !isSupportedImportExtension(ext)
 }
 
 function asErrorMessage(error: unknown) {
