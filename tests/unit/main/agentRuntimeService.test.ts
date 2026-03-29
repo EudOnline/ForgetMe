@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { AgentRunRecord, AgentTaskKind, RunAgentTaskInput } from '../../../src/shared/archiveContracts'
+import type { AgentRole, AgentTaskKind, RunAgentTaskInput } from '../../../src/shared/archiveContracts'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
 import { createAgentRuntime } from '../../../src/main/services/agentRuntimeService'
 import type { AgentAdapter } from '../../../src/main/services/agents/agentTypes'
@@ -148,7 +148,7 @@ describe('agent runtime service', () => {
       prompt: 'Apply this safe group action now.',
       role: 'orchestrator',
       taskKind: 'review.apply_safe_group'
-    })
+    } as unknown as RunAgentTaskInput)
     const detail = runtime.getRun({ runId: result.runId })
 
     expect(result.status).toBe('failed')
@@ -166,13 +166,15 @@ describe('agent runtime service', () => {
 
   it('passes replay-metadata-synchronized run state into adapters', async () => {
     const db = setupDatabase()
-    let adapterRun: AgentRunRecord | null = null
-    let adapterAssignedRoles: AgentRunRecord['assignedRoles'] = []
+    let adapterTargetRole: AgentRole | null = null
+    let adapterRunAssignedRoles: AgentRole[] = []
+    let adapterAssignedRoles: AgentRole[] = []
     const workspaceAdapter: AgentAdapter = {
       role: 'workspace',
       canHandle: (taskKind) => taskKind === 'workspace.ask_memory',
       execute: async (context) => {
-        adapterRun = context.run
+        adapterTargetRole = context.run.targetRole
+        adapterRunAssignedRoles = [...context.run.assignedRoles]
         adapterAssignedRoles = context.assignedRoles
         return {
           messages: [
@@ -196,9 +198,9 @@ describe('agent runtime service', () => {
     })
 
     expect(result.status).toBe('completed')
-    expect(adapterRun?.targetRole).toBe('workspace')
-    expect(adapterRun?.assignedRoles).toEqual(['orchestrator', 'workspace'])
-    expect(adapterRun?.assignedRoles).toEqual(adapterAssignedRoles)
+    expect(adapterTargetRole).toBe('workspace')
+    expect(adapterRunAssignedRoles).toEqual(['orchestrator', 'workspace'])
+    expect(adapterRunAssignedRoles).toEqual(adapterAssignedRoles)
 
     db.close()
   })

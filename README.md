@@ -272,12 +272,14 @@ npm run build
 
 - `orchestrator` delegates user goals into the safest matching role instead of bypassing existing services
 - `ingestion` plans imports, reruns enrichment, and summarizes document evidence
-- `review` summarizes queue pressure, suggests safe-group actions, and keeps destructive review actions confirmation-gated
+- `review` summarizes queue pressure, suggests safe-group actions, executes item-level approve/reject decisions through the existing review queue service, and keeps destructive review actions confirmation-gated
 - `workspace` reuses `Memory Workspace`, compare, and approved-draft publication flows
 - `governance` records operational feedback, summarizes failed runs, and drafts policy versions without auto-activation
 
-Agent runs, agent messages, operational memories, and policy drafts are persisted in SQLite so the console can replay recent work without inventing a second source of truth.
+Agent runs, agent messages, operational memories, and policy drafts are persisted in SQLite so the console can replay recent work without inventing a second source of truth. Persisted run metadata now includes delegated role assignment and the latest assistant summary so replay stays durable across navigation and app relaunches.
+`role` records who initiated execution, while `targetRole` records which role actually handled delegated work (for example, an `orchestrator` run can target `review`).
 Approved truth remains review-gated: agents do not directly mutate approved fact tables, and high-risk review actions still require an explicit confirmation token.
+Phase scope remains local-first: this slice still does not introduce a background autonomous scheduler.
 
 ### Agent Traffic via LiteLLM
 

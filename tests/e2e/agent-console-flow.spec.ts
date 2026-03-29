@@ -34,6 +34,7 @@ test('agent console runs review and workspace tasks and links back into existing
   await page.getByLabel('Agent prompt').fill('Summarize the highest-priority pending review work')
   await page.getByRole('button', { name: 'Run agent task' }).click()
   await expect(page.getByText('Assigned roles: orchestrator, review').first()).toBeVisible()
+  await expect(page.getByText('Target role: review')).toBeVisible()
   await expect(page.getByText(/pending items across .* conflict groups/i).first()).toBeVisible()
   await page.getByRole('button', { name: 'Open Review Queue' }).click()
   await expect(page.getByRole('heading', { name: 'Review Queue' })).toBeVisible()

@@ -10,7 +10,7 @@
     "preview": "electron-vite preview",
     "test:unit": "vitest run",
     "test:e2e": "npm run build && playwright test",
-    "test:e2e:agent": "npm run test:e2e -- tests/e2e/agent-console-flow.spec.ts",
+    "test:e2e:agent": "npm run test:e2e -- tests/e2e/agent-console-flow.spec.ts tests/e2e/agent-console-replay-and-review-item-flow.spec.ts",
     "test:smoke:release": "npm run test:e2e -- tests/e2e/import-batch.spec.ts tests/e2e/person-review-flow.spec.ts tests/e2e/memory-workspace-flow.spec.ts tests/e2e/memory-workspace-approved-draft-hosted-share-link-flow.spec.ts",
     "verify:release": "npm run test:typecheck && npm run test:unit && npm run test:smoke:release && npm run build",
     "typecheck:app": "tsc -p tsconfig.app.json --noEmit",
