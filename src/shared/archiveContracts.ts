@@ -1425,13 +1425,15 @@ export type AgentRole =
   | 'workspace'
   | 'governance'
 
-export type AgentTaskKind =
-  | 'orchestrator.plan_next_action'
-  | 'ingestion.import_batch'
-  | 'review.apply_safe_group'
-  | 'review.apply_item_decision'
-  | 'workspace.ask_memory'
-  | 'governance.propose_policy_update'
+export type AgentTaskKindByRole = {
+  orchestrator: 'orchestrator.plan_next_action'
+  ingestion: 'ingestion.import_batch'
+  review: 'review.apply_safe_group' | 'review.apply_item_decision'
+  workspace: 'workspace.ask_memory'
+  governance: 'governance.propose_policy_update'
+}
+
+export type AgentTaskKind = AgentTaskKindByRole[AgentRole]
 
 export type AgentRunStatus =
   | 'queued'
@@ -1484,11 +1486,13 @@ export type AgentPolicyVersionRecord = {
 }
 
 export type RunAgentTaskInput = {
-  prompt: string
-  role: AgentRole
-  taskKind?: AgentTaskKind
-  confirmationToken?: string
-}
+  [Role in AgentRole]: {
+    prompt: string
+    role: Role
+    taskKind?: AgentTaskKindByRole[Role]
+    confirmationToken?: string
+  }
+}[AgentRole]
 
 export type RunAgentTaskResult = {
   runId: string
