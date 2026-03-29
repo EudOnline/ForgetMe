@@ -101,7 +101,11 @@ describe('agent runtime shared contracts', () => {
       | 'review.apply_safe_group'
       | 'review.apply_item_decision'
     >()
-    expectTypeOf<WorkspaceTaskKind>().toEqualTypeOf<'workspace.ask_memory'>()
-    expectTypeOf<GovernanceTaskKind>().toEqualTypeOf<'governance.propose_policy_update'>()
+    expectTypeOf<WorkspaceTaskKind>().toEqualTypeOf<
+      'workspace.ask_memory' | 'workspace.compare' | 'workspace.publish_draft'
+    >()
+    expectTypeOf<GovernanceTaskKind>().toEqualTypeOf<
+      'governance.record_feedback' | 'governance.summarize_failures' | 'governance.propose_policy_update'
+    >()
   })
 })

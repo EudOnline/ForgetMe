@@ -40,6 +40,10 @@ export const agentTaskKindSchema = z.enum([
   'review.apply_safe_group',
   'review.apply_item_decision',
   'workspace.ask_memory',
+  'workspace.compare',
+  'workspace.publish_draft',
+  'governance.record_feedback',
+  'governance.summarize_failures',
   'governance.propose_policy_update'
 ])
 
@@ -69,8 +73,16 @@ const allowedTaskKindsByRole: Record<AgentRole, readonly AgentTaskKind[]> = {
     'review.apply_safe_group',
     'review.apply_item_decision'
   ],
-  workspace: ['workspace.ask_memory'],
-  governance: ['governance.propose_policy_update']
+  workspace: [
+    'workspace.ask_memory',
+    'workspace.compare',
+    'workspace.publish_draft'
+  ],
+  governance: [
+    'governance.record_feedback',
+    'governance.summarize_failures',
+    'governance.propose_policy_update'
+  ]
 } as const
 
 export const runAgentTaskInputSchema = z.object({
