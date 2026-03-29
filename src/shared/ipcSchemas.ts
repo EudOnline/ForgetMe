@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { AgentTaskKind } from './archiveContracts'
+import type { AgentRole, AgentTaskKind } from './archiveContracts'
 
 export const createImportBatchInputSchema = z.object({
   sourcePaths: z.array(z.string()).min(1),
@@ -52,12 +52,31 @@ const destructiveReviewTaskKinds: ReadonlySet<AgentTaskKind> = new Set([
   'review.apply_item_decision'
 ])
 
+const allowedTaskKindsByRole: Record<AgentRole, readonly AgentTaskKind[]> = {
+  orchestrator: ['orchestrator.plan_next_action'],
+  ingestion: ['ingestion.import_batch'],
+  review: ['review.apply_safe_group', 'review.apply_item_decision'],
+  workspace: ['workspace.ask_memory'],
+  governance: ['governance.propose_policy_update']
+} as const
+
 export const runAgentTaskInputSchema = z.object({
   prompt: z.string().min(1),
   role: agentRoleSchema,
   taskKind: agentTaskKindSchema.optional(),
   confirmationToken: z.string().min(1).optional()
 }).superRefine((value, ctx) => {
+  if (value.taskKind) {
+    const allowedTaskKinds = allowedTaskKindsByRole[value.role]
+    if (!allowedTaskKinds.includes(value.taskKind)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'taskKind is not allowed for the selected role',
+        path: ['taskKind']
+      })
+    }
+  }
+
   if (value.taskKind && destructiveReviewTaskKinds.has(value.taskKind) && !value.confirmationToken) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,

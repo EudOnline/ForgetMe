@@ -24,7 +24,7 @@ describe('agent persistence service', () => {
     const db = setupDatabase()
 
     const run = createAgentRun(db, {
-      role: 'orchestrator',
+      role: 'ingestion',
       taskKind: 'ingestion.import_batch',
       prompt: 'Import the latest chat export'
     })

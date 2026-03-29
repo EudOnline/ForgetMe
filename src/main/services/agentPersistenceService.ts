@@ -53,6 +53,19 @@ type AgentPolicyVersionRow = {
   createdAt: string
 }
 
+export type CreateAgentRunInput = {
+  runId?: string
+  role: AgentRole
+  taskKind?: AgentTaskKind | null
+  prompt: string
+  confirmationToken?: string | null
+  status?: AgentRunStatus
+  policyVersion?: string | null
+  errorMessage?: string | null
+  createdAt?: string
+  updatedAt?: string
+}
+
 function inTransaction<T>(db: ArchiveDatabase, callback: () => T) {
   db.exec('begin immediate')
   try {
@@ -163,18 +176,10 @@ function loadAgentMemoryRow(db: ArchiveDatabase, input: {
   ).get(input.role, input.memoryKey) as AgentMemoryRow | undefined
 }
 
-export function createAgentRun(db: ArchiveDatabase, input: {
-  runId?: string
-  role: AgentRole
-  taskKind?: AgentTaskKind | null
-  status?: AgentRunStatus
-  prompt: string
-  confirmationToken?: string | null
-  policyVersion?: string | null
-  errorMessage?: string | null
-  createdAt?: string
-  updatedAt?: string
-}): AgentRunRecord {
+export function createAgentRun(
+  db: ArchiveDatabase,
+  input: CreateAgentRunInput
+): AgentRunRecord {
   const createdAt = input.createdAt ?? new Date().toISOString()
   const updatedAt = input.updatedAt ?? createdAt
   const runId = input.runId ?? crypto.randomUUID()
