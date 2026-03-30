@@ -249,10 +249,12 @@ export function createAgentRuntime(input: CreateAgentRuntimeInput): AgentRuntime
         : suggestion.taskInput
       const result = await this.runTask(taskInput)
 
-      markAgentSuggestionExecuted(input.db, {
-        suggestionId: suggestion.suggestionId,
-        runId: result.runId
-      })
+      if (result.status === 'completed') {
+        markAgentSuggestionExecuted(input.db, {
+          suggestionId: suggestion.suggestionId,
+          runId: result.runId
+        })
+      }
 
       return result
     }

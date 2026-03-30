@@ -305,6 +305,44 @@ describe('agent runtime service', () => {
     db.close()
   })
 
+  it('keeps a suggestion in suggested state when runSuggestion fails before execution completes', async () => {
+    const db = setupDatabase()
+    const runtime = createAgentRuntime({
+      db,
+      adapters: []
+    })
+
+    const guardedSuggestion = upsertAgentSuggestion(db, {
+      triggerKind: 'review.safe_group_available',
+      role: 'review',
+      taskKind: 'review.apply_safe_group',
+      taskInput: {
+        role: 'review',
+        taskKind: 'review.apply_safe_group',
+        prompt: 'Apply safe group group-1 now.'
+      },
+      dedupeKey: 'review.safe-group::requires-confirmation',
+      sourceRunId: null,
+      observedAt: '2026-03-30T00:12:00.000Z'
+    })
+
+    const result = await runtime.runSuggestion({
+      suggestionId: guardedSuggestion.suggestionId
+    })
+    const suggestedRows = runtime.listSuggestions({
+      status: 'suggested'
+    })
+    const executedRows = runtime.listSuggestions({
+      status: 'executed'
+    })
+
+    expect(result?.status).toBe('failed')
+    expect(suggestedRows.map((item) => item.suggestionId)).toContain(guardedSuggestion.suggestionId)
+    expect(executedRows).toEqual([])
+
+    db.close()
+  })
+
   it('infers review.apply_item_decision for approve/reject prompts with explicit review item ids', async () => {
     const db = setupDatabase()
     let delegatedTaskKind: AgentTaskKind | null = null
