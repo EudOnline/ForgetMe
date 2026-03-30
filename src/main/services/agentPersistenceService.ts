@@ -7,11 +7,17 @@ import type {
   AgentRunDetail,
   AgentRunRecord,
   AgentRunStatus,
+  AgentSuggestionRecord,
+  AgentSuggestionStatus,
   AgentTaskKind,
+  AgentTriggerKind,
+  DismissAgentSuggestionInput,
   GetAgentRunInput,
   ListAgentMemoriesInput,
+  ListAgentSuggestionsInput,
   ListAgentPolicyVersionsInput,
-  ListAgentRunsInput
+  ListAgentRunsInput,
+  RunAgentTaskInput
 } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
 
@@ -57,6 +63,21 @@ type AgentPolicyVersionRow = {
   createdAt: string
 }
 
+type AgentSuggestionRow = {
+  id: string
+  triggerKind: AgentTriggerKind
+  status: AgentSuggestionStatus
+  role: AgentRole
+  taskKind: AgentTaskKind
+  taskInputJson: string
+  dedupeKey: string
+  sourceRunId: string | null
+  executedRunId: string | null
+  createdAt: string
+  updatedAt: string
+  lastObservedAt: string
+}
+
 export type CreateAgentRunInput = {
   runId?: string
   role: AgentRole
@@ -71,6 +92,17 @@ export type CreateAgentRunInput = {
   errorMessage?: string | null
   createdAt?: string
   updatedAt?: string
+}
+
+export type UpsertAgentSuggestionInput = {
+  suggestionId?: string
+  triggerKind: AgentTriggerKind
+  role: AgentRole
+  taskKind: AgentTaskKind
+  taskInput: RunAgentTaskInput
+  dedupeKey: string
+  sourceRunId: string | null
+  observedAt?: string
 }
 
 function inTransaction<T>(db: ArchiveDatabase, callback: () => T) {
@@ -164,6 +196,32 @@ function mapAgentPolicyVersionRow(row: AgentPolicyVersionRow): AgentPolicyVersio
   }
 }
 
+function parseTaskInputJson(rawValue: string): RunAgentTaskInput {
+  const parsed = JSON.parse(rawValue) as unknown
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('invalid agent suggestion task input')
+  }
+
+  return parsed as RunAgentTaskInput
+}
+
+function mapAgentSuggestionRow(row: AgentSuggestionRow): AgentSuggestionRecord {
+  return {
+    suggestionId: row.id,
+    triggerKind: row.triggerKind,
+    status: row.status,
+    role: row.role,
+    taskKind: row.taskKind,
+    taskInput: parseTaskInputJson(row.taskInputJson),
+    dedupeKey: row.dedupeKey,
+    sourceRunId: row.sourceRunId,
+    executedRunId: row.executedRunId,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    lastObservedAt: row.lastObservedAt
+  }
+}
+
 function loadAgentRunRow(db: ArchiveDatabase, runId: string) {
   return db.prepare(
     `select
@@ -216,6 +274,46 @@ function loadAgentMemoryRow(db: ArchiveDatabase, input: {
      where role = ?
        and memory_key = ?`
   ).get(input.role, input.memoryKey) as AgentMemoryRow | undefined
+}
+
+function loadAgentSuggestionRow(db: ArchiveDatabase, suggestionId: string) {
+  return db.prepare(
+    `select
+      id,
+      trigger_kind as triggerKind,
+      status,
+      role,
+      task_kind as taskKind,
+      task_input_json as taskInputJson,
+      dedupe_key as dedupeKey,
+      source_run_id as sourceRunId,
+      executed_run_id as executedRunId,
+      created_at as createdAt,
+      updated_at as updatedAt,
+      last_observed_at as lastObservedAt
+     from agent_suggestions
+     where id = ?`
+  ).get(suggestionId) as AgentSuggestionRow | undefined
+}
+
+function loadAgentSuggestionRowByDedupeKey(db: ArchiveDatabase, dedupeKey: string) {
+  return db.prepare(
+    `select
+      id,
+      trigger_kind as triggerKind,
+      status,
+      role,
+      task_kind as taskKind,
+      task_input_json as taskInputJson,
+      dedupe_key as dedupeKey,
+      source_run_id as sourceRunId,
+      executed_run_id as executedRunId,
+      created_at as createdAt,
+      updated_at as updatedAt,
+      last_observed_at as lastObservedAt
+     from agent_suggestions
+     where dedupe_key = ?`
+  ).get(dedupeKey) as AgentSuggestionRow | undefined
 }
 
 export function createAgentRun(
@@ -537,4 +635,131 @@ export function listAgentPolicyVersions(
       return true
     })
     .map(mapAgentPolicyVersionRow)
+}
+
+export function upsertAgentSuggestion(
+  db: ArchiveDatabase,
+  input: UpsertAgentSuggestionInput
+): AgentSuggestionRecord {
+  const suggestionId = input.suggestionId ?? crypto.randomUUID()
+  const observedAt = input.observedAt ?? new Date().toISOString()
+  const taskInputJson = JSON.stringify(input.taskInput)
+
+  db.prepare(
+    `insert into agent_suggestions (
+      id,
+      trigger_kind,
+      status,
+      role,
+      task_kind,
+      task_input_json,
+      dedupe_key,
+      source_run_id,
+      executed_run_id,
+      created_at,
+      updated_at,
+      last_observed_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    on conflict(dedupe_key) do update set
+      trigger_kind = excluded.trigger_kind,
+      role = excluded.role,
+      task_kind = excluded.task_kind,
+      task_input_json = excluded.task_input_json,
+      source_run_id = excluded.source_run_id,
+      updated_at = excluded.updated_at,
+      last_observed_at = excluded.last_observed_at`
+  ).run(
+    suggestionId,
+    input.triggerKind,
+    'suggested',
+    input.role,
+    input.taskKind,
+    taskInputJson,
+    input.dedupeKey,
+    input.sourceRunId,
+    null,
+    observedAt,
+    observedAt,
+    observedAt
+  )
+
+  return mapAgentSuggestionRow(loadAgentSuggestionRowByDedupeKey(db, input.dedupeKey)!)
+}
+
+export function listAgentSuggestions(
+  db: ArchiveDatabase,
+  input: ListAgentSuggestionsInput = {}
+): AgentSuggestionRecord[] {
+  const rows = db.prepare(
+    `select
+      id,
+      trigger_kind as triggerKind,
+      status,
+      role,
+      task_kind as taskKind,
+      task_input_json as taskInputJson,
+      dedupe_key as dedupeKey,
+      source_run_id as sourceRunId,
+      executed_run_id as executedRunId,
+      created_at as createdAt,
+      updated_at as updatedAt,
+      last_observed_at as lastObservedAt
+     from agent_suggestions
+     order by last_observed_at desc, updated_at desc, created_at desc, id asc`
+  ).all() as AgentSuggestionRow[]
+
+  const filtered = rows.filter((row) => {
+    if (input.status && row.status !== input.status) {
+      return false
+    }
+
+    if (input.role && row.role !== input.role) {
+      return false
+    }
+
+    return true
+  })
+
+  return filtered
+    .slice(0, input.limit ?? filtered.length)
+    .map(mapAgentSuggestionRow)
+}
+
+export function getAgentSuggestion(
+  db: ArchiveDatabase,
+  input: { suggestionId: string }
+): AgentSuggestionRecord | null {
+  const row = loadAgentSuggestionRow(db, input.suggestionId)
+  return row ? mapAgentSuggestionRow(row) : null
+}
+
+export function dismissAgentSuggestion(
+  db: ArchiveDatabase,
+  input: DismissAgentSuggestionInput
+): AgentSuggestionRecord | null {
+  const updatedAt = new Date().toISOString()
+  db.prepare(
+    `update agent_suggestions
+     set status = ?,
+         updated_at = ?
+     where id = ?`
+  ).run('dismissed', updatedAt, input.suggestionId)
+
+  return getAgentSuggestion(db, { suggestionId: input.suggestionId })
+}
+
+export function markAgentSuggestionExecuted(
+  db: ArchiveDatabase,
+  input: { suggestionId: string; runId: string }
+): AgentSuggestionRecord | null {
+  const updatedAt = new Date().toISOString()
+  db.prepare(
+    `update agent_suggestions
+     set status = ?,
+         executed_run_id = ?,
+         updated_at = ?
+     where id = ?`
+  ).run('executed', input.runId, updatedAt, input.suggestionId)
+
+  return getAgentSuggestion(db, { suggestionId: input.suggestionId })
 }

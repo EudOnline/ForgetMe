@@ -1522,6 +1522,31 @@ export type AgentPolicyVersionRecord = {
   createdAt: string
 }
 
+export type AgentTriggerKind =
+  | 'governance.failed_runs_detected'
+  | 'review.safe_group_available'
+  | 'ingestion.failed_enrichment_job'
+
+export type AgentSuggestionStatus =
+  | 'suggested'
+  | 'dismissed'
+  | 'executed'
+
+export type AgentSuggestionRecord = {
+  suggestionId: string
+  triggerKind: AgentTriggerKind
+  status: AgentSuggestionStatus
+  role: AgentRole
+  taskKind: AgentTaskKind
+  taskInput: RunAgentTaskInput
+  dedupeKey: string
+  sourceRunId: string | null
+  executedRunId: string | null
+  createdAt: string
+  updatedAt: string
+  lastObservedAt: string
+}
+
 export type RunAgentTaskInput = {
   [Role in AgentRole]: {
     prompt: string
@@ -1566,6 +1591,21 @@ export type ListAgentPolicyVersionsInput = {
   policyKey?: string
 }
 
+export type ListAgentSuggestionsInput = {
+  status?: AgentSuggestionStatus
+  role?: AgentRole
+  limit?: number
+}
+
+export type DismissAgentSuggestionInput = {
+  suggestionId: string
+}
+
+export type RunAgentSuggestionInput = {
+  suggestionId: string
+  confirmationToken?: string
+}
+
 export interface ArchiveApi {
   selectImportFiles: () => Promise<string[]>
   selectBackupExportDestination: () => Promise<string | null>
@@ -1582,6 +1622,9 @@ export interface ArchiveApi {
   getAgentRun: (input: GetAgentRunInput) => Promise<AgentRunDetail | null>
   listAgentMemories: (input?: ListAgentMemoriesInput) => Promise<AgentMemoryRecord[]>
   listAgentPolicyVersions: (input?: ListAgentPolicyVersionsInput) => Promise<AgentPolicyVersionRecord[]>
+  listAgentSuggestions: (input?: ListAgentSuggestionsInput) => Promise<AgentSuggestionRecord[]>
+  dismissAgentSuggestion: (input: DismissAgentSuggestionInput) => Promise<AgentSuggestionRecord | null>
+  runAgentSuggestion: (input: RunAgentSuggestionInput) => Promise<RunAgentTaskResult | null>
   listImportBatches: () => Promise<ImportBatchSummary[]>
   getImportBatch: (batchId: string) => Promise<ImportBatchSummary | null>
   searchArchive: (input: { query?: string; fileKinds?: string[]; batchId?: string; duplicateClass?: string; personName?: string }) => Promise<ArchiveSearchResult[]>

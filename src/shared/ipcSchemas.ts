@@ -59,6 +59,12 @@ const agentRunStatusSchema = z.enum([
   'cancelled'
 ])
 
+const agentSuggestionStatusSchema = z.enum([
+  'suggested',
+  'dismissed',
+  'executed'
+])
+
 const destructiveReviewTaskKinds: ReadonlySet<AgentTaskKind> = new Set([
   'review.apply_safe_group',
   'review.apply_item_decision'
@@ -136,6 +142,21 @@ export const listAgentPolicyVersionsInputSchema = z.object({
   role: agentRoleSchema.optional(),
   policyKey: z.string().min(1).optional()
 }).optional().default({})
+
+export const listAgentSuggestionsInputSchema = z.object({
+  status: agentSuggestionStatusSchema.optional(),
+  role: agentRoleSchema.optional(),
+  limit: z.number().int().positive().max(200).optional()
+}).optional().default({})
+
+export const dismissAgentSuggestionInputSchema = z.object({
+  suggestionId: z.string().min(1)
+})
+
+export const runAgentSuggestionInputSchema = z.object({
+  suggestionId: z.string().min(1),
+  confirmationToken: z.string().min(1).optional()
+})
 
 export const memoryWorkspaceScopeSchema = z.discriminatedUnion('kind', [
   z.object({

@@ -7,11 +7,16 @@ import {
   appendAgentMessage,
   createAgentPolicyVersion,
   createAgentRun,
+  dismissAgentSuggestion,
   getAgentRun,
+  getAgentSuggestion,
+  listAgentSuggestions,
   listAgentRuns,
   listAgentMemories,
   listAgentPolicyVersions,
+  markAgentSuggestionExecuted,
   updateAgentRunReplayMetadata,
+  upsertAgentSuggestion,
   upsertAgentMemory
 } from '../../../src/main/services/agentPersistenceService'
 
@@ -250,6 +255,154 @@ describe('agent persistence service', () => {
       'version 2',
       'version 1'
     ])
+
+    db.close()
+  })
+
+  it('round-trips persisted task input and lists suggestions newest-first with status filtering', () => {
+    const db = setupDatabase()
+
+    upsertAgentSuggestion(db, {
+      triggerKind: 'review.safe_group_available',
+      role: 'review',
+      taskKind: 'review.suggest_safe_group_action',
+      taskInput: {
+        role: 'review',
+        taskKind: 'review.suggest_safe_group_action',
+        prompt: 'Summarize safe group candidates for review queue.'
+      },
+      dedupeKey: 'review.safe-group::person-1',
+      sourceRunId: null,
+      observedAt: '2026-03-30T00:00:01.000Z'
+    })
+
+    const governanceSuggestion = upsertAgentSuggestion(db, {
+      triggerKind: 'governance.failed_runs_detected',
+      role: 'governance',
+      taskKind: 'governance.summarize_failures',
+      taskInput: {
+        role: 'governance',
+        taskKind: 'governance.summarize_failures',
+        prompt: 'Summarize failed agent runs from the proactive monitor.'
+      },
+      dedupeKey: 'governance.failed-runs::latest',
+      sourceRunId: null,
+      observedAt: '2026-03-30T00:00:02.000Z'
+    })
+
+    const suggestions = listAgentSuggestions(db)
+    const governanceOnly = listAgentSuggestions(db, {
+      status: 'suggested',
+      role: 'governance'
+    })
+
+    expect(suggestions[0]).toMatchObject({
+      triggerKind: 'governance.failed_runs_detected',
+      status: 'suggested',
+      taskInput: {
+        role: 'governance',
+        taskKind: 'governance.summarize_failures',
+        prompt: 'Summarize failed agent runs from the proactive monitor.'
+      }
+    })
+    expect(governanceOnly.map((item) => item.suggestionId)).toEqual([governanceSuggestion.suggestionId])
+
+    db.close()
+  })
+
+  it('updates lastObservedAt when dedupe key repeats instead of inserting duplicates', () => {
+    const db = setupDatabase()
+
+    const first = upsertAgentSuggestion(db, {
+      triggerKind: 'ingestion.failed_enrichment_job',
+      role: 'ingestion',
+      taskKind: 'ingestion.rerun_enrichment',
+      taskInput: {
+        role: 'ingestion',
+        taskKind: 'ingestion.rerun_enrichment',
+        prompt: 'Retry failed enrichment jobs from the latest run.'
+      },
+      dedupeKey: 'ingestion.failed-enrichment::job-1',
+      sourceRunId: null,
+      observedAt: '2026-03-30T00:10:00.000Z'
+    })
+
+    const second = upsertAgentSuggestion(db, {
+      triggerKind: 'ingestion.failed_enrichment_job',
+      role: 'ingestion',
+      taskKind: 'ingestion.rerun_enrichment',
+      taskInput: {
+        role: 'ingestion',
+        taskKind: 'ingestion.rerun_enrichment',
+        prompt: 'Retry failed enrichment jobs from the latest run.'
+      },
+      dedupeKey: 'ingestion.failed-enrichment::job-1',
+      sourceRunId: null,
+      observedAt: '2026-03-30T00:12:00.000Z'
+    })
+
+    const suggestions = listAgentSuggestions(db)
+
+    expect(suggestions).toHaveLength(1)
+    expect(second.suggestionId).toBe(first.suggestionId)
+    expect(second.lastObservedAt).toBe('2026-03-30T00:12:00.000Z')
+
+    db.close()
+  })
+
+  it('keeps dismissed and executed suggestions queryable for audit history', () => {
+    const db = setupDatabase()
+    const sourceRun = createAgentRun(db, {
+      role: 'governance',
+      taskKind: 'governance.summarize_failures',
+      prompt: 'Generate source run for proactive suggestion'
+    })
+    const executedRun = createAgentRun(db, {
+      role: 'governance',
+      taskKind: 'governance.summarize_failures',
+      prompt: 'Generate executed run for proactive suggestion'
+    })
+
+    const dismissed = upsertAgentSuggestion(db, {
+      triggerKind: 'review.safe_group_available',
+      role: 'review',
+      taskKind: 'review.suggest_safe_group_action',
+      taskInput: {
+        role: 'review',
+        taskKind: 'review.suggest_safe_group_action',
+        prompt: 'Summarize safe group candidates for review queue.'
+      },
+      dedupeKey: 'review.safe-group::dismissed',
+      sourceRunId: null,
+      observedAt: '2026-03-30T00:20:00.000Z'
+    })
+    const executed = upsertAgentSuggestion(db, {
+      triggerKind: 'governance.failed_runs_detected',
+      role: 'governance',
+      taskKind: 'governance.summarize_failures',
+      taskInput: {
+        role: 'governance',
+        taskKind: 'governance.summarize_failures',
+        prompt: 'Summarize failed agent runs from the proactive monitor.'
+      },
+      dedupeKey: 'governance.failed-runs::executed',
+      sourceRunId: sourceRun.runId,
+      observedAt: '2026-03-30T00:21:00.000Z'
+    })
+
+    dismissAgentSuggestion(db, { suggestionId: dismissed.suggestionId })
+    markAgentSuggestionExecuted(db, {
+      suggestionId: executed.suggestionId,
+      runId: executedRun.runId
+    })
+
+    const dismissedRows = listAgentSuggestions(db, { status: 'dismissed' })
+    const executedRows = listAgentSuggestions(db, { status: 'executed' })
+    const executedRow = getAgentSuggestion(db, { suggestionId: executed.suggestionId })
+
+    expect(dismissedRows.map((item) => item.suggestionId)).toEqual([dismissed.suggestionId])
+    expect(executedRows.map((item) => item.suggestionId)).toEqual([executed.suggestionId])
+    expect(executedRow?.executedRunId).toBe(executedRun.runId)
 
     db.close()
   })
