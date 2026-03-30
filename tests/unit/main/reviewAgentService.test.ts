@@ -132,7 +132,7 @@ describe('review agent service', () => {
       assignedRoles: ['review']
     })
 
-    expect(result.messages?.some((message) => message.content.includes('group-safe-42'))).toBe(true)
+    expect(result.messages?.at(-1)?.content).toBe('Safe review group ready for approval: group-safe-42 (4 items).')
 
     db.close()
   })
