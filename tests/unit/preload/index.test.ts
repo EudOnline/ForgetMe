@@ -156,6 +156,51 @@ describe('preload archiveApi hosted share bridge', () => {
           createdAt: '2026-03-29T00:00:01.000Z'
         }
       ])
+      .mockResolvedValueOnce([
+        {
+          suggestionId: 'suggestion-1',
+          triggerKind: 'governance.failed_runs_detected',
+          status: 'suggested',
+          role: 'governance',
+          taskKind: 'governance.summarize_failures',
+          taskInput: {
+            role: 'governance',
+            taskKind: 'governance.summarize_failures',
+            prompt: 'Summarize failed agent runs from the proactive monitor.'
+          },
+          dedupeKey: 'governance.failed-runs::latest',
+          sourceRunId: null,
+          executedRunId: null,
+          createdAt: '2026-03-30T00:00:00.000Z',
+          updatedAt: '2026-03-30T00:00:00.000Z',
+          lastObservedAt: '2026-03-30T00:00:00.000Z'
+        }
+      ])
+      .mockResolvedValueOnce({
+        suggestionId: 'suggestion-1',
+        triggerKind: 'governance.failed_runs_detected',
+        status: 'dismissed',
+        role: 'governance',
+        taskKind: 'governance.summarize_failures',
+        taskInput: {
+          role: 'governance',
+          taskKind: 'governance.summarize_failures',
+          prompt: 'Summarize failed agent runs from the proactive monitor.'
+        },
+        dedupeKey: 'governance.failed-runs::latest',
+        sourceRunId: null,
+        executedRunId: null,
+        createdAt: '2026-03-30T00:00:00.000Z',
+        updatedAt: '2026-03-30T00:00:05.000Z',
+        lastObservedAt: '2026-03-30T00:00:00.000Z'
+      })
+      .mockResolvedValueOnce({
+        runId: 'run-from-suggestion-1',
+        status: 'completed',
+        targetRole: 'governance',
+        assignedRoles: ['governance'],
+        latestAssistantResponse: 'Failures summarized.'
+      })
 
     const archiveApi = exposeInMainWorld.mock.calls[0]?.[1] as {
       previewAgentTask: (input: { prompt: string; role: 'orchestrator' }) => Promise<unknown>
@@ -164,6 +209,9 @@ describe('preload archiveApi hosted share bridge', () => {
       getAgentRun: (input: { runId: string }) => Promise<unknown>
       listAgentMemories: (input: { role: 'governance' }) => Promise<unknown>
       listAgentPolicyVersions: (input: { role: 'governance'; policyKey: string }) => Promise<unknown>
+      listAgentSuggestions: (input: { role: 'governance'; status: 'suggested'; limit: number }) => Promise<unknown>
+      dismissAgentSuggestion: (input: { suggestionId: string }) => Promise<unknown>
+      runAgentSuggestion: (input: { suggestionId: string; confirmationToken: string }) => Promise<unknown>
     }
 
     const preview = await archiveApi.previewAgentTask({
@@ -180,6 +228,18 @@ describe('preload archiveApi hosted share bridge', () => {
     const policyVersions = await archiveApi.listAgentPolicyVersions({
       role: 'governance',
       policyKey: 'governance.review.policy'
+    })
+    const suggestions = await archiveApi.listAgentSuggestions({
+      role: 'governance',
+      status: 'suggested',
+      limit: 10
+    })
+    const dismissed = await archiveApi.dismissAgentSuggestion({
+      suggestionId: 'suggestion-1'
+    })
+    const runSuggestionResult = await archiveApi.runAgentSuggestion({
+      suggestionId: 'suggestion-1',
+      confirmationToken: 'confirm-1'
     })
 
     expect(preview).toEqual({
@@ -223,6 +283,24 @@ describe('preload archiveApi hosted share bridge', () => {
         policyKey: 'governance.review.policy'
       })
     ])
+    expect(suggestions).toEqual([
+      expect.objectContaining({
+        suggestionId: 'suggestion-1',
+        status: 'suggested',
+        role: 'governance'
+      })
+    ])
+    expect(dismissed).toEqual(expect.objectContaining({
+      suggestionId: 'suggestion-1',
+      status: 'dismissed'
+    }))
+    expect(runSuggestionResult).toEqual({
+      runId: 'run-from-suggestion-1',
+      status: 'completed',
+      targetRole: 'governance',
+      assignedRoles: ['governance'],
+      latestAssistantResponse: 'Failures summarized.'
+    })
 
     expect(invoke).toHaveBeenNthCalledWith(1, 'archive:previewAgentTask', {
       prompt: 'Approve review item rq-1',
@@ -244,6 +322,18 @@ describe('preload archiveApi hosted share bridge', () => {
     expect(invoke).toHaveBeenNthCalledWith(6, 'archive:listAgentPolicyVersions', {
       role: 'governance',
       policyKey: 'governance.review.policy'
+    })
+    expect(invoke).toHaveBeenNthCalledWith(7, 'archive:listAgentSuggestions', {
+      role: 'governance',
+      status: 'suggested',
+      limit: 10
+    })
+    expect(invoke).toHaveBeenNthCalledWith(8, 'archive:dismissAgentSuggestion', {
+      suggestionId: 'suggestion-1'
+    })
+    expect(invoke).toHaveBeenNthCalledWith(9, 'archive:runAgentSuggestion', {
+      suggestionId: 'suggestion-1',
+      confirmationToken: 'confirm-1'
     })
   })
 })

@@ -1,23 +1,31 @@
 import type {
   AgentExecutionPreview,
+  AgentSuggestionRecord,
   AgentRole,
   AgentPolicyVersionRecord,
   AgentRunDetail,
   AgentRunRecord,
+  DismissAgentSuggestionInput,
   GetAgentRunInput,
   ListAgentMemoriesInput,
+  ListAgentSuggestionsInput,
   ListAgentPolicyVersionsInput,
   ListAgentRunsInput,
+  RunAgentSuggestionInput,
   RunAgentTaskInput,
   RunAgentTaskResult
 } from '../../shared/archiveContracts'
 import {
   appendAgentMessage,
   createAgentRun,
+  dismissAgentSuggestion,
   getAgentRun,
+  getAgentSuggestion,
   listAgentMemories,
+  listAgentSuggestions,
   listAgentPolicyVersions,
   listAgentRuns,
+  markAgentSuggestionExecuted,
   updateAgentRunReplayMetadata,
   updateAgentRunStatus
 } from './agentPersistenceService'
@@ -39,6 +47,9 @@ export type AgentRuntime = {
   getRun(input: GetAgentRunInput): AgentRunDetail | null
   listMemories(input?: ListAgentMemoriesInput): ReturnType<typeof listAgentMemories>
   listPolicyVersions(input?: ListAgentPolicyVersionsInput): AgentPolicyVersionRecord[]
+  listSuggestions(input?: ListAgentSuggestionsInput): AgentSuggestionRecord[]
+  dismissSuggestion(input: DismissAgentSuggestionInput): AgentSuggestionRecord | null
+  runSuggestion(input: RunAgentSuggestionInput): Promise<AgentRuntimeRunResult | null>
 }
 
 type CreateAgentRuntimeInput = {
@@ -220,6 +231,30 @@ export function createAgentRuntime(input: CreateAgentRuntimeInput): AgentRuntime
     },
     listPolicyVersions(policyInput = {}) {
       return listAgentPolicyVersions(input.db, policyInput)
+    },
+    listSuggestions(suggestionsInput = {}) {
+      return listAgentSuggestions(input.db, suggestionsInput)
+    },
+    dismissSuggestion(dismissInput) {
+      return dismissAgentSuggestion(input.db, dismissInput)
+    },
+    async runSuggestion(runSuggestionInput) {
+      const suggestion = getAgentSuggestion(input.db, { suggestionId: runSuggestionInput.suggestionId })
+      if (!suggestion) {
+        return null
+      }
+
+      const taskInput = runSuggestionInput.confirmationToken
+        ? { ...suggestion.taskInput, confirmationToken: runSuggestionInput.confirmationToken }
+        : suggestion.taskInput
+      const result = await this.runTask(taskInput)
+
+      markAgentSuggestionExecuted(input.db, {
+        suggestionId: suggestion.suggestionId,
+        runId: result.runId
+      })
+
+      return result
     }
   }
 }

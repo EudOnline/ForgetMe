@@ -106,7 +106,10 @@ describe('registerAgentIpc', () => {
       listRuns: vi.fn(),
       getRun: vi.fn(),
       listMemories: vi.fn(),
-      listPolicyVersions: vi.fn()
+      listPolicyVersions: vi.fn(),
+      listSuggestions: vi.fn(),
+      dismissSuggestion: vi.fn(),
+      runSuggestion: vi.fn()
     }
 
     openDatabase.mockReturnValue(db)
@@ -124,6 +127,9 @@ describe('registerAgentIpc', () => {
     expect(handlerMap.has('archive:getAgentRun')).toBe(true)
     expect(handlerMap.has('archive:listAgentMemories')).toBe(true)
     expect(handlerMap.has('archive:listAgentPolicyVersions')).toBe(true)
+    expect(handlerMap.has('archive:listAgentSuggestions')).toBe(true)
+    expect(handlerMap.has('archive:dismissAgentSuggestion')).toBe(true)
+    expect(handlerMap.has('archive:runAgentSuggestion')).toBe(true)
 
     const result = await handlerMap.get('archive:runAgentTask')?.({}, {
       prompt: 'Summarize the highest-priority pending review work',
@@ -216,7 +222,52 @@ describe('registerAgentIpc', () => {
           policyBody: 'Always summarize recent failures before proposing a new policy.',
           createdAt: '2026-03-29T00:00:02.000Z'
         }
-      ])
+      ]),
+      listSuggestions: vi.fn().mockReturnValue([
+        {
+          suggestionId: 'suggestion-1',
+          triggerKind: 'governance.failed_runs_detected',
+          status: 'suggested',
+          role: 'governance',
+          taskKind: 'governance.summarize_failures',
+          taskInput: {
+            role: 'governance',
+            taskKind: 'governance.summarize_failures',
+            prompt: 'Summarize failed agent runs from the proactive monitor.'
+          },
+          dedupeKey: 'governance.failed-runs::latest',
+          sourceRunId: null,
+          executedRunId: null,
+          createdAt: '2026-03-30T00:00:00.000Z',
+          updatedAt: '2026-03-30T00:00:00.000Z',
+          lastObservedAt: '2026-03-30T00:00:00.000Z'
+        }
+      ]),
+      dismissSuggestion: vi.fn().mockReturnValue({
+        suggestionId: 'suggestion-1',
+        triggerKind: 'governance.failed_runs_detected',
+        status: 'dismissed',
+        role: 'governance',
+        taskKind: 'governance.summarize_failures',
+        taskInput: {
+          role: 'governance',
+          taskKind: 'governance.summarize_failures',
+          prompt: 'Summarize failed agent runs from the proactive monitor.'
+        },
+        dedupeKey: 'governance.failed-runs::latest',
+        sourceRunId: null,
+        executedRunId: null,
+        createdAt: '2026-03-30T00:00:00.000Z',
+        updatedAt: '2026-03-30T00:00:05.000Z',
+        lastObservedAt: '2026-03-30T00:00:00.000Z'
+      }),
+      runSuggestion: vi.fn().mockResolvedValue({
+        runId: 'run-from-suggestion-1',
+        status: 'completed',
+        targetRole: 'governance',
+        assignedRoles: ['governance'],
+        latestAssistantResponse: 'Failures summarized.'
+      })
     }
 
     openDatabase.mockReturnValue(db)
@@ -239,6 +290,18 @@ describe('registerAgentIpc', () => {
       role: 'governance',
       policyKey: 'governance.review.policy'
     })
+    const suggestions = await handlerMap.get('archive:listAgentSuggestions')?.({}, {
+      role: 'governance',
+      status: 'suggested',
+      limit: 10
+    })
+    const dismissed = await handlerMap.get('archive:dismissAgentSuggestion')?.({}, {
+      suggestionId: 'suggestion-1'
+    })
+    const runSuggestionResult = await handlerMap.get('archive:runAgentSuggestion')?.({}, {
+      suggestionId: 'suggestion-1',
+      confirmationToken: 'confirm-1'
+    })
 
     expect(runtime.previewTask).toHaveBeenCalledWith({
       prompt: 'Approve review item rq-1',
@@ -256,6 +319,18 @@ describe('registerAgentIpc', () => {
     expect(runtime.listPolicyVersions).toHaveBeenCalledWith({
       role: 'governance',
       policyKey: 'governance.review.policy'
+    })
+    expect(runtime.listSuggestions).toHaveBeenCalledWith({
+      role: 'governance',
+      status: 'suggested',
+      limit: 10
+    })
+    expect(runtime.dismissSuggestion).toHaveBeenCalledWith({
+      suggestionId: 'suggestion-1'
+    })
+    expect(runtime.runSuggestion).toHaveBeenCalledWith({
+      suggestionId: 'suggestion-1',
+      confirmationToken: 'confirm-1'
     })
     expect(runs).toEqual([
       expect.objectContaining({
@@ -286,6 +361,24 @@ describe('registerAgentIpc', () => {
         policyKey: 'governance.review.policy'
       })
     ])
-    expect(close).toHaveBeenCalledTimes(5)
+    expect(suggestions).toEqual([
+      expect.objectContaining({
+        suggestionId: 'suggestion-1',
+        status: 'suggested',
+        role: 'governance'
+      })
+    ])
+    expect(dismissed).toEqual(expect.objectContaining({
+      suggestionId: 'suggestion-1',
+      status: 'dismissed'
+    }))
+    expect(runSuggestionResult).toEqual({
+      runId: 'run-from-suggestion-1',
+      status: 'completed',
+      targetRole: 'governance',
+      assignedRoles: ['governance'],
+      latestAssistantResponse: 'Failures summarized.'
+    })
+    expect(close).toHaveBeenCalledTimes(8)
   })
 })

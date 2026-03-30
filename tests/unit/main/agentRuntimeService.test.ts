@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import type { AgentRole, AgentTaskKind, RunAgentTaskInput } from '../../../src/shared/archiveContracts'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
 import { createAgentRuntime } from '../../../src/main/services/agentRuntimeService'
+import { upsertAgentSuggestion } from '../../../src/main/services/agentPersistenceService'
 import type { AgentAdapter } from '../../../src/main/services/agents/agentTypes'
 
 function setupDatabase() {
@@ -224,6 +225,82 @@ describe('agent runtime service', () => {
       requiresConfirmation: true
     })
     expect(runtime.listRuns()).toEqual([])
+
+    db.close()
+  })
+
+  it('lists, dismisses, and runs persisted suggestions through runtime methods', async () => {
+    const db = setupDatabase()
+    const governanceAdapter: AgentAdapter = {
+      role: 'governance',
+      canHandle: (taskKind) => taskKind === 'governance.summarize_failures',
+      execute: async () => ({
+        messages: [
+          {
+            sender: 'agent',
+            content: 'Summarized failed runs and highlighted top regressions.'
+          }
+        ]
+      })
+    }
+    const runtime = createAgentRuntime({
+      db,
+      adapters: [governanceAdapter]
+    })
+
+    const dismissedSeed = upsertAgentSuggestion(db, {
+      triggerKind: 'review.safe_group_available',
+      role: 'review',
+      taskKind: 'review.suggest_safe_group_action',
+      taskInput: {
+        role: 'review',
+        taskKind: 'review.suggest_safe_group_action',
+        prompt: 'Summarize safe group candidates for review queue.'
+      },
+      dedupeKey: 'review.safe-group::runtime-dismiss',
+      sourceRunId: null,
+      observedAt: '2026-03-30T00:10:00.000Z'
+    })
+    const runnableSeed = upsertAgentSuggestion(db, {
+      triggerKind: 'governance.failed_runs_detected',
+      role: 'governance',
+      taskKind: 'governance.summarize_failures',
+      taskInput: {
+        role: 'governance',
+        taskKind: 'governance.summarize_failures',
+        prompt: 'Summarize failed agent runs from the proactive monitor.'
+      },
+      dedupeKey: 'governance.failed-runs::runtime-run',
+      sourceRunId: null,
+      observedAt: '2026-03-30T00:11:00.000Z'
+    })
+
+    const suggestedRows = runtime.listSuggestions({
+      status: 'suggested'
+    })
+    const dismissed = runtime.dismissSuggestion({
+      suggestionId: dismissedSeed.suggestionId
+    })
+    const runResult = await runtime.runSuggestion({
+      suggestionId: runnableSeed.suggestionId
+    })
+    const dismissedRows = runtime.listSuggestions({
+      status: 'dismissed'
+    })
+    const executedRows = runtime.listSuggestions({
+      status: 'executed'
+    })
+
+    expect(suggestedRows.map((item) => item.suggestionId)).toEqual([
+      runnableSeed.suggestionId,
+      dismissedSeed.suggestionId
+    ])
+    expect(dismissed?.status).toBe('dismissed')
+    expect(runResult?.status).toBe('completed')
+    expect(runResult?.runId).toBeTruthy()
+    expect(dismissedRows.map((item) => item.suggestionId)).toEqual([dismissedSeed.suggestionId])
+    expect(executedRows.map((item) => item.suggestionId)).toEqual([runnableSeed.suggestionId])
+    expect(executedRows[0]?.executedRunId).toBe(runResult?.runId ?? null)
 
     db.close()
   })

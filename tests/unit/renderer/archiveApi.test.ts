@@ -90,6 +90,18 @@ describe('archiveApi agent runtime methods', () => {
     await expect(archiveApi.listAgentPolicyVersions({
       role: 'governance'
     })).resolves.toEqual([])
+    await expect(archiveApi.listAgentSuggestions({
+      role: 'governance',
+      status: 'suggested',
+      limit: 10
+    })).resolves.toEqual([])
+    await expect(archiveApi.dismissAgentSuggestion({
+      suggestionId: 'suggestion-1'
+    })).resolves.toBeNull()
+    await expect(archiveApi.runAgentSuggestion({
+      suggestionId: 'suggestion-1',
+      confirmationToken: 'confirm-1'
+    })).resolves.toBeNull()
   })
 
   it('preserves renderer-provided agent runtime methods', async () => {
@@ -167,6 +179,51 @@ describe('archiveApi agent runtime methods', () => {
         createdAt: '2026-03-29T00:00:01.000Z'
       }
     ])
+    const listAgentSuggestions = vi.fn().mockResolvedValue([
+      {
+        suggestionId: 'suggestion-1',
+        triggerKind: 'governance.failed_runs_detected',
+        status: 'suggested',
+        role: 'governance',
+        taskKind: 'governance.summarize_failures',
+        taskInput: {
+          role: 'governance',
+          taskKind: 'governance.summarize_failures',
+          prompt: 'Summarize failed agent runs from the proactive monitor.'
+        },
+        dedupeKey: 'governance.failed-runs::latest',
+        sourceRunId: null,
+        executedRunId: null,
+        createdAt: '2026-03-30T00:00:00.000Z',
+        updatedAt: '2026-03-30T00:00:00.000Z',
+        lastObservedAt: '2026-03-30T00:00:00.000Z'
+      }
+    ])
+    const dismissAgentSuggestion = vi.fn().mockResolvedValue({
+      suggestionId: 'suggestion-1',
+      triggerKind: 'governance.failed_runs_detected',
+      status: 'dismissed',
+      role: 'governance',
+      taskKind: 'governance.summarize_failures',
+      taskInput: {
+        role: 'governance',
+        taskKind: 'governance.summarize_failures',
+        prompt: 'Summarize failed agent runs from the proactive monitor.'
+      },
+      dedupeKey: 'governance.failed-runs::latest',
+      sourceRunId: null,
+      executedRunId: null,
+      createdAt: '2026-03-30T00:00:00.000Z',
+      updatedAt: '2026-03-30T00:00:05.000Z',
+      lastObservedAt: '2026-03-30T00:00:00.000Z'
+    })
+    const runAgentSuggestion = vi.fn().mockResolvedValue({
+      runId: 'run-from-suggestion-1',
+      status: 'completed',
+      targetRole: 'governance',
+      assignedRoles: ['governance'],
+      latestAssistantResponse: 'Failures summarized.'
+    })
 
     vi.stubGlobal('window', {
       archiveApi: {
@@ -175,7 +232,10 @@ describe('archiveApi agent runtime methods', () => {
         listAgentRuns,
         getAgentRun,
         listAgentMemories,
-        listAgentPolicyVersions
+        listAgentPolicyVersions,
+        listAgentSuggestions,
+        dismissAgentSuggestion,
+        runAgentSuggestion
       }
     })
 
@@ -192,6 +252,18 @@ describe('archiveApi agent runtime methods', () => {
     const detail = await archiveApi.getAgentRun({ runId: 'run-1' })
     const memories = await archiveApi.listAgentMemories({ role: 'governance' })
     const policyVersions = await archiveApi.listAgentPolicyVersions({ role: 'governance' })
+    const suggestions = await archiveApi.listAgentSuggestions({
+      role: 'governance',
+      status: 'suggested',
+      limit: 10
+    })
+    const dismissed = await archiveApi.dismissAgentSuggestion({
+      suggestionId: 'suggestion-1'
+    })
+    const runSuggestionResult = await archiveApi.runAgentSuggestion({
+      suggestionId: 'suggestion-1',
+      confirmationToken: 'confirm-1'
+    })
 
     expect(preview).toEqual({
       taskKind: 'review.apply_item_decision',
@@ -216,6 +288,15 @@ describe('archiveApi agent runtime methods', () => {
     expect(detail?.messages[0]?.content).toContain('pending items')
     expect(memories[0]?.memoryKey).toBe('governance.feedback')
     expect(policyVersions[0]?.policyKey).toBe('governance.review.policy')
+    expect(suggestions[0]?.suggestionId).toBe('suggestion-1')
+    expect(dismissed?.status).toBe('dismissed')
+    expect(runSuggestionResult).toEqual({
+      runId: 'run-from-suggestion-1',
+      status: 'completed',
+      targetRole: 'governance',
+      assignedRoles: ['governance'],
+      latestAssistantResponse: 'Failures summarized.'
+    })
   })
 })
 

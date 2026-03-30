@@ -1,11 +1,14 @@
 import path from 'node:path'
 import { ipcMain } from 'electron'
 import {
+  dismissAgentSuggestionInputSchema,
   getAgentRunInputSchema,
   listAgentMemoriesInputSchema,
+  listAgentSuggestionsInputSchema,
   listAgentPolicyVersionsInputSchema,
   listAgentRunsInputSchema,
   previewAgentTaskInputSchema,
+  runAgentSuggestionInputSchema,
   runAgentTaskInputSchema
 } from '../../shared/ipcSchemas'
 import type { RunAgentTaskInput } from '../../shared/archiveContracts'
@@ -63,6 +66,9 @@ export function registerAgentIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:getAgentRun')
   ipcMain.removeHandler('archive:listAgentMemories')
   ipcMain.removeHandler('archive:listAgentPolicyVersions')
+  ipcMain.removeHandler('archive:listAgentSuggestions')
+  ipcMain.removeHandler('archive:dismissAgentSuggestion')
+  ipcMain.removeHandler('archive:runAgentSuggestion')
 
   ipcMain.handle('archive:previewAgentTask', async (_event, payload) => {
     const input = previewAgentTaskInputSchema.parse(payload) as RunAgentTaskInput
@@ -92,5 +98,20 @@ export function registerAgentIpc(appPaths: AppPaths) {
   ipcMain.handle('archive:listAgentPolicyVersions', async (_event, payload) => {
     const input = listAgentPolicyVersionsInputSchema.parse(payload)
     return withArchiveAgentRuntime(appPaths, (runtime) => runtime.listPolicyVersions(input))
+  })
+
+  ipcMain.handle('archive:listAgentSuggestions', async (_event, payload) => {
+    const input = listAgentSuggestionsInputSchema.parse(payload)
+    return withArchiveAgentRuntime(appPaths, (runtime) => runtime.listSuggestions(input))
+  })
+
+  ipcMain.handle('archive:dismissAgentSuggestion', async (_event, payload) => {
+    const input = dismissAgentSuggestionInputSchema.parse(payload)
+    return withArchiveAgentRuntime(appPaths, (runtime) => runtime.dismissSuggestion(input))
+  })
+
+  ipcMain.handle('archive:runAgentSuggestion', async (_event, payload) => {
+    const input = runAgentSuggestionInputSchema.parse(payload)
+    return withArchiveAgentRuntime(appPaths, (runtime) => runtime.runSuggestion(input))
   })
 }
