@@ -77,6 +77,23 @@ export function createReviewAgentService(
         'review.apply_item_decision'
       ].includes(taskKind)
     },
+    async receive(context) {
+      if (context.objective.objectiveKind === 'review_decision') {
+        return {
+          messages: [
+            {
+              kind: 'challenge',
+              body: 'Review requires tighter evidence bounds before approval.',
+              blocking: true
+            }
+          ]
+        }
+      }
+
+      return {
+        messages: []
+      }
+    },
     async execute(context) {
       switch (context.taskKind) {
         case 'review.summarize_queue': {

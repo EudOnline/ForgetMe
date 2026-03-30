@@ -187,15 +187,18 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
         votes: runtimeState.votes,
         messages: runtimeState.messages
       })
+      const nextStatus = runtimeState.proposal.allowVetoBy.includes('governance')
+        ? 'vetoed'
+        : gate.status
       const updated = updateProposalStatus(db, {
         proposalId: input.proposalId,
-        status: gate.status
+        status: nextStatus
       })
       if (!updated) {
         throw new Error(`failed to update proposal: ${input.proposalId}`)
       }
 
-      writeStatusCheckpoint(input.proposalId, gate.status)
+      writeStatusCheckpoint(input.proposalId, nextStatus)
 
       return updated
     },

@@ -1,7 +1,15 @@
 import type {
+  AgentArtifactRef,
+  AgentExecutionBudget,
+  AgentMessageKind,
   AgentMessageRecord,
+  AgentMessageRecordV2,
+  AgentObjectiveRecord,
+  AgentProposalKind,
   AgentRole,
   AgentRunRecord,
+  AgentSkillPackId,
+  AgentThreadRecord,
   AgentTaskKind,
   RunAgentTaskInput
 } from '../../../shared/archiveContracts'
@@ -22,8 +30,59 @@ export type AgentExecutionContext = {
   assignedRoles: AgentRole[]
 }
 
+export type AgentMessageDraft = {
+  toParticipantId?: string | null
+  kind: AgentMessageKind
+  body: string
+  refs?: AgentArtifactRef[]
+  blocking?: boolean
+  confidence?: number | null
+}
+
+export type AgentProposalDraft = {
+  proposalKind: AgentProposalKind
+  payload: Record<string, unknown>
+  ownerRole: AgentRole
+  requiredApprovals?: AgentRole[]
+  allowVetoBy?: AgentRole[]
+  requiresOperatorConfirmation?: boolean
+  toolPolicyId?: string | null
+  budget?: AgentExecutionBudget | null
+  artifactRefs?: AgentArtifactRef[]
+}
+
+export type SpawnSubagentDraft = {
+  specialization: AgentSkillPackId
+  toolPolicyId: string
+  budget: AgentExecutionBudget
+  expectedOutputSchema: string
+}
+
+export type ToolRequestDraft = {
+  toolName: string
+  payload: Record<string, unknown>
+  toolPolicyId?: string
+}
+
+export type AgentReceiveContext = {
+  db: ArchiveDatabase
+  objective: AgentObjectiveRecord
+  thread: AgentThreadRecord
+  participantId: string
+  messages: AgentMessageRecordV2[]
+  round: number
+}
+
+export type AgentReceiveResult = {
+  messages: AgentMessageDraft[]
+  proposals?: AgentProposalDraft[]
+  spawnRequests?: SpawnSubagentDraft[]
+  toolRequests?: ToolRequestDraft[]
+}
+
 export type AgentAdapter = {
   role: AgentRole
   canHandle(taskKind: AgentTaskKind): boolean
   execute(context: AgentExecutionContext): Promise<AgentAdapterResult>
+  receive?(context: AgentReceiveContext): Promise<AgentReceiveResult>
 }

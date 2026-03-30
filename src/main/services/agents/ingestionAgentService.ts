@@ -39,6 +39,26 @@ export function createIngestionAgentService(
         'ingestion.summarize_document_evidence'
       ].includes(taskKind)
     },
+    async receive(context) {
+      if (context.objective.objectiveKind === 'evidence_investigation') {
+        return {
+          messages: [],
+          toolRequests: [
+            {
+              toolName: 'get_document_evidence',
+              payload: {
+                prompt: context.objective.prompt
+              },
+              toolPolicyId: 'local-evidence-policy'
+            }
+          ]
+        }
+      }
+
+      return {
+        messages: []
+      }
+    },
     async execute(context) {
       switch (context.taskKind) {
         case 'ingestion.import_batch':

@@ -43,6 +43,23 @@ export function createGovernanceAgentService(
         'governance.propose_policy_update'
       ].includes(taskKind)
     },
+    async receive(context) {
+      const latestMessage = context.messages.at(-1)
+      if (latestMessage?.kind === 'challenge' || context.objective.objectiveKind === 'policy_change') {
+        return {
+          messages: [
+            {
+              kind: 'risk_notice',
+              body: 'Governance requires policy review before this objective can commit.'
+            }
+          ]
+        }
+      }
+
+      return {
+        messages: []
+      }
+    },
     async execute(context) {
       const recordMemory = dependencies.recordMemory ?? createAgentMemoryService({ db: context.db }).recordMemory
       const getRuns = dependencies.listRuns ?? ((input) => listAgentRuns(context.db, input))
