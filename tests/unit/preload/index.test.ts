@@ -176,6 +176,26 @@ describe('preload archiveApi hosted share bridge', () => {
           lastObservedAt: '2026-03-30T00:00:00.000Z'
         }
       ])
+      .mockResolvedValueOnce([
+        {
+          suggestionId: 'suggestion-1',
+          triggerKind: 'governance.failed_runs_detected',
+          status: 'suggested',
+          role: 'governance',
+          taskKind: 'governance.summarize_failures',
+          taskInput: {
+            role: 'governance',
+            taskKind: 'governance.summarize_failures',
+            prompt: 'Summarize failed agent runs from the proactive monitor.'
+          },
+          dedupeKey: 'governance.failed-runs::latest',
+          sourceRunId: null,
+          executedRunId: null,
+          createdAt: '2026-03-30T00:00:00.000Z',
+          updatedAt: '2026-03-30T00:00:00.000Z',
+          lastObservedAt: '2026-03-30T00:00:00.000Z'
+        }
+      ])
       .mockResolvedValueOnce({
         suggestionId: 'suggestion-1',
         triggerKind: 'governance.failed_runs_detected',
@@ -210,6 +230,7 @@ describe('preload archiveApi hosted share bridge', () => {
       listAgentMemories: (input: { role: 'governance' }) => Promise<unknown>
       listAgentPolicyVersions: (input: { role: 'governance'; policyKey: string }) => Promise<unknown>
       listAgentSuggestions: (input: { role: 'governance'; status: 'suggested'; limit: number }) => Promise<unknown>
+      refreshAgentSuggestions: () => Promise<unknown>
       dismissAgentSuggestion: (input: { suggestionId: string }) => Promise<unknown>
       runAgentSuggestion: (input: { suggestionId: string; confirmationToken: string }) => Promise<unknown>
     }
@@ -234,6 +255,7 @@ describe('preload archiveApi hosted share bridge', () => {
       status: 'suggested',
       limit: 10
     })
+    const refreshedSuggestions = await archiveApi.refreshAgentSuggestions()
     const dismissed = await archiveApi.dismissAgentSuggestion({
       suggestionId: 'suggestion-1'
     })
@@ -290,6 +312,13 @@ describe('preload archiveApi hosted share bridge', () => {
         role: 'governance'
       })
     ])
+    expect(refreshedSuggestions).toEqual([
+      expect.objectContaining({
+        suggestionId: 'suggestion-1',
+        status: 'suggested',
+        role: 'governance'
+      })
+    ])
     expect(dismissed).toEqual(expect.objectContaining({
       suggestionId: 'suggestion-1',
       status: 'dismissed'
@@ -328,10 +357,11 @@ describe('preload archiveApi hosted share bridge', () => {
       status: 'suggested',
       limit: 10
     })
-    expect(invoke).toHaveBeenNthCalledWith(8, 'archive:dismissAgentSuggestion', {
+    expect(invoke).toHaveBeenNthCalledWith(8, 'archive:refreshAgentSuggestions')
+    expect(invoke).toHaveBeenNthCalledWith(9, 'archive:dismissAgentSuggestion', {
       suggestionId: 'suggestion-1'
     })
-    expect(invoke).toHaveBeenNthCalledWith(9, 'archive:runAgentSuggestion', {
+    expect(invoke).toHaveBeenNthCalledWith(10, 'archive:runAgentSuggestion', {
       suggestionId: 'suggestion-1',
       confirmationToken: 'confirm-1'
     })

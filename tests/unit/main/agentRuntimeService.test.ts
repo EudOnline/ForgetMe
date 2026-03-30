@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import type { AgentRole, AgentTaskKind, RunAgentTaskInput } from '../../../src/shared/archiveContracts'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
 import { createAgentRuntime } from '../../../src/main/services/agentRuntimeService'
-import { upsertAgentSuggestion } from '../../../src/main/services/agentPersistenceService'
+import { createAgentRun, upsertAgentSuggestion } from '../../../src/main/services/agentPersistenceService'
 import type { AgentAdapter } from '../../../src/main/services/agents/agentTypes'
 
 function setupDatabase() {
@@ -225,6 +225,50 @@ describe('agent runtime service', () => {
       requiresConfirmation: true
     })
     expect(runtime.listRuns()).toEqual([])
+
+    db.close()
+  })
+
+  it('refreshes proactive suggestions by evaluating runtime signals and upserting them', () => {
+    const db = setupDatabase()
+    createAgentRun(db, {
+      runId: 'run-failed-1',
+      role: 'governance',
+      taskKind: 'governance.summarize_failures',
+      prompt: 'Summarize recent runtime failures.',
+      status: 'failed',
+      errorMessage: 'runtime failure',
+      createdAt: '2026-03-30T00:20:00.000Z',
+      updatedAt: '2026-03-30T00:20:00.000Z'
+    })
+
+    const runtime = createAgentRuntime({
+      db,
+      adapters: []
+    })
+
+    const firstRefresh = runtime.refreshSuggestions()
+    const secondRefresh = runtime.refreshSuggestions()
+    const persistedRows = runtime.listSuggestions({
+      status: 'suggested'
+    })
+
+    expect(firstRefresh).toHaveLength(1)
+    expect(firstRefresh[0]).toMatchObject({
+      triggerKind: 'governance.failed_runs_detected',
+      status: 'suggested',
+      role: 'governance',
+      taskKind: 'governance.summarize_failures',
+      taskInput: {
+        role: 'governance',
+        taskKind: 'governance.summarize_failures',
+        prompt: 'Summarize failed agent runs from the proactive monitor.'
+      },
+      dedupeKey: 'governance.failed-runs::latest',
+      sourceRunId: 'run-failed-1'
+    })
+    expect(secondRefresh[0]?.suggestionId).toBe(firstRefresh[0]?.suggestionId)
+    expect(persistedRows[0]?.suggestionId).toBe(firstRefresh[0]?.suggestionId)
 
     db.close()
   })

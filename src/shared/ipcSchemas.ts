@@ -149,6 +149,8 @@ export const listAgentSuggestionsInputSchema = z.object({
   limit: z.number().int().positive().max(200).optional()
 }).optional().default({})
 
+export const refreshAgentSuggestionsInputSchema = z.undefined().optional()
+
 export const dismissAgentSuggestionInputSchema = z.object({
   suggestionId: z.string().min(1)
 })

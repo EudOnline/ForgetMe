@@ -108,6 +108,7 @@ describe('registerAgentIpc', () => {
       listMemories: vi.fn(),
       listPolicyVersions: vi.fn(),
       listSuggestions: vi.fn(),
+      refreshSuggestions: vi.fn(),
       dismissSuggestion: vi.fn(),
       runSuggestion: vi.fn()
     }
@@ -128,6 +129,7 @@ describe('registerAgentIpc', () => {
     expect(handlerMap.has('archive:listAgentMemories')).toBe(true)
     expect(handlerMap.has('archive:listAgentPolicyVersions')).toBe(true)
     expect(handlerMap.has('archive:listAgentSuggestions')).toBe(true)
+    expect(handlerMap.has('archive:refreshAgentSuggestions')).toBe(true)
     expect(handlerMap.has('archive:dismissAgentSuggestion')).toBe(true)
     expect(handlerMap.has('archive:runAgentSuggestion')).toBe(true)
 
@@ -243,6 +245,26 @@ describe('registerAgentIpc', () => {
           lastObservedAt: '2026-03-30T00:00:00.000Z'
         }
       ]),
+      refreshSuggestions: vi.fn().mockReturnValue([
+        {
+          suggestionId: 'suggestion-1',
+          triggerKind: 'governance.failed_runs_detected',
+          status: 'suggested',
+          role: 'governance',
+          taskKind: 'governance.summarize_failures',
+          taskInput: {
+            role: 'governance',
+            taskKind: 'governance.summarize_failures',
+            prompt: 'Summarize failed agent runs from the proactive monitor.'
+          },
+          dedupeKey: 'governance.failed-runs::latest',
+          sourceRunId: null,
+          executedRunId: null,
+          createdAt: '2026-03-30T00:00:00.000Z',
+          updatedAt: '2026-03-30T00:00:00.000Z',
+          lastObservedAt: '2026-03-30T00:00:00.000Z'
+        }
+      ]),
       dismissSuggestion: vi.fn().mockReturnValue({
         suggestionId: 'suggestion-1',
         triggerKind: 'governance.failed_runs_detected',
@@ -295,6 +317,7 @@ describe('registerAgentIpc', () => {
       status: 'suggested',
       limit: 10
     })
+    const refreshedSuggestions = await handlerMap.get('archive:refreshAgentSuggestions')?.({}, undefined)
     const dismissed = await handlerMap.get('archive:dismissAgentSuggestion')?.({}, {
       suggestionId: 'suggestion-1'
     })
@@ -325,6 +348,7 @@ describe('registerAgentIpc', () => {
       status: 'suggested',
       limit: 10
     })
+    expect(runtime.refreshSuggestions).toHaveBeenCalledWith()
     expect(runtime.dismissSuggestion).toHaveBeenCalledWith({
       suggestionId: 'suggestion-1'
     })
@@ -368,6 +392,13 @@ describe('registerAgentIpc', () => {
         role: 'governance'
       })
     ])
+    expect(refreshedSuggestions).toEqual([
+      expect.objectContaining({
+        suggestionId: 'suggestion-1',
+        status: 'suggested',
+        role: 'governance'
+      })
+    ])
     expect(dismissed).toEqual(expect.objectContaining({
       suggestionId: 'suggestion-1',
       status: 'dismissed'
@@ -379,6 +410,6 @@ describe('registerAgentIpc', () => {
       assignedRoles: ['governance'],
       latestAssistantResponse: 'Failures summarized.'
     })
-    expect(close).toHaveBeenCalledTimes(8)
+    expect(close).toHaveBeenCalledTimes(9)
   })
 })

@@ -8,6 +8,7 @@ import {
   listAgentPolicyVersionsInputSchema,
   listAgentRunsInputSchema,
   previewAgentTaskInputSchema,
+  refreshAgentSuggestionsInputSchema,
   runAgentSuggestionInputSchema,
   runAgentTaskInputSchema
 } from '../../shared/ipcSchemas'
@@ -67,6 +68,7 @@ export function registerAgentIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:listAgentMemories')
   ipcMain.removeHandler('archive:listAgentPolicyVersions')
   ipcMain.removeHandler('archive:listAgentSuggestions')
+  ipcMain.removeHandler('archive:refreshAgentSuggestions')
   ipcMain.removeHandler('archive:dismissAgentSuggestion')
   ipcMain.removeHandler('archive:runAgentSuggestion')
 
@@ -103,6 +105,11 @@ export function registerAgentIpc(appPaths: AppPaths) {
   ipcMain.handle('archive:listAgentSuggestions', async (_event, payload) => {
     const input = listAgentSuggestionsInputSchema.parse(payload)
     return withArchiveAgentRuntime(appPaths, (runtime) => runtime.listSuggestions(input))
+  })
+
+  ipcMain.handle('archive:refreshAgentSuggestions', async (_event, payload) => {
+    refreshAgentSuggestionsInputSchema.parse(payload)
+    return withArchiveAgentRuntime(appPaths, (runtime) => runtime.refreshSuggestions())
   })
 
   ipcMain.handle('archive:dismissAgentSuggestion', async (_event, payload) => {

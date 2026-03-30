@@ -19,6 +19,7 @@ const archiveApi: ArchiveApi = {
   listAgentMemories: (input) => ipcRenderer.invoke('archive:listAgentMemories', input),
   listAgentPolicyVersions: (input) => ipcRenderer.invoke('archive:listAgentPolicyVersions', input),
   listAgentSuggestions: (input) => ipcRenderer.invoke('archive:listAgentSuggestions', input),
+  refreshAgentSuggestions: () => ipcRenderer.invoke('archive:refreshAgentSuggestions'),
   dismissAgentSuggestion: (input) => ipcRenderer.invoke('archive:dismissAgentSuggestion', input),
   runAgentSuggestion: (input) => ipcRenderer.invoke('archive:runAgentSuggestion', input),
   listImportBatches: () => ipcRenderer.invoke('archive:listImportBatches'),

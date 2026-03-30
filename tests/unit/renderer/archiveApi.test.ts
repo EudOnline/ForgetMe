@@ -95,6 +95,7 @@ describe('archiveApi agent runtime methods', () => {
       status: 'suggested',
       limit: 10
     })).resolves.toEqual([])
+    await expect(archiveApi.refreshAgentSuggestions()).resolves.toEqual([])
     await expect(archiveApi.dismissAgentSuggestion({
       suggestionId: 'suggestion-1'
     })).resolves.toBeNull()
@@ -199,6 +200,26 @@ describe('archiveApi agent runtime methods', () => {
         lastObservedAt: '2026-03-30T00:00:00.000Z'
       }
     ])
+    const refreshAgentSuggestions = vi.fn().mockResolvedValue([
+      {
+        suggestionId: 'suggestion-1',
+        triggerKind: 'governance.failed_runs_detected',
+        status: 'suggested',
+        role: 'governance',
+        taskKind: 'governance.summarize_failures',
+        taskInput: {
+          role: 'governance',
+          taskKind: 'governance.summarize_failures',
+          prompt: 'Summarize failed agent runs from the proactive monitor.'
+        },
+        dedupeKey: 'governance.failed-runs::latest',
+        sourceRunId: null,
+        executedRunId: null,
+        createdAt: '2026-03-30T00:00:00.000Z',
+        updatedAt: '2026-03-30T00:00:00.000Z',
+        lastObservedAt: '2026-03-30T00:00:00.000Z'
+      }
+    ])
     const dismissAgentSuggestion = vi.fn().mockResolvedValue({
       suggestionId: 'suggestion-1',
       triggerKind: 'governance.failed_runs_detected',
@@ -234,6 +255,7 @@ describe('archiveApi agent runtime methods', () => {
         listAgentMemories,
         listAgentPolicyVersions,
         listAgentSuggestions,
+        refreshAgentSuggestions,
         dismissAgentSuggestion,
         runAgentSuggestion
       }
@@ -257,6 +279,7 @@ describe('archiveApi agent runtime methods', () => {
       status: 'suggested',
       limit: 10
     })
+    const refreshedSuggestions = await archiveApi.refreshAgentSuggestions()
     const dismissed = await archiveApi.dismissAgentSuggestion({
       suggestionId: 'suggestion-1'
     })
@@ -289,6 +312,7 @@ describe('archiveApi agent runtime methods', () => {
     expect(memories[0]?.memoryKey).toBe('governance.feedback')
     expect(policyVersions[0]?.policyKey).toBe('governance.review.policy')
     expect(suggestions[0]?.suggestionId).toBe('suggestion-1')
+    expect(refreshedSuggestions[0]?.suggestionId).toBe('suggestion-1')
     expect(dismissed?.status).toBe('dismissed')
     expect(runSuggestionResult).toEqual({
       runId: 'run-from-suggestion-1',

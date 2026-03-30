@@ -25,10 +25,12 @@ import {
   listAgentSuggestions,
   listAgentPolicyVersions,
   listAgentRuns,
+  upsertAgentSuggestion,
   markAgentSuggestionExecuted,
   updateAgentRunReplayMetadata,
   updateAgentRunStatus
 } from './agentPersistenceService'
+import { evaluateAgentProactiveSuggestions } from './agentProactiveTriggerService'
 import {
   inferAgentReplayMetadata,
   planAgentExecution,
@@ -48,6 +50,7 @@ export type AgentRuntime = {
   listMemories(input?: ListAgentMemoriesInput): ReturnType<typeof listAgentMemories>
   listPolicyVersions(input?: ListAgentPolicyVersionsInput): AgentPolicyVersionRecord[]
   listSuggestions(input?: ListAgentSuggestionsInput): AgentSuggestionRecord[]
+  refreshSuggestions(): AgentSuggestionRecord[]
   dismissSuggestion(input: DismissAgentSuggestionInput): AgentSuggestionRecord | null
   runSuggestion(input: RunAgentSuggestionInput): Promise<AgentRuntimeRunResult | null>
 }
@@ -234,6 +237,16 @@ export function createAgentRuntime(input: CreateAgentRuntimeInput): AgentRuntime
     },
     listSuggestions(suggestionsInput = {}) {
       return listAgentSuggestions(input.db, suggestionsInput)
+    },
+    refreshSuggestions() {
+      return evaluateAgentProactiveSuggestions(input.db).map((suggestion) => upsertAgentSuggestion(input.db, {
+        triggerKind: suggestion.triggerKind,
+        role: suggestion.role,
+        taskKind: suggestion.taskKind,
+        taskInput: suggestion.taskInput,
+        dedupeKey: suggestion.dedupeKey,
+        sourceRunId: suggestion.sourceRunId ?? null
+      }))
     },
     dismissSuggestion(dismissInput) {
       return dismissAgentSuggestion(input.db, dismissInput)

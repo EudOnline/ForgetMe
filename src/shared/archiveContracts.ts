@@ -1623,6 +1623,7 @@ export interface ArchiveApi {
   listAgentMemories: (input?: ListAgentMemoriesInput) => Promise<AgentMemoryRecord[]>
   listAgentPolicyVersions: (input?: ListAgentPolicyVersionsInput) => Promise<AgentPolicyVersionRecord[]>
   listAgentSuggestions: (input?: ListAgentSuggestionsInput) => Promise<AgentSuggestionRecord[]>
+  refreshAgentSuggestions: () => Promise<AgentSuggestionRecord[]>
   dismissAgentSuggestion: (input: DismissAgentSuggestionInput) => Promise<AgentSuggestionRecord | null>
   runAgentSuggestion: (input: RunAgentSuggestionInput) => Promise<RunAgentTaskResult | null>
   listImportBatches: () => Promise<ImportBatchSummary[]>
