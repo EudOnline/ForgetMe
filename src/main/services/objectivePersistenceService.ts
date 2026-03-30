@@ -638,6 +638,32 @@ function listProposalRowsByThread(db: ArchiveDatabase, threadId: string) {
   ).all(threadId) as AgentProposalRow[]
 }
 
+function getProposalRow(db: ArchiveDatabase, proposalId: string) {
+  return db.prepare(
+    `select
+      id,
+      objective_id as objectiveId,
+      thread_id as threadId,
+      proposed_by as proposedBy,
+      proposal_kind as proposalKind,
+      payload_json as payloadJson,
+      owner_role as ownerRole,
+      status,
+      required_approvals_json as requiredApprovalsJson,
+      allow_veto_by_json as allowVetoByJson,
+      requires_operator_confirmation as requiresOperatorConfirmation,
+      tool_policy_id as toolPolicyId,
+      budget_json as budgetJson,
+      derived_from_message_ids_json as derivedFromMessageIdsJson,
+      artifact_refs_json as artifactRefsJson,
+      created_at as createdAt,
+      updated_at as updatedAt,
+      committed_at as committedAt
+    from agent_proposals
+    where id = ?`
+  ).get(proposalId) as AgentProposalRow | undefined
+}
+
 function listVoteRows(db: ArchiveDatabase, threadId: string) {
   return db.prepare(
     `select
@@ -1022,35 +1048,40 @@ export function createProposal(db: ArchiveDatabase, input: CreateProposalInput):
     input.committedAt ?? null
   )
 
-  const row = db.prepare(
-    `select
-      id,
-      objective_id as objectiveId,
-      thread_id as threadId,
-      proposed_by as proposedBy,
-      proposal_kind as proposalKind,
-      payload_json as payloadJson,
-      owner_role as ownerRole,
-      status,
-      required_approvals_json as requiredApprovalsJson,
-      allow_veto_by_json as allowVetoByJson,
-      requires_operator_confirmation as requiresOperatorConfirmation,
-      tool_policy_id as toolPolicyId,
-      budget_json as budgetJson,
-      derived_from_message_ids_json as derivedFromMessageIdsJson,
-      artifact_refs_json as artifactRefsJson,
-      created_at as createdAt,
-      updated_at as updatedAt,
-      committed_at as committedAt
-    from agent_proposals
-    where id = ?`
-  ).get(proposalId) as AgentProposalRow | undefined
+  const row = getProposalRow(db, proposalId)
 
   if (!row) {
     throw new Error('failed to create proposal')
   }
 
   return mapProposalRow(row)
+}
+
+export function getProposal(db: ArchiveDatabase, input: {
+  proposalId: string
+}): AgentProposalRecord | null {
+  const row = getProposalRow(db, input.proposalId)
+  return row ? mapProposalRow(row) : null
+}
+
+export function updateProposalStatus(db: ArchiveDatabase, input: {
+  proposalId: string
+  status: AgentProposalStatus
+  updatedAt?: string
+  committedAt?: string | null
+}): AgentProposalRecord | null {
+  const updatedAt = input.updatedAt ?? nowIso()
+  const committedAt = input.committedAt === undefined
+    ? (input.status === 'committed' ? updatedAt : null)
+    : input.committedAt
+
+  db.prepare(
+    `update agent_proposals
+    set status = ?, updated_at = ?, committed_at = ?
+    where id = ?`
+  ).run(input.status, updatedAt, committedAt, input.proposalId)
+
+  return getProposal(db, { proposalId: input.proposalId })
 }
 
 export function recordProposalVote(db: ArchiveDatabase, input: RecordProposalVoteInput): AgentVoteRecord {
