@@ -7,6 +7,7 @@ import type {
 import { listAgentRuns } from './agentPersistenceService'
 import type { ArchiveDatabase } from './db'
 import { listEnrichmentJobs } from './enrichmentReadService'
+import { buildObjectiveSuggestionSeed } from './objectiveSuggestionBridgeService'
 import { listReviewConflictGroups } from './reviewWorkbenchReadService'
 
 export type AgentSuggestionSeed = {
@@ -74,4 +75,17 @@ export function evaluateAgentProactiveSuggestions(db: ArchiveDatabase): AgentSug
   }
 
   return suggestions
+}
+
+export function evaluateAgentProactiveObjectiveSeeds(db: ArchiveDatabase) {
+  return evaluateAgentProactiveSuggestions(db).map((suggestion) => buildObjectiveSuggestionSeed({
+    triggerKind: suggestion.triggerKind,
+    dedupeKey: suggestion.dedupeKey,
+    sourceRunId: suggestion.sourceRunId ?? null,
+    taskInput: suggestion.taskInput,
+    rationale: `Bridge proactive trigger ${suggestion.triggerKind} into the objective runtime.`,
+    autoRunnable: suggestion.taskKind === 'governance.summarize_failures'
+      || suggestion.taskKind === 'review.suggest_safe_group_action'
+      || suggestion.taskKind === 'ingestion.rerun_enrichment'
+  }))
 }

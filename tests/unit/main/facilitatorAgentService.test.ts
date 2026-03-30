@@ -39,4 +39,26 @@ describe('facilitator agent service', () => {
 
     db.close()
   })
+
+  it('includes ingestion alongside workspace, review, and governance for evidence investigations', () => {
+    const db = setupDatabase()
+    const facilitator = createFacilitatorAgentService()
+
+    const created = facilitator.acceptObjective({
+      db,
+      title: 'Investigate local and external evidence together',
+      objectiveKind: 'evidence_investigation',
+      prompt: 'Review file-evidence-1 locally and verify the public claim.',
+      initiatedBy: 'operator'
+    })
+
+    expect(created.participants.map((participant) => participant.role)).toEqual([
+      'workspace',
+      'review',
+      'governance',
+      'ingestion'
+    ])
+
+    db.close()
+  })
 })

@@ -1846,6 +1846,7 @@ export type AgentObjectiveDetail = AgentObjectiveRecord & {
   proposals: AgentProposalRecord[]
   checkpoints: AgentCheckpointRecord[]
   subagents: AgentSubagentRecord[]
+  toolExecutions?: AgentToolExecutionRecord[]
 }
 
 export type AgentThreadDetail = AgentThreadRecord & {
@@ -1855,6 +1856,7 @@ export type AgentThreadDetail = AgentThreadRecord & {
   votes: AgentVoteRecord[]
   checkpoints: AgentCheckpointRecord[]
   subagents: AgentSubagentRecord[]
+  toolExecutions?: AgentToolExecutionRecord[]
 }
 
 export type CreateAgentObjectiveInput = {

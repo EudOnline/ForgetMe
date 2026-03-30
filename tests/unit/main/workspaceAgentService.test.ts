@@ -33,6 +33,55 @@ function createRunRecord(): AgentRunRecord {
 }
 
 describe('workspace agent service', () => {
+  it('proposes bounded verification work during evidence investigations', async () => {
+    const db = setupDatabase()
+    const agent = createWorkspaceAgentService()
+
+    const result = await agent.receive?.({
+      db,
+      objective: {
+        objectiveId: 'objective-1',
+        title: 'Verify the claim',
+        objectiveKind: 'evidence_investigation',
+        status: 'in_progress',
+        prompt: 'Verify the official claim before we answer the user.',
+        initiatedBy: 'operator',
+        ownerRole: 'workspace',
+        mainThreadId: 'thread-1',
+        riskLevel: 'medium',
+        budget: null,
+        requiresOperatorInput: false,
+        createdAt: '2026-03-30T00:00:00.000Z',
+        updatedAt: '2026-03-30T00:00:00.000Z'
+      },
+      thread: {
+        threadId: 'thread-1',
+        objectiveId: 'objective-1',
+        parentThreadId: null,
+        threadKind: 'main',
+        ownerRole: 'workspace',
+        title: 'Main thread',
+        status: 'open',
+        createdAt: '2026-03-30T00:00:00.000Z',
+        updatedAt: '2026-03-30T00:00:00.000Z',
+        closedAt: null
+      },
+      participantId: 'workspace',
+      messages: [],
+      proposals: [],
+      round: 1
+    })
+
+    expect(result?.proposals).toEqual([
+      expect.objectContaining({
+        proposalKind: 'verify_external_claim',
+        ownerRole: 'workspace'
+      })
+    ])
+
+    db.close()
+  })
+
   it('delegates archive-grounded questions into askMemoryWorkspacePersisted', async () => {
     const db = setupDatabase()
     const askMemoryWorkspacePersisted = vi.fn().mockReturnValue({

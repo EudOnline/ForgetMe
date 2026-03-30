@@ -10,9 +10,8 @@ describe('message-native objective runtime cleanup', () => {
     const readme = readRepoFile('README.md')
 
     expect(readme).toContain('### Message-Native Objective Runtime Verification')
-    expect(readme).toContain('tests/e2e/objective-workbench-deliberation-flow.spec.ts')
-    expect(readme).toContain('tests/e2e/objective-workbench-external-verification-flow.spec.ts')
-    expect(readme).toContain('tests/e2e/objective-workbench-operator-confirmation-flow.spec.ts')
+    expect(readme).toContain('npm run test:e2e:objective')
+    expect(readme).toContain('npm run test:typecheck')
     expect(readme).not.toContain('Agent Console')
   })
 

@@ -70,6 +70,76 @@ function createConflictGroup(overrides: Partial<ReviewConflictGroupSummary> = {}
 }
 
 describe('review agent service', () => {
+  it('raises a blocking challenge during review objectives when an open proposal is present', async () => {
+    const db = setupDatabase()
+    const agent = createReviewAgentService()
+
+    const result = await agent.receive?.({
+      db,
+      objective: {
+        objectiveId: 'objective-1',
+        title: 'Review approval safety',
+        objectiveKind: 'review_decision',
+        status: 'in_progress',
+        prompt: 'Decide whether this approval is safe.',
+        initiatedBy: 'operator',
+        ownerRole: 'review',
+        mainThreadId: 'thread-1',
+        riskLevel: 'medium',
+        budget: null,
+        requiresOperatorInput: false,
+        createdAt: '2026-03-30T00:00:00.000Z',
+        updatedAt: '2026-03-30T00:00:00.000Z'
+      },
+      thread: {
+        threadId: 'thread-1',
+        objectiveId: 'objective-1',
+        parentThreadId: null,
+        threadKind: 'main',
+        ownerRole: 'review',
+        title: 'Main thread',
+        status: 'open',
+        createdAt: '2026-03-30T00:00:00.000Z',
+        updatedAt: '2026-03-30T00:00:00.000Z',
+        closedAt: null
+      },
+      participantId: 'review',
+      messages: [],
+      proposals: [
+        {
+          proposalId: 'proposal-1',
+          objectiveId: 'objective-1',
+          threadId: 'thread-1',
+          proposedByParticipantId: 'workspace',
+          proposalKind: 'verify_external_claim',
+          payload: {},
+          ownerRole: 'workspace',
+          status: 'under_review',
+          requiredApprovals: ['workspace'],
+          allowVetoBy: ['governance'],
+          requiresOperatorConfirmation: false,
+          toolPolicyId: 'tool-policy-web-1',
+          budget: null,
+          derivedFromMessageIds: [],
+          artifactRefs: [],
+          createdAt: '2026-03-30T00:00:00.000Z',
+          updatedAt: '2026-03-30T00:00:00.000Z',
+          committedAt: null
+        }
+      ],
+      round: 1
+    })
+
+    expect(result?.messages).toEqual([
+      expect.objectContaining({
+        kind: 'challenge',
+        blocking: true
+      })
+    ])
+
+    db.close()
+  })
+
   it('reads queue and workbench state to summarize pending review work', async () => {
     const db = setupDatabase()
     const listReviewWorkbenchItems = vi.fn().mockReturnValue([

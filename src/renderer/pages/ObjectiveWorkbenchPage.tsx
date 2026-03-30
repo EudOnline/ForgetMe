@@ -27,6 +27,14 @@ function humanize(value: string) {
   return value.replaceAll('_', ' ')
 }
 
+function formatBudgetSummary(budget: AgentProposalRecord['budget']) {
+  if (!budget) {
+    return 'none'
+  }
+
+  return `${budget.maxRounds} rounds · ${budget.maxToolCalls} tools · ${Math.round(budget.timeoutMs / 1000)}s`
+}
+
 function summarizeObjective(detail: AgentObjectiveDetail): AgentObjectiveRecord {
   return {
     objectiveId: detail.objectiveId,
@@ -218,6 +226,16 @@ export function ObjectiveWorkbenchPage() {
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
   }, [objectiveDetail])
 
+  const visibleToolExecutions = useMemo(() => {
+    const threadScopedExecutions = threadDetail?.toolExecutions ?? []
+    if (threadScopedExecutions.length > 0) {
+      return threadScopedExecutions
+    }
+
+    return (objectiveDetail?.toolExecutions ?? [])
+      .filter((execution) => !selectedThreadId || execution.threadId === selectedThreadId)
+  }, [objectiveDetail, selectedThreadId, threadDetail])
+
   const roleStances = useMemo(() => {
     if (!objectiveDetail) {
       return []
@@ -260,6 +278,78 @@ export function ObjectiveWorkbenchPage() {
   }, [objectiveDetail, threadDetail, visibleProposals, t])
 
   const selectedProposal = visibleProposals.find((proposal) => proposal.proposalId === activeProposalId) ?? null
+
+  const participantLabel = (participantId: string) => {
+    if (participantId === 'operator') {
+      return 'operator'
+    }
+
+    const participant = threadDetail?.participants.find((candidate) => candidate.participantId === participantId)
+      ?? objectiveDetail?.participants.find((candidate) => candidate.participantId === participantId)
+
+    return participant?.displayLabel ?? participantId
+  }
+
+  const proposalSourceLabel = (proposal: AgentProposalRecord) => {
+    if (proposal.proposedByParticipantId === 'operator') {
+      return t('objectiveWorkbench.proposalSourceOperator')
+    }
+
+    return t('objectiveWorkbench.proposalSourceAgent', {
+      actor: participantLabel(proposal.proposedByParticipantId)
+    })
+  }
+
+  const blockedReason = useMemo(() => {
+    const blockingMessage = [...(threadDetail?.messages ?? [])]
+      .reverse()
+      .find((message) => message.blocking)
+    if (blockingMessage) {
+      return t('objectiveWorkbench.blockedByLine', {
+        actor: participantLabel(blockingMessage.fromParticipantId),
+        reason: blockingMessage.body
+      })
+    }
+
+    const failedSubagent = [...(threadDetail?.subagents ?? [])]
+      .reverse()
+      .find((subagent) => subagent.status === 'failed')
+    if (failedSubagent?.summary) {
+      return t('objectiveWorkbench.blockedByLine', {
+        actor: failedSubagent.specialization,
+        reason: failedSubagent.summary
+      })
+    }
+
+    const failedTool = [...visibleToolExecutions]
+      .reverse()
+      .find((execution) => execution.status === 'failed' || execution.status === 'blocked')
+    const failedToolReason = typeof failedTool?.outputPayload?.message === 'string'
+      ? failedTool.outputPayload.message
+      : typeof failedTool?.outputPayload?.reason === 'string'
+        ? failedTool.outputPayload.reason
+        : null
+    if (failedTool && failedToolReason) {
+      return t('objectiveWorkbench.blockedByLine', {
+        actor: failedTool.toolName,
+        reason: failedToolReason
+      })
+    }
+
+    return null
+  }, [participantLabel, t, threadDetail, visibleToolExecutions])
+
+  const subagentLineage = useMemo(() => {
+    return (objectiveDetail?.subagents ?? [])
+      .filter((subagent) => !selectedThreadId || subagent.threadId === selectedThreadId || subagent.parentThreadId === selectedThreadId)
+      .map((subagent) => ({
+        subagentId: subagent.subagentId,
+        summary: `${subagent.parentAgentRole} -> ${subagent.specialization}`,
+        status: subagent.status,
+        toolPolicyId: subagent.toolPolicyId,
+        budget: formatBudgetSummary(subagent.budget)
+      }))
+  }, [objectiveDetail, selectedThreadId])
 
   const handleCreateObjective = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -498,9 +588,14 @@ export function ObjectiveWorkbenchPage() {
                 <ol className="fmObjectiveWorkbenchThreadMessages">
                   {threadDetail.messages.map((message) => (
                     <li key={message.messageId}>
-                      <span>{message.kind}</span>
-                      <strong>{message.fromParticipantId}</strong>
+                      <div className="fmObjectiveWorkbenchTimelineMeta">
+                        <span>{participantLabel(message.fromParticipantId)}</span>
+                        <span>{humanize(message.kind)}</span>
+                      </div>
                       <p>{message.body}</p>
+                      {message.refs.length ? (
+                        <small>{t('objectiveWorkbench.threadRefsLine', { count: message.refs.length })}</small>
+                      ) : null}
                     </li>
                   ))}
                 </ol>
@@ -546,6 +641,55 @@ export function ObjectiveWorkbenchPage() {
             </div>
           </section>
 
+          <section aria-label={t('objectiveWorkbench.runtimeTitle')}>
+            <h2>{t('objectiveWorkbench.runtimeTitle')}</h2>
+            <p>
+              <span>{t('objectiveWorkbench.blockedReasonLabel')}</span>
+              {blockedReason ? ` ${blockedReason}` : ` ${t('objectiveWorkbench.none')}`}
+            </p>
+            <p>
+              <span>{t('objectiveWorkbench.selectedBudgetLabel')}</span>
+              {selectedProposal ? ` ${formatBudgetSummary(selectedProposal.budget)}` : ` ${t('objectiveWorkbench.none')}`}
+            </p>
+            <p>
+              <span>{t('objectiveWorkbench.selectedPolicyLabel')}</span>
+              {selectedProposal?.toolPolicyId ? ` ${selectedProposal.toolPolicyId}` : ` ${t('objectiveWorkbench.none')}`}
+            </p>
+            <div className="fmObjectiveWorkbenchSectionHeader">
+              <h3>{t('objectiveWorkbench.toolExecutionsTitle')}</h3>
+            </div>
+            {visibleToolExecutions.length === 0 ? (
+              <p>{t('objectiveWorkbench.noToolExecutions')}</p>
+            ) : (
+              <div className="fmObjectiveWorkbenchProposalList">
+                {visibleToolExecutions.map((execution) => (
+                  <article key={execution.toolExecutionId} className="fmObjectiveWorkbenchProposalCard">
+                    <strong>{execution.toolName}</strong>
+                    <p>{humanize(execution.status)}</p>
+                    <p>{execution.toolPolicyId ?? t('objectiveWorkbench.none')}</p>
+                  </article>
+                ))}
+              </div>
+            )}
+            <div className="fmObjectiveWorkbenchSectionHeader">
+              <h3>{t('objectiveWorkbench.subagentLineageTitle')}</h3>
+            </div>
+            {subagentLineage.length === 0 ? (
+              <p>{t('objectiveWorkbench.noSubagentLineage')}</p>
+            ) : (
+              <div className="fmObjectiveWorkbenchProposalList">
+                {subagentLineage.map((entry) => (
+                  <article key={entry.subagentId} className="fmObjectiveWorkbenchProposalCard">
+                    <strong>{entry.summary}</strong>
+                    <p>{humanize(entry.status)}</p>
+                    <p>{entry.toolPolicyId}</p>
+                    <p>{entry.budget}</p>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
           <section aria-label={t('objectiveWorkbench.proposalsTitle')}>
             <h2>{t('objectiveWorkbench.proposalsTitle')}</h2>
             {selectedProposal ? (
@@ -571,6 +715,9 @@ export function ObjectiveWorkbenchPage() {
                       <span>{humanize(proposal.status)} · {proposal.ownerRole}</span>
                     </button>
                     <p>{proposalSummary(proposal)}</p>
+                    <p>{proposalSourceLabel(proposal)}</p>
+                    <p>{proposal.toolPolicyId ?? t('objectiveWorkbench.none')}</p>
+                    <p>{formatBudgetSummary(proposal.budget)}</p>
                     <div className="fmButtonRow">
                       {proposal.status === 'awaiting_operator' ? (
                         <>

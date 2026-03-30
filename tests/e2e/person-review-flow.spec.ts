@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron } from '@playwright/test'
+import { importFixturesThroughPreflight } from './helpers/importFlow'
 
 test('approves a merge candidate and shows the merged result in people view', async () => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase2-e2e-'))
@@ -32,12 +33,12 @@ test('approves a merge candidate and shows the merged result in people view', as
   })
 
   const page = await electronApp.firstWindow()
-  await page.getByText('Choose Files').click()
-  await page.getByText('Review Queue').click()
+  await importFixturesThroughPreflight(page, ['chat-a.json', 'chat-b.json'])
+  await page.getByRole('button', { name: 'Review Queue' }).click()
   await expect(page.getByText('person_merge_candidate')).toBeVisible()
   await page.getByText('Approve').click()
   await expect(page.getByText('No pending review items.')).toBeVisible()
-  await page.getByText('People').click()
+  await page.getByRole('button', { name: 'People' }).click()
   await expect(page.getByRole('button', { name: /^Alice Chen$/ })).toBeVisible()
   await expect(page.getByRole('button', { name: /^alice chen$/ })).toHaveCount(0)
   await electronApp.close()

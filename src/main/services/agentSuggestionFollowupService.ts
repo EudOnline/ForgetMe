@@ -13,6 +13,7 @@ import {
 import type { RankedAgentSuggestionSeed } from './agentSuggestionRankingService'
 import { isSafeAutoRunnableTaskKind } from './agentSuggestionRankingService'
 import type { ArchiveDatabase } from './db'
+import { buildObjectiveSuggestionSeed } from './objectiveSuggestionBridgeService'
 
 const SAFE_GROUP_FOLLOWUP_PATTERN = /Suggested follow-up:\s*Apply safe group\s+([A-Za-z0-9-]+)/i
 const GOVERNANCE_POLICY_PROMPT_PATTERN = /Suggested follow-up:\s*(Propose policy update:\s*.+)$/i
@@ -201,4 +202,21 @@ export function deriveAgentSuggestionFollowups(
     default:
       return []
   }
+}
+
+export function deriveAgentObjectiveFollowups(
+  db: ArchiveDatabase,
+  input: {
+    runId: string
+    parentSuggestionId?: string | null
+  }
+) {
+  return deriveAgentSuggestionFollowups(db, input).map((followup) => buildObjectiveSuggestionSeed({
+    triggerKind: followup.triggerKind,
+    dedupeKey: followup.dedupeKey,
+    sourceRunId: followup.sourceRunId ?? null,
+    taskInput: followup.taskInput,
+    rationale: followup.rationale,
+    autoRunnable: followup.autoRunnable
+  }))
 }

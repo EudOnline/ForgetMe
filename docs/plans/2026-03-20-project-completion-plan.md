@@ -393,10 +393,29 @@ Confirm before merging:
 - no scope leakage occurs between global / person / group sessions
 - persona guardrails still block imitation requests
 - project verification now includes a real typecheck step
+- the message-native `Objective Workbench` is the active agent surface, with persisted proposal provenance, tool execution history, and subagent lineage
+- final completion verification includes the dedicated objective runtime e2e slice instead of the removed agent-console flow
 
 **Step 3: Final commit**
 
 ```bash
 git add .
 git commit -m "feat: complete v1 conversation continuity"
+```
+
+### Post-Completion Addendum: Objective Runtime Baseline
+
+As of 2026-03-31, the repository completion baseline also includes the shipped message-native objective runtime:
+
+- `Objective Workbench` replaces the old run-centric agent surface
+- facilitator-led deliberation, governed proposals, brokered external verification, and bounded subagents are persisted for replay
+- operators can inspect proposal provenance, runtime tool execution history, and subagent lineage directly from the objective detail view
+
+Runtime verification addendum:
+
+```bash
+npm run test:typecheck
+npm run test:unit -- tests/unit/main/agentIpc.test.ts tests/unit/preload/index.test.ts tests/unit/renderer/archiveApi.test.ts tests/unit/renderer/objectiveWorkbenchPage.test.tsx tests/unit/repo/objectiveRuntimeCleanup.test.ts
+npm run test:e2e:objective
+npm run build
 ```

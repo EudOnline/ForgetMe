@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron } from '@playwright/test'
+import { importFixturesThroughPreflight } from './helpers/importFlow'
 
 test('memory workspace supports global, person, and group scoped asks', async () => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase8a-e2e-'))
@@ -25,8 +26,7 @@ test('memory workspace supports global, person, and group scoped asks', async ()
   })
 
   const page = await electronApp.firstWindow()
-  await page.getByText('Choose Files').click()
-  await expect(page.getByRole('button', { name: 'chat-phase8a.json' })).toBeVisible()
+  await importFixturesThroughPreflight(page, 'chat-phase8a.json')
 
   await page.getByRole('button', { name: 'Memory Workspace' }).click()
   await expect(page.getByRole('heading', { name: 'Memory Workspace', exact: true })).toBeVisible()

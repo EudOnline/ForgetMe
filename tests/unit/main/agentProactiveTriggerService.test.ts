@@ -4,7 +4,10 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { createAgentRun } from '../../../src/main/services/agentPersistenceService'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
-import { evaluateAgentProactiveSuggestions } from '../../../src/main/services/agentProactiveTriggerService'
+import {
+  evaluateAgentProactiveObjectiveSeeds,
+  evaluateAgentProactiveSuggestions
+} from '../../../src/main/services/agentProactiveTriggerService'
 
 function setupDatabase() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-agent-proactive-trigger-'))
@@ -311,6 +314,35 @@ describe('agentProactiveTriggerService', () => {
 
     expect(firstCycle.map((item) => item.dedupeKey)).toEqual(secondCycle.map((item) => item.dedupeKey))
     expect(firstCycle.map((item) => item.triggerKind)).toEqual(secondCycle.map((item) => item.triggerKind))
+
+    db.close()
+  })
+
+  it('maps proactive triggers into objective seeds for the objective runtime', () => {
+    const db = setupDatabase()
+
+    createAgentRun(db, {
+      runId: 'run-failed-1',
+      role: 'workspace',
+      taskKind: 'workspace.ask_memory',
+      status: 'failed',
+      errorMessage: 'workspace failure',
+      prompt: 'Answer from workspace memory',
+      createdAt: '2026-03-30T00:00:00.000Z',
+      updatedAt: '2026-03-30T00:00:00.000Z'
+    })
+
+    const objectiveSeeds = evaluateAgentProactiveObjectiveSeeds(db)
+
+    expect(objectiveSeeds).toContainEqual(expect.objectContaining({
+      triggerKind: 'governance.failed_runs_detected',
+      dedupeKey: 'governance.failed-runs::latest',
+      objective: expect.objectContaining({
+        objectiveKind: 'policy_change',
+        initiatedBy: 'proposal_followup'
+      }),
+      autoStartSafe: true
+    }))
 
     db.close()
   })

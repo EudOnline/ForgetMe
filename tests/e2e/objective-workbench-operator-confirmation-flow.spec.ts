@@ -10,7 +10,7 @@ import { createExternalVerificationBrokerService } from '../../src/main/services
 import { createObjectiveRuntimeService } from '../../src/main/services/objectiveRuntimeService'
 import { createSubagentRegistryService } from '../../src/main/services/subagentRegistryService'
 
-function seedAwaitingOperatorObjective(userDataDir: string) {
+async function seedAwaitingOperatorObjective(userDataDir: string) {
   const appPaths = ensureAppPaths(userDataDir)
   const db = openDatabase(path.join(appPaths.sqliteDir, 'archive.sqlite'))
   runMigrations(db)
@@ -30,7 +30,7 @@ function seedAwaitingOperatorObjective(userDataDir: string) {
     subagentRegistry: createSubagentRegistryService()
   })
 
-  const started = runtime.startObjective({
+  const started = await runtime.startObjective({
     title: 'Confirm a review action before commit',
     objectiveKind: 'review_decision',
     prompt: 'Hold the review action until an operator confirms it.',
@@ -47,7 +47,7 @@ function seedAwaitingOperatorObjective(userDataDir: string) {
     requiresOperatorConfirmation: true
   })
 
-  runtime.respondToAgentProposal({
+  await runtime.respondToAgentProposal({
     proposalId: proposal.proposalId,
     responderRole: 'review',
     response: 'approve',
@@ -110,7 +110,7 @@ async function readProposalStatus(page: Page, input: {
 
 test('objective workbench only commits a gated proposal after operator confirmation', async () => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-objective-confirmation-e2e-'))
-  const seeded = seedAwaitingOperatorObjective(userDataDir)
+  const seeded = await seedAwaitingOperatorObjective(userDataDir)
 
   const electronApp = await launchApp(userDataDir)
   const page = await electronApp.firstWindow()

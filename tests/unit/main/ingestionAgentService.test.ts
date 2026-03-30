@@ -33,6 +33,58 @@ function createRunRecord(): AgentRunRecord {
 }
 
 describe('ingestion agent service', () => {
+  it('requests bounded local evidence work during evidence investigations with a file id', async () => {
+    const db = setupDatabase()
+    const agent = createIngestionAgentService()
+
+    const result = await agent.receive?.({
+      db,
+      objective: {
+        objectiveId: 'objective-1',
+        title: 'Review local evidence',
+        objectiveKind: 'evidence_investigation',
+        status: 'in_progress',
+        prompt: 'Review local evidence in file-evidence-1 before responding.',
+        initiatedBy: 'operator',
+        ownerRole: 'workspace',
+        mainThreadId: 'thread-1',
+        riskLevel: 'medium',
+        budget: null,
+        requiresOperatorInput: false,
+        createdAt: '2026-03-30T00:00:00.000Z',
+        updatedAt: '2026-03-30T00:00:00.000Z'
+      },
+      thread: {
+        threadId: 'thread-1',
+        objectiveId: 'objective-1',
+        parentThreadId: null,
+        threadKind: 'main',
+        ownerRole: 'workspace',
+        title: 'Main thread',
+        status: 'open',
+        createdAt: '2026-03-30T00:00:00.000Z',
+        updatedAt: '2026-03-30T00:00:00.000Z',
+        closedAt: null
+      },
+      participantId: 'ingestion',
+      messages: [],
+      proposals: [],
+      round: 1
+    })
+
+    expect(result?.spawnRequests).toEqual([
+      expect.objectContaining({
+        specialization: 'evidence-checker',
+        ownerRole: 'workspace',
+        payload: {
+          fileId: 'file-evidence-1'
+        }
+      })
+    ])
+
+    db.close()
+  })
+
   it('produces a tool plan for import-batch requests instead of touching UI', async () => {
     const db = setupDatabase()
     const createImportBatch = vi.fn()

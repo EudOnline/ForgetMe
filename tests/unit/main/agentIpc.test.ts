@@ -9,6 +9,7 @@ const {
   listAgentPolicyVersions,
   createObjectiveRuntimeService,
   createFacilitatorAgentService,
+  createRoleAgentRegistryService,
   createExternalVerificationBrokerService,
   createExternalWebSearchService,
   createSubagentRegistryService
@@ -20,6 +21,7 @@ const {
   listAgentPolicyVersions: vi.fn(),
   createObjectiveRuntimeService: vi.fn(),
   createFacilitatorAgentService: vi.fn(),
+  createRoleAgentRegistryService: vi.fn(),
   createExternalVerificationBrokerService: vi.fn(),
   createExternalWebSearchService: vi.fn(),
   createSubagentRegistryService: vi.fn()
@@ -52,6 +54,10 @@ vi.mock('../../../src/main/services/objectiveRuntimeService', () => ({
 
 vi.mock('../../../src/main/services/agents/facilitatorAgentService', () => ({
   createFacilitatorAgentService
+}))
+
+vi.mock('../../../src/main/services/agents/roleAgentRegistryService', () => ({
+  createRoleAgentRegistryService
 }))
 
 vi.mock('../../../src/main/services/externalVerificationBrokerService', () => ({
@@ -88,6 +94,7 @@ describe('registerAgentIpc', () => {
     listAgentPolicyVersions.mockReset()
     createObjectiveRuntimeService.mockReset()
     createFacilitatorAgentService.mockReset()
+    createRoleAgentRegistryService.mockReset()
     createExternalVerificationBrokerService.mockReset()
     createExternalWebSearchService.mockReset()
     createSubagentRegistryService.mockReset()
@@ -123,6 +130,7 @@ describe('registerAgentIpc', () => {
     const close = vi.fn()
     const db = { close }
     const facilitator = { role: 'facilitator' }
+    const roleAgentRegistry = { role: 'role-agent-registry' }
     const externalVerificationBroker = { role: 'external-verification-broker' }
     const externalWebSearch = {
       searchWeb: vi.fn(),
@@ -280,6 +288,7 @@ describe('registerAgentIpc', () => {
 
     openDatabase.mockReturnValue(db)
     createFacilitatorAgentService.mockReturnValue(facilitator)
+    createRoleAgentRegistryService.mockReturnValue(roleAgentRegistry)
     createExternalWebSearchService.mockReturnValue(externalWebSearch)
     createExternalVerificationBrokerService.mockReturnValue(externalVerificationBroker)
     createSubagentRegistryService.mockReturnValue(subagentRegistry)
@@ -323,6 +332,7 @@ describe('registerAgentIpc', () => {
     })
 
     expect(createFacilitatorAgentService).toHaveBeenCalledTimes(6)
+    expect(createRoleAgentRegistryService).toHaveBeenCalledTimes(6)
     expect(createExternalWebSearchService).toHaveBeenCalledTimes(6)
     expect(createExternalVerificationBrokerService).toHaveBeenCalledTimes(6)
     expect(createExternalVerificationBrokerService).toHaveBeenCalledWith({
@@ -334,7 +344,8 @@ describe('registerAgentIpc', () => {
       db,
       facilitator,
       externalVerificationBroker,
-      subagentRegistry
+      subagentRegistry,
+      roleAgentRegistry
     })
     expect(objectiveRuntime.startObjective).toHaveBeenCalledWith({
       title: 'Verify an external claim before responding',
@@ -427,5 +438,107 @@ describe('registerAgentIpc', () => {
     expect(policyVersions).toEqual(policyVersionsResult)
     expect(createObjectiveRuntimeService).not.toHaveBeenCalled()
     expect(close).toHaveBeenCalledTimes(2)
+  })
+
+  it('awaits async objective startup before reading back the created objective detail', async () => {
+    const close = vi.fn()
+    const db = { close }
+    const facilitator = { role: 'facilitator' }
+    const roleAgentRegistry = { role: 'role-agent-registry' }
+    const externalVerificationBroker = { role: 'external-verification-broker' }
+    const externalWebSearch = {
+      searchWeb: vi.fn(),
+      openSourcePage: vi.fn()
+    }
+    const subagentRegistry = { role: 'subagent-registry' }
+    const objectiveDetail = {
+      objectiveId: 'objective-async',
+      title: 'Async startup objective',
+      objectiveKind: 'evidence_investigation',
+      status: 'in_progress',
+      prompt: 'Check the source before we answer the user.',
+      initiatedBy: 'operator',
+      ownerRole: 'workspace',
+      mainThreadId: 'thread-main-async',
+      riskLevel: 'medium',
+      budget: null,
+      requiresOperatorInput: false,
+      createdAt: '2026-03-30T00:00:00.000Z',
+      updatedAt: '2026-03-30T00:00:00.000Z',
+      threads: [],
+      participants: [],
+      proposals: [
+        {
+          proposalId: 'proposal-async-1',
+          objectiveId: 'objective-async',
+          threadId: 'thread-main-async',
+          proposedByParticipantId: 'workspace',
+          proposalKind: 'verify_external_claim',
+          payload: {
+            claim: 'Async startup seeded this proposal.'
+          },
+          ownerRole: 'workspace',
+          status: 'under_review',
+          requiredApprovals: ['workspace'],
+          allowVetoBy: ['governance'],
+          requiresOperatorConfirmation: true,
+          toolPolicyId: 'external-verification-policy',
+          budget: {
+            maxRounds: 2,
+            maxToolCalls: 3,
+            timeoutMs: 30_000
+          },
+          derivedFromMessageIds: [],
+          artifactRefs: [],
+          createdAt: '2026-03-30T00:00:00.000Z',
+          updatedAt: '2026-03-30T00:00:00.000Z',
+          committedAt: null
+        }
+      ],
+      checkpoints: [],
+      subagents: []
+    }
+    const objectiveRuntime = {
+      startObjective: vi.fn().mockResolvedValue({
+        objective: {
+          objectiveId: 'objective-async'
+        }
+      }),
+      listObjectives: vi.fn().mockReturnValue([]),
+      getObjectiveDetail: vi.fn().mockImplementation(({ objectiveId }: { objectiveId: string }) => (
+        objectiveId === 'objective-async' ? objectiveDetail : null
+      )),
+      getThreadDetail: vi.fn().mockReturnValue(null),
+      respondToAgentProposal: vi.fn(),
+      confirmAgentProposal: vi.fn()
+    }
+
+    openDatabase.mockReturnValue(db)
+    createFacilitatorAgentService.mockReturnValue(facilitator)
+    createRoleAgentRegistryService.mockReturnValue(roleAgentRegistry)
+    createExternalWebSearchService.mockReturnValue(externalWebSearch)
+    createExternalVerificationBrokerService.mockReturnValue(externalVerificationBroker)
+    createSubagentRegistryService.mockReturnValue(subagentRegistry)
+    createObjectiveRuntimeService.mockReturnValue(objectiveRuntime)
+
+    registerAgentIpc(appPathsFixture())
+
+    const created = await handlerMap.get('archive:createAgentObjective')?.({}, {
+      title: 'Async startup objective',
+      objectiveKind: 'evidence_investigation',
+      prompt: 'Check the source before we answer the user.',
+      initiatedBy: 'operator'
+    })
+
+    expect(objectiveRuntime.startObjective).toHaveBeenCalledWith({
+      title: 'Async startup objective',
+      objectiveKind: 'evidence_investigation',
+      prompt: 'Check the source before we answer the user.',
+      initiatedBy: 'operator'
+    })
+    expect(objectiveRuntime.getObjectiveDetail).toHaveBeenCalledWith({
+      objectiveId: 'objective-async'
+    })
+    expect(created).toEqual(objectiveDetail)
   })
 })

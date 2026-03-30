@@ -33,6 +33,54 @@ function createRunRecord(): AgentRunRecord {
 }
 
 describe('governance agent service', () => {
+  it('emits a risk notice when policy review is required', async () => {
+    const db = setupDatabase()
+    const agent = createGovernanceAgentService()
+
+    const result = await agent.receive?.({
+      db,
+      objective: {
+        objectiveId: 'objective-1',
+        title: 'Policy review',
+        objectiveKind: 'policy_change',
+        status: 'in_progress',
+        prompt: 'Review the latest governance policy before rollout.',
+        initiatedBy: 'operator',
+        ownerRole: 'governance',
+        mainThreadId: 'thread-1',
+        riskLevel: 'medium',
+        budget: null,
+        requiresOperatorInput: false,
+        createdAt: '2026-03-30T00:00:00.000Z',
+        updatedAt: '2026-03-30T00:00:00.000Z'
+      },
+      thread: {
+        threadId: 'thread-1',
+        objectiveId: 'objective-1',
+        parentThreadId: null,
+        threadKind: 'main',
+        ownerRole: 'governance',
+        title: 'Main thread',
+        status: 'open',
+        createdAt: '2026-03-30T00:00:00.000Z',
+        updatedAt: '2026-03-30T00:00:00.000Z',
+        closedAt: null
+      },
+      participantId: 'governance',
+      messages: [],
+      proposals: [],
+      round: 1
+    })
+
+    expect(result?.messages).toEqual([
+      expect.objectContaining({
+        kind: 'risk_notice'
+      })
+    ])
+
+    db.close()
+  })
+
   it('records structured feedback into operational memory', async () => {
     const db = setupDatabase()
     const recordMemory = vi.fn().mockReturnValue({

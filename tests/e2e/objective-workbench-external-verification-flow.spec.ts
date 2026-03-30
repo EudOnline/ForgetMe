@@ -36,7 +36,7 @@ async function seedExternalVerificationObjective(userDataDir: string) {
     subagentRegistry: createSubagentRegistryService()
   })
 
-  const started = runtime.startObjective({
+  const started = await runtime.startObjective({
     title: 'Verify an external claim before responding',
     objectiveKind: 'evidence_investigation',
     prompt: 'Check the external source before we answer the user.',

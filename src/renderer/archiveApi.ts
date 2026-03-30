@@ -103,7 +103,8 @@ function buildFallbackObjectiveDetail(input: CreateAgentObjectiveInput): AgentOb
     participants: [],
     proposals: [],
     checkpoints: [],
-    subagents: []
+    subagents: [],
+    toolExecutions: []
   }
 }
 

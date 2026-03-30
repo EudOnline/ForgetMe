@@ -46,6 +46,21 @@ const TOOL_POLICIES: Record<string, ToolPolicy> = {
     allowedTools: ['search_web', 'open_source_page', 'capture_citation_bundle'],
     allowsNetwork: true
   },
+  'workspace-compare-policy': {
+    policyId: 'workspace-compare-policy',
+    allowedTools: ['run_compare', 'summarize_compare_results'],
+    allowsNetwork: true
+  },
+  'draft-composer-policy': {
+    policyId: 'draft-composer-policy',
+    allowedTools: ['ask_memory_workspace', 'compose_reviewed_draft'],
+    allowsNetwork: false
+  },
+  'policy-audit-policy': {
+    policyId: 'policy-audit-policy',
+    allowedTools: ['read_policy_versions', 'compare_policy_versions'],
+    allowsNetwork: false
+  },
   'local-evidence-policy': {
     policyId: 'local-evidence-policy',
     allowedTools: ['get_document_evidence', 'read_evidence_trace', 'summarize_ocr_evidence'],

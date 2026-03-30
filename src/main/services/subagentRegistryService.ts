@@ -37,7 +37,7 @@ const SUBAGENT_PROFILES: Record<AgentSkillPackId, SubagentProfile> = {
     skillPackIds: ['policy-auditor'],
     toolWhitelist: ['read_policy_versions', 'compare_policy_versions'],
     outputSchema: 'policyAuditResultSchema',
-    defaultToolPolicyId: null,
+    defaultToolPolicyId: 'policy-audit-policy',
     defaultBudget: {
       maxRounds: 2,
       maxToolCalls: 2,
@@ -46,7 +46,7 @@ const SUBAGENT_PROFILES: Record<AgentSkillPackId, SubagentProfile> = {
   },
   'draft-composer': {
     ...draftComposerSkillPack,
-    defaultToolPolicyId: null,
+    defaultToolPolicyId: 'draft-composer-policy',
     defaultBudget: {
       maxRounds: 2,
       maxToolCalls: 2,
@@ -58,7 +58,7 @@ const SUBAGENT_PROFILES: Record<AgentSkillPackId, SubagentProfile> = {
     skillPackIds: ['compare-analyst'],
     toolWhitelist: ['run_compare', 'summarize_compare_results'],
     outputSchema: 'compareAnalysisResultSchema',
-    defaultToolPolicyId: null,
+    defaultToolPolicyId: 'workspace-compare-policy',
     defaultBudget: {
       maxRounds: 2,
       maxToolCalls: 2,

@@ -56,7 +56,7 @@ function inferInitialParticipants(objectiveKind: AgentObjectiveKind): AgentRole[
       return ['workspace', 'governance']
     case 'evidence_investigation':
     default:
-      return ['workspace', 'review', 'governance']
+      return ['workspace', 'review', 'governance', 'ingestion']
   }
 }
 

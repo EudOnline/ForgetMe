@@ -52,4 +52,50 @@ describe('subagentRegistryService', () => {
       }
     })
   })
+
+  it('assigns concrete default tool policies to every retained specialization', () => {
+    const registry = createSubagentRegistryService()
+
+    expect(registry.buildSpawnSubagentSpec({
+      specialization: 'compare-analyst',
+      payload: {
+        question: 'Compare the grounded answer candidates.'
+      }
+    })).toEqual(expect.objectContaining({
+      toolPolicyId: 'workspace-compare-policy',
+      budget: {
+        maxRounds: 2,
+        maxToolCalls: 2,
+        timeoutMs: 30_000
+      }
+    }))
+
+    expect(registry.buildSpawnSubagentSpec({
+      specialization: 'draft-composer',
+      payload: {
+        question: 'Draft a review-ready answer.'
+      }
+    })).toEqual(expect.objectContaining({
+      toolPolicyId: 'draft-composer-policy',
+      budget: {
+        maxRounds: 2,
+        maxToolCalls: 2,
+        timeoutMs: 30_000
+      }
+    }))
+
+    expect(registry.buildSpawnSubagentSpec({
+      specialization: 'policy-auditor',
+      payload: {
+        policyKey: 'governance.review.policy'
+      }
+    })).toEqual(expect.objectContaining({
+      toolPolicyId: 'policy-audit-policy',
+      budget: {
+        maxRounds: 2,
+        maxToolCalls: 2,
+        timeoutMs: 30_000
+      }
+    }))
+  })
 })

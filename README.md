@@ -271,9 +271,11 @@ npm run build
 `Objective Workbench` replaces the old run-centric agent surface with an `objective / thread / message / proposal` runtime.
 
 - a facilitator starts scoped objectives and keeps deliberation inside explicit threads instead of raw console runs
+- proactive triggers and follow-up suggestions can now seed fresh objectives instead of stopping at passive suggestions
 - proposals can pause for governance challenge, operator confirmation, or external verification before any mutation happens
 - external verification is brokered through a bounded web-search boundary with captured evidence and source tracing
-- subagents stay constrained to proposal-scoped work, while objective checkpoints keep the operator focused on key decisions
+- subagents stay constrained to proposal-scoped work, with persisted lineage, bounded budgets, and specialized compare / draft / policy runners
+- proposal provenance, tool executions, and subagent lineage are visible in `Objective Workbench` so operators can audit why a thread moved forward
 - objective state, thread messages, proposals, checkpoints, operational memories, and policy history are all persisted in SQLite
 
 ### Objective Runtime Traffic via LiteLLM
@@ -293,8 +295,9 @@ The gateway also forwards objective/runtime metadata so outbound model traffic s
 ### Message-Native Objective Runtime Verification
 
 ```bash
-npm run test:unit -- tests/unit/main/agentIpc.test.ts tests/unit/preload/index.test.ts tests/unit/renderer/archiveApi.test.ts tests/unit/repo/objectiveRuntimeCleanup.test.ts
-npm run test:e2e -- tests/e2e/objective-workbench-deliberation-flow.spec.ts tests/e2e/objective-workbench-external-verification-flow.spec.ts tests/e2e/objective-workbench-operator-confirmation-flow.spec.ts
+npm run test:typecheck
+npm run test:unit -- tests/unit/main/facilitatorAgentService.test.ts tests/unit/main/workspaceAgentService.test.ts tests/unit/main/reviewAgentService.test.ts tests/unit/main/governanceAgentService.test.ts tests/unit/main/ingestionAgentService.test.ts tests/unit/main/agentAutonomyPolicy.test.ts tests/unit/main/agentProactiveTriggerService.test.ts tests/unit/main/agentSuggestionFollowupService.test.ts tests/unit/main/objectiveRuntimeService.test.ts tests/unit/main/subagentRegistryService.test.ts tests/unit/main/toolBrokerService.test.ts tests/unit/main/agentIpc.test.ts tests/unit/preload/index.test.ts tests/unit/renderer/archiveApi.test.ts tests/unit/renderer/objectiveWorkbenchPage.test.tsx tests/unit/repo/objectiveRuntimeCleanup.test.ts
+npm run test:e2e:objective
 npm run build
 ```
 
@@ -304,6 +307,7 @@ npm run build
 npm run test:typecheck
 npm run test:unit -- tests/unit/main/memoryWorkspaceService.test.ts tests/unit/main/memoryWorkspaceSessionService.test.ts tests/unit/main/memoryWorkspaceIpc.test.ts tests/unit/renderer/archiveApi.test.ts tests/unit/preload/index.test.ts tests/unit/renderer/memoryWorkspacePage.test.tsx
 npm run test:e2e -- tests/e2e/memory-workspace-flow.spec.ts
+npm run test:e2e:objective
 npm run build
 ```
 

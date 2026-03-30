@@ -4,7 +4,10 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { createAgentRun, upsertAgentSuggestion } from '../../../src/main/services/agentPersistenceService'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
-import { deriveAgentSuggestionFollowups } from '../../../src/main/services/agentSuggestionFollowupService'
+import {
+  deriveAgentObjectiveFollowups,
+  deriveAgentSuggestionFollowups
+} from '../../../src/main/services/agentSuggestionFollowupService'
 
 function setupDatabase() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-agent-followup-'))
@@ -119,6 +122,55 @@ describe('agentSuggestionFollowupService', () => {
     })
 
     expect(secondPass).toEqual([])
+
+    db.close()
+  })
+
+  it('bridges safe-group follow-ups into objective seeds with seeded proposals', () => {
+    const db = setupDatabase()
+    const parentSuggestion = upsertAgentSuggestion(db, {
+      triggerKind: 'review.safe_group_available',
+      role: 'review',
+      taskKind: 'review.suggest_safe_group_action',
+      taskInput: {
+        role: 'review',
+        taskKind: 'review.suggest_safe_group_action',
+        prompt: 'Suggest a safe group action.'
+      },
+      dedupeKey: 'review.safe-group::group-safe-42',
+      sourceRunId: null,
+      priority: 'high',
+      rationale: 'A safe group is ready for manual review.',
+      autoRunnable: true,
+      followUpOfSuggestionId: null,
+      observedAt: '2026-03-30T00:00:00.000Z'
+    })
+    const run = createAgentRun(db, {
+      runId: 'run-safe-group-followup',
+      role: 'review',
+      taskKind: 'review.suggest_safe_group_action',
+      prompt: 'Suggest a safe group action.',
+      latestAssistantResponse: 'Safe review group ready for approval: group-safe-42 (4 items). Suggested follow-up: Apply safe group group-safe-42.',
+      status: 'completed'
+    })
+
+    const objectiveFollowups = deriveAgentObjectiveFollowups(db, {
+      runId: run.runId,
+      parentSuggestionId: parentSuggestion.suggestionId
+    })
+
+    expect(objectiveFollowups).toContainEqual(expect.objectContaining({
+      objective: expect.objectContaining({
+        objectiveKind: 'review_decision',
+        initiatedBy: 'proposal_followup'
+      }),
+      seededProposal: expect.objectContaining({
+        proposalKind: 'approve_safe_group',
+        payload: {
+          groupKey: 'group-safe-42'
+        }
+      })
+    }))
 
     db.close()
   })

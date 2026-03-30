@@ -194,6 +194,27 @@ function buildObjectiveDetail() {
         createdAt: '2026-03-30T00:01:00.000Z',
         completedAt: '2026-03-30T00:01:40.000Z'
       }
+    ],
+    toolExecutions: [
+      {
+        toolExecutionId: 'tool-execution-1',
+        objectiveId: 'objective-1',
+        threadId: 'thread-main-1',
+        proposalId: 'proposal-1',
+        requestedByParticipantId: 'subagent-1',
+        toolName: 'search_web',
+        toolPolicyId: 'external-verification-policy',
+        status: 'completed',
+        inputPayload: {
+          query: 'official announcement date'
+        },
+        outputPayload: {
+          resultCount: 1
+        },
+        artifactRefs: [],
+        createdAt: '2026-03-30T00:01:10.000Z',
+        completedAt: '2026-03-30T00:01:15.000Z'
+      }
     ]
   }
 }
@@ -246,7 +267,8 @@ function buildThreadDetail() {
     proposals: buildObjectiveDetail().proposals,
     votes: [],
     checkpoints: buildObjectiveDetail().checkpoints,
-    subagents: buildObjectiveDetail().subagents
+    subagents: buildObjectiveDetail().subagents,
+    toolExecutions: buildObjectiveDetail().toolExecutions
   }
 }
 
@@ -325,5 +347,25 @@ describe('ObjectiveWorkbenchPage', () => {
         operatorNote: 'Operator confirmed after reviewing the checkpoint summary.'
       })
     })
+  })
+
+  it('shows proposal provenance, bounded tool policy details, and subagent lineage', async () => {
+    installArchiveApi({
+      listAgentObjectives: vi.fn().mockResolvedValue([buildObjectiveSummary()]),
+      getAgentObjective: vi.fn().mockResolvedValue(buildObjectiveDetail()),
+      getAgentThread: vi.fn().mockResolvedValue(buildThreadDetail())
+    })
+
+    render(<ObjectiveWorkbenchPage />)
+
+    await screen.findByRole('heading', { name: 'Objective Workbench' })
+
+    expect(screen.getByText('Agent source: workspace')).toBeInTheDocument()
+    expect(screen.getByText('Blocked by governance: Need stronger evidence before this can proceed.')).toBeInTheDocument()
+    expect(screen.getByText('Tool executions')).toBeInTheDocument()
+    expect(screen.getByText('search_web')).toBeInTheDocument()
+    expect(screen.getByText('external-verification-policy')).toBeInTheDocument()
+    expect(screen.getAllByText('2 rounds · 3 tools · 30s').length).toBeGreaterThan(0)
+    expect(screen.getByText('workspace -> web-verifier')).toBeInTheDocument()
   })
 })

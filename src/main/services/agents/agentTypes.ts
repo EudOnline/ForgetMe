@@ -5,6 +5,7 @@ import type {
   AgentMessageRecord,
   AgentMessageRecordV2,
   AgentObjectiveRecord,
+  AgentProposalRecord,
   AgentProposalKind,
   AgentRole,
   AgentRunRecord,
@@ -53,15 +54,14 @@ export type AgentProposalDraft = {
 
 export type SpawnSubagentDraft = {
   specialization: AgentSkillPackId
-  toolPolicyId: string
-  budget: AgentExecutionBudget
-  expectedOutputSchema: string
-}
-
-export type ToolRequestDraft = {
-  toolName: string
-  payload: Record<string, unknown>
-  toolPolicyId?: string
+  payload?: Record<string, unknown>
+  ownerRole: AgentRole
+  requiredApprovals?: AgentRole[]
+  allowVetoBy?: AgentRole[]
+  requiresOperatorConfirmation?: boolean
+  toolPolicyId?: string | null
+  budget?: AgentExecutionBudget | null
+  artifactRefs?: AgentArtifactRef[]
 }
 
 export type AgentReceiveContext = {
@@ -70,6 +70,7 @@ export type AgentReceiveContext = {
   thread: AgentThreadRecord
   participantId: string
   messages: AgentMessageRecordV2[]
+  proposals: AgentProposalRecord[]
   round: number
 }
 
@@ -77,7 +78,6 @@ export type AgentReceiveResult = {
   messages: AgentMessageDraft[]
   proposals?: AgentProposalDraft[]
   spawnRequests?: SpawnSubagentDraft[]
-  toolRequests?: ToolRequestDraft[]
 }
 
 export type AgentAdapter = {

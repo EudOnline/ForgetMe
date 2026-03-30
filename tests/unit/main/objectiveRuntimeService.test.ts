@@ -4,8 +4,13 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
 import { createFacilitatorAgentService } from '../../../src/main/services/agents/facilitatorAgentService'
+import { createRoleAgentRegistryService } from '../../../src/main/services/agents/roleAgentRegistryService'
 import { createExternalVerificationBrokerService } from '../../../src/main/services/externalVerificationBrokerService'
 import { createObjectiveRuntimeService } from '../../../src/main/services/objectiveRuntimeService'
+import {
+  buildObjectiveSuggestionSeed,
+  createObjectiveFromSuggestionSeed
+} from '../../../src/main/services/objectiveSuggestionBridgeService'
 import { createSubagentRegistryService } from '../../../src/main/services/subagentRegistryService'
 
 function setupDatabase() {
@@ -16,6 +21,222 @@ function setupDatabase() {
 }
 
 describe('objective runtime service', () => {
+  it('can deliberate a thread with role agents and auto-runs the first deliberation during objective startup', async () => {
+    const db = setupDatabase()
+    const roleAgentRegistry = {
+      get(role: string) {
+        if (role === 'workspace') {
+          return {
+            role: 'workspace',
+            canHandle() {
+              return true
+            },
+            async execute() {
+              return {
+                messages: []
+              }
+            },
+            async receive() {
+              return {
+                messages: [],
+                proposals: [
+                  {
+                    proposalKind: 'verify_external_claim' as const,
+                    payload: {
+                      claim: 'The source confirms the announcement date.',
+                      query: 'official announcement date'
+                    },
+                    ownerRole: 'workspace' as const,
+                    requiredApprovals: ['workspace' as const],
+                    allowVetoBy: ['governance' as const],
+                    toolPolicyId: 'external-verification-policy',
+                    budget: {
+                      maxRounds: 2,
+                      maxToolCalls: 3,
+                      timeoutMs: 30_000
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+
+        if (role === 'review') {
+          return {
+            role: 'review',
+            canHandle() {
+              return true
+            },
+            async execute() {
+              return {
+                messages: []
+              }
+            },
+            async receive() {
+              return {
+                messages: [
+                  {
+                    kind: 'challenge' as const,
+                    body: 'Review needs stronger evidence before approval.',
+                    blocking: true
+                  }
+                ]
+              }
+            }
+          }
+        }
+
+        return null
+      }
+    }
+
+    const runtime = createObjectiveRuntimeService({
+      db,
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => [],
+        openSourcePage: async ({ url }) => ({
+          url,
+          title: null,
+          publishedAt: null,
+          excerpt: ''
+        })
+      }),
+      subagentRegistry: createSubagentRegistryService(),
+      roleAgentRegistry
+    } as any)
+
+    const started = await runtime.startObjective({
+      title: 'Verify an external claim before responding',
+      objectiveKind: 'evidence_investigation',
+      prompt: 'Check the external source before we answer the user.',
+      initiatedBy: 'operator'
+    })
+    const detail = runtime.getObjectiveDetail({
+      objectiveId: started.objective.objectiveId
+    })
+    const mainThread = runtime.getThreadDetail({
+      threadId: started.mainThread.threadId
+    })
+
+    expect(detail?.proposals).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        proposalKind: 'verify_external_claim',
+        proposedByParticipantId: 'workspace'
+      })
+    ]))
+    expect(mainThread?.messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'challenge',
+        fromParticipantId: 'review',
+        body: 'Review needs stronger evidence before approval.'
+      })
+    ]))
+
+    const rerun = await (runtime as any).deliberateThread({
+      threadId: started.mainThread.threadId
+    })
+
+    expect(rerun.thread.messages.length).toBeGreaterThanOrEqual(mainThread?.messages.length ?? 0)
+
+    db.close()
+  })
+
+  it('persists runtime-generated workspace and ingestion proposals during startup deliberation', async () => {
+    const db = setupDatabase()
+    const runtime = createObjectiveRuntimeService({
+      db,
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => [],
+        openSourcePage: async ({ url }) => ({
+          url,
+          title: null,
+          publishedAt: null,
+          excerpt: ''
+        })
+      }),
+      subagentRegistry: createSubagentRegistryService(),
+      roleAgentRegistry: createRoleAgentRegistryService()
+    })
+
+    const started = await runtime.startObjective({
+      title: 'Investigate local and external evidence together',
+      objectiveKind: 'evidence_investigation',
+      prompt: 'Review local evidence in file-evidence-1 and verify the public claim before responding.',
+      initiatedBy: 'operator'
+    })
+    const detail = runtime.getObjectiveDetail({
+      objectiveId: started.objective.objectiveId
+    })
+
+    expect(detail?.participants.some((participant) => participant.role === 'ingestion')).toBe(true)
+    expect(detail?.proposals).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        proposalKind: 'verify_external_claim',
+        proposedByParticipantId: 'workspace'
+      }),
+      expect.objectContaining({
+        proposalKind: 'spawn_subagent',
+        proposedByParticipantId: 'ingestion',
+        payload: expect.objectContaining({
+          specialization: 'evidence-checker',
+          fileId: 'file-evidence-1'
+        })
+      })
+    ]))
+
+    db.close()
+  })
+
+  it('creates an objective plus a seeded proposal from a proactive bridge seed', async () => {
+    const db = setupDatabase()
+    const runtime = createObjectiveRuntimeService({
+      db,
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => [],
+        openSourcePage: async ({ url }) => ({
+          url,
+          title: null,
+          publishedAt: null,
+          excerpt: ''
+        })
+      }),
+      subagentRegistry: createSubagentRegistryService()
+    })
+
+    const seed = buildObjectiveSuggestionSeed({
+      triggerKind: 'review.safe_group_available',
+      dedupeKey: 'review.safe-group::group-safe-42::follow-up::suggestion-1',
+      sourceRunId: 'run-safe-group-followup',
+      taskInput: {
+        role: 'review',
+        taskKind: 'review.apply_safe_group',
+        prompt: 'Apply safe group group-safe-42.'
+      },
+      rationale: 'The safe group recommendation is ready to apply manually.',
+      autoRunnable: false
+    })
+
+    const detail = await createObjectiveFromSuggestionSeed(runtime, seed)
+
+    expect(detail).toEqual(expect.objectContaining({
+      objectiveKind: 'review_decision'
+    }))
+    expect((detail as any)?.proposals).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        proposalKind: 'approve_safe_group',
+        payload: {
+          groupKey: 'group-safe-42'
+        }
+      })
+    ]))
+
+    db.close()
+  })
+
   it('lets review raise a blocking challenge and governance veto a proposal', async () => {
     const db = setupDatabase()
     const runtime = createObjectiveRuntimeService({
@@ -33,7 +254,7 @@ describe('objective runtime service', () => {
       subagentRegistry: createSubagentRegistryService()
     })
 
-    const started = runtime.startObjective({
+    const started = await runtime.startObjective({
       title: 'Decide whether approval is safe',
       objectiveKind: 'review_decision',
       prompt: 'Review the candidate and decide whether approval is safe.',
@@ -95,7 +316,7 @@ describe('objective runtime service', () => {
       subagentRegistry: createSubagentRegistryService()
     })
 
-    const started = runtime.startObjective({
+    const started = await runtime.startObjective({
       title: 'Verify an external claim before responding',
       objectiveKind: 'evidence_investigation',
       prompt: 'Check the external source before we answer the user.',
@@ -213,7 +434,7 @@ describe('objective runtime service', () => {
       subagentRegistry: createSubagentRegistryService()
     })
 
-    const started = runtime.startObjective({
+    const started = await runtime.startObjective({
       title: 'Decide whether approval is safe',
       objectiveKind: 'review_decision',
       prompt: 'Review the candidate and decide whether approval is safe.',
@@ -295,7 +516,7 @@ describe('objective runtime service', () => {
       subagentRegistry: createSubagentRegistryService()
     })
 
-    const started = runtime.startObjective({
+    const started = await runtime.startObjective({
       title: 'Verify an external claim before responding',
       objectiveKind: 'evidence_investigation',
       prompt: 'Check the external source before we answer the user.',
@@ -403,7 +624,7 @@ describe('objective runtime service', () => {
       subagentRegistry: createSubagentRegistryService()
     })
 
-    const started = runtime.startObjective({
+    const started = await runtime.startObjective({
       title: 'Check local OCR evidence before responding',
       objectiveKind: 'evidence_investigation',
       prompt: 'Review the local OCR evidence and report the confidence gaps.',
@@ -523,7 +744,7 @@ describe('objective runtime service', () => {
       subagentRegistry: createSubagentRegistryService()
     })
 
-    const started = runtime.startObjective({
+    const started = await runtime.startObjective({
       title: 'Auto-run bounded local evidence checks',
       objectiveKind: 'evidence_investigation',
       prompt: 'Allow bounded subagent execution once the owner approves.',
@@ -584,6 +805,465 @@ describe('objective runtime service', () => {
     db.close()
   })
 
+  it('executes committed compare-analyst proposals through the specialization runner', async () => {
+    const db = setupDatabase()
+    const runMemoryWorkspaceCompare = async () => ({
+      compareSessionId: 'compare-session-1',
+      scope: { kind: 'global' as const },
+      title: 'Memory Workspace Compare',
+      question: 'Compare grounded answer candidates for this request.',
+      expressionMode: 'grounded' as const,
+      workflowKind: 'default' as const,
+      runCount: 2,
+      metadata: {
+        completedRunCount: 2,
+        failedRunCount: 0,
+        judgeStatus: 'ready' as const
+      },
+      recommendation: {
+        status: 'ready' as const,
+        recommendedCompareRunId: 'compare-run-local',
+        reason: 'The baseline answer stayed the most grounded.'
+      },
+      createdAt: '2026-03-30T00:00:00.000Z',
+      updatedAt: '2026-03-30T00:00:10.000Z',
+      runs: [
+        {
+          compareRunId: 'compare-run-local',
+          compareSessionId: 'compare-session-1',
+          ordinal: 1,
+          targetId: 'local-baseline',
+          targetLabel: 'Local baseline',
+          executionMode: 'local_baseline' as const,
+          provider: null,
+          model: null,
+          status: 'completed' as const,
+          errorMessage: null,
+          response: null,
+          evaluation: null,
+          judgeVerdict: null,
+          promptHash: 'prompt-hash-1',
+          contextHash: 'context-hash-1',
+          createdAt: '2026-03-30T00:00:00.000Z'
+        },
+        {
+          compareRunId: 'compare-run-remote',
+          compareSessionId: 'compare-session-1',
+          ordinal: 2,
+          targetId: 'remote-model',
+          targetLabel: 'Remote model',
+          executionMode: 'provider_compare' as const,
+          provider: 'test-provider',
+          model: 'test-model',
+          status: 'completed' as const,
+          errorMessage: null,
+          response: null,
+          evaluation: null,
+          judgeVerdict: null,
+          promptHash: 'prompt-hash-2',
+          contextHash: 'context-hash-2',
+          createdAt: '2026-03-30T00:00:05.000Z'
+        }
+      ]
+    })
+    const runtime = createObjectiveRuntimeService({
+      db,
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => [],
+        openSourcePage: async ({ url }) => ({
+          url,
+          title: null,
+          publishedAt: null,
+          excerpt: ''
+        })
+      }),
+      subagentRegistry: createSubagentRegistryService(),
+      runMemoryWorkspaceCompare
+    } as any)
+
+    const started = await runtime.startObjective({
+      title: 'Compare grounded answer candidates',
+      objectiveKind: 'user_response',
+      prompt: 'Compare grounded answer candidates for this request.',
+      initiatedBy: 'operator'
+    })
+    const compareSpec = createSubagentRegistryService().buildSpawnSubagentSpec({
+      specialization: 'compare-analyst',
+      payload: {
+        question: 'Compare grounded answer candidates for this request.'
+      }
+    })
+
+    const proposal = runtime.createProposal({
+      objectiveId: started.objective.objectiveId,
+      threadId: started.mainThread.threadId,
+      proposedByParticipantId: 'workspace',
+      proposalKind: 'spawn_subagent',
+      payload: compareSpec.payload,
+      ownerRole: 'workspace',
+      requiresOperatorConfirmation: false,
+      toolPolicyId: compareSpec.toolPolicyId,
+      budget: compareSpec.budget
+    })
+
+    const approved = await runtime.respondToAgentProposal({
+      proposalId: proposal.proposalId,
+      responderRole: 'workspace',
+      response: 'approve',
+      comment: 'Owner approved bounded compare analysis.'
+    })
+    const detail = runtime.getObjectiveDetail({
+      objectiveId: started.objective.objectiveId
+    })
+    const subagent = detail?.subagents.find((candidate) => candidate.specialization === 'compare-analyst')
+    const subthread = runtime.getThreadDetail({
+      threadId: subagent?.threadId ?? ''
+    })
+    const toolExecutions = db.prepare(
+      `select tool_name as toolName, status
+       from agent_tool_executions
+       where objective_id = ?
+       order by created_at asc`
+    ).all(started.objective.objectiveId) as Array<{ toolName: string; status: string }>
+
+    expect(approved?.status).toBe('committed')
+    expect(subagent?.status).toBe('completed')
+    expect(subthread?.messages.map((message) => message.kind)).toEqual([
+      'goal',
+      'tool_result',
+      'tool_result',
+      'final_response'
+    ])
+    expect(subthread?.messages.at(-1)?.body).toMatch(/compare session compare-session-1/i)
+    expect(toolExecutions).toEqual([
+      { toolName: 'run_compare', status: 'completed' },
+      { toolName: 'summarize_compare_results', status: 'completed' }
+    ])
+
+    db.close()
+  })
+
+  it('executes committed draft-composer proposals through the specialization runner', async () => {
+    const db = setupDatabase()
+    const askMemoryWorkspacePersisted = () => ({
+      turnId: 'turn-1',
+      sessionId: 'session-1',
+      ordinal: 1,
+      question: 'Draft a review-ready response from the archive.',
+      response: {
+        title: 'Memory Workspace Draft',
+        answer: {
+          summary: 'Draft summary'
+        },
+        workflowKind: 'persona_draft_sandbox',
+        expressionMode: 'grounded',
+        supportingExcerptCount: 2,
+        reasonCodes: ['persona_draft_sandbox'],
+        personaDraft: {
+          draft: 'Reviewed simulation draft based on the archive.',
+          trace: [],
+          reviewStatus: 'review_required'
+        }
+      },
+      provider: null,
+      model: null,
+      promptHash: 'prompt-hash-1',
+      contextHash: 'context-hash-1',
+      createdAt: '2026-03-30T00:00:00.000Z'
+    })
+    const runtime = createObjectiveRuntimeService({
+      db,
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => [],
+        openSourcePage: async ({ url }) => ({
+          url,
+          title: null,
+          publishedAt: null,
+          excerpt: ''
+        })
+      }),
+      subagentRegistry: createSubagentRegistryService(),
+      askMemoryWorkspacePersisted
+    } as any)
+
+    const started = await runtime.startObjective({
+      title: 'Prepare a reviewed draft',
+      objectiveKind: 'user_response',
+      prompt: 'Draft a review-ready response from the archive.',
+      initiatedBy: 'operator'
+    })
+    const draftSpec = createSubagentRegistryService().buildSpawnSubagentSpec({
+      specialization: 'draft-composer',
+      payload: {
+        question: 'Draft a review-ready response from the archive.'
+      }
+    })
+
+    const proposal = runtime.createProposal({
+      objectiveId: started.objective.objectiveId,
+      threadId: started.mainThread.threadId,
+      proposedByParticipantId: 'workspace',
+      proposalKind: 'spawn_subagent',
+      payload: draftSpec.payload,
+      ownerRole: 'workspace',
+      requiresOperatorConfirmation: false,
+      toolPolicyId: draftSpec.toolPolicyId,
+      budget: draftSpec.budget
+    })
+
+    const approved = await runtime.respondToAgentProposal({
+      proposalId: proposal.proposalId,
+      responderRole: 'workspace',
+      response: 'approve',
+      comment: 'Owner approved bounded draft composition.'
+    })
+    const detail = runtime.getObjectiveDetail({
+      objectiveId: started.objective.objectiveId
+    })
+    const subagent = detail?.subagents.find((candidate) => candidate.specialization === 'draft-composer')
+    const subthread = runtime.getThreadDetail({
+      threadId: subagent?.threadId ?? ''
+    })
+    const toolExecutions = db.prepare(
+      `select tool_name as toolName, status
+       from agent_tool_executions
+       where objective_id = ?
+       order by created_at asc`
+    ).all(started.objective.objectiveId) as Array<{ toolName: string; status: string }>
+
+    expect(approved?.status).toBe('committed')
+    expect(subagent?.status).toBe('completed')
+    expect(subthread?.messages.map((message) => message.kind)).toEqual([
+      'goal',
+      'tool_result',
+      'tool_result',
+      'final_response'
+    ])
+    expect(subthread?.messages.at(-1)?.body).toMatch(/reviewed simulation draft/i)
+    expect(toolExecutions).toEqual([
+      { toolName: 'ask_memory_workspace', status: 'completed' },
+      { toolName: 'compose_reviewed_draft', status: 'completed' }
+    ])
+
+    db.close()
+  })
+
+  it('executes committed policy-auditor proposals through the specialization runner', async () => {
+    const db = setupDatabase()
+    db.prepare(
+      `insert into agent_policy_versions (id, role, policy_key, policy_body, created_at)
+       values (?, ?, ?, ?, ?)`
+    ).run(
+      'policy-version-1',
+      'governance',
+      'governance.review.policy',
+      'Always require explicit evidence review.',
+      '2026-03-29T00:00:00.000Z'
+    )
+    db.prepare(
+      `insert into agent_policy_versions (id, role, policy_key, policy_body, created_at)
+       values (?, ?, ?, ?, ?)`
+    ).run(
+      'policy-version-2',
+      'governance',
+      'governance.review.policy',
+      'Require explicit evidence review and bounded verification.',
+      '2026-03-30T00:00:00.000Z'
+    )
+
+    const runtime = createObjectiveRuntimeService({
+      db,
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => [],
+        openSourcePage: async ({ url }) => ({
+          url,
+          title: null,
+          publishedAt: null,
+          excerpt: ''
+        })
+      }),
+      subagentRegistry: createSubagentRegistryService()
+    })
+
+    const started = await runtime.startObjective({
+      title: 'Audit the latest governance policy change',
+      objectiveKind: 'policy_change',
+      prompt: 'Audit the latest governance policy change before rollout.',
+      initiatedBy: 'operator'
+    })
+    const policySpec = createSubagentRegistryService().buildSpawnSubagentSpec({
+      specialization: 'policy-auditor',
+      payload: {
+        policyKey: 'governance.review.policy'
+      }
+    })
+
+    const proposal = runtime.createProposal({
+      objectiveId: started.objective.objectiveId,
+      threadId: started.mainThread.threadId,
+      proposedByParticipantId: 'governance',
+      proposalKind: 'spawn_subagent',
+      payload: policySpec.payload,
+      ownerRole: 'governance',
+      requiresOperatorConfirmation: false,
+      toolPolicyId: policySpec.toolPolicyId,
+      budget: policySpec.budget
+    })
+
+    const approved = await runtime.respondToAgentProposal({
+      proposalId: proposal.proposalId,
+      responderRole: 'governance',
+      response: 'approve',
+      comment: 'Owner approved bounded policy auditing.'
+    })
+    const detail = runtime.getObjectiveDetail({
+      objectiveId: started.objective.objectiveId
+    })
+    const subagent = detail?.subagents.find((candidate) => candidate.specialization === 'policy-auditor')
+    const subthread = runtime.getThreadDetail({
+      threadId: subagent?.threadId ?? ''
+    })
+    const toolExecutions = db.prepare(
+      `select tool_name as toolName, status
+       from agent_tool_executions
+       where objective_id = ?
+       order by created_at asc`
+    ).all(started.objective.objectiveId) as Array<{ toolName: string; status: string }>
+
+    expect(approved?.status).toBe('committed')
+    expect(subagent?.status).toBe('completed')
+    expect(subthread?.messages.map((message) => message.kind)).toEqual([
+      'goal',
+      'tool_result',
+      'tool_result',
+      'final_response'
+    ])
+    expect(subthread?.messages.at(-1)?.body).toMatch(/policy-version-2/i)
+    expect(toolExecutions).toEqual([
+      { toolName: 'read_policy_versions', status: 'completed' },
+      { toolName: 'compare_policy_versions', status: 'completed' }
+    ])
+
+    db.close()
+  })
+
+  it('fails compare-analyst execution when the budget does not cover both bounded compare steps', async () => {
+    const db = setupDatabase()
+    const runMemoryWorkspaceCompare = async () => ({
+      compareSessionId: 'compare-session-1',
+      scope: { kind: 'global' as const },
+      title: 'Memory Workspace Compare',
+      question: 'Compare grounded answer candidates for this request.',
+      expressionMode: 'grounded' as const,
+      workflowKind: 'default' as const,
+      runCount: 1,
+      metadata: {
+        completedRunCount: 1,
+        failedRunCount: 0,
+        judgeStatus: 'ready' as const
+      },
+      recommendation: {
+        status: 'ready' as const,
+        recommendedCompareRunId: 'compare-run-local',
+        reason: 'The baseline answer stayed the most grounded.'
+      },
+      createdAt: '2026-03-30T00:00:00.000Z',
+      updatedAt: '2026-03-30T00:00:10.000Z',
+      runs: [
+        {
+          compareRunId: 'compare-run-local',
+          compareSessionId: 'compare-session-1',
+          ordinal: 1,
+          targetId: 'local-baseline',
+          targetLabel: 'Local baseline',
+          executionMode: 'local_baseline' as const,
+          provider: null,
+          model: null,
+          status: 'completed' as const,
+          errorMessage: null,
+          response: null,
+          evaluation: null,
+          judgeVerdict: null,
+          promptHash: 'prompt-hash-1',
+          contextHash: 'context-hash-1',
+          createdAt: '2026-03-30T00:00:00.000Z'
+        }
+      ]
+    })
+    const runtime = createObjectiveRuntimeService({
+      db,
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => [],
+        openSourcePage: async ({ url }) => ({
+          url,
+          title: null,
+          publishedAt: null,
+          excerpt: ''
+        })
+      }),
+      subagentRegistry: createSubagentRegistryService(),
+      runMemoryWorkspaceCompare
+    } as any)
+
+    const started = await runtime.startObjective({
+      title: 'Compare with a deliberately tight budget',
+      objectiveKind: 'user_response',
+      prompt: 'Compare grounded answer candidates for this request.',
+      initiatedBy: 'operator'
+    })
+    const compareSpec = createSubagentRegistryService().buildSpawnSubagentSpec({
+      specialization: 'compare-analyst',
+      payload: {
+        question: 'Compare grounded answer candidates for this request.'
+      }
+    })
+
+    const proposal = runtime.createProposal({
+      objectiveId: started.objective.objectiveId,
+      threadId: started.mainThread.threadId,
+      proposedByParticipantId: 'workspace',
+      proposalKind: 'spawn_subagent',
+      payload: compareSpec.payload,
+      ownerRole: 'workspace',
+      requiresOperatorConfirmation: false,
+      toolPolicyId: compareSpec.toolPolicyId,
+      budget: {
+        ...compareSpec.budget,
+        maxToolCalls: 1
+      }
+    })
+
+    await expect(runtime.respondToAgentProposal({
+      proposalId: proposal.proposalId,
+      responderRole: 'workspace',
+      response: 'approve',
+      comment: 'Owner approved a too-small compare budget.'
+    })).rejects.toThrow(/remaining budget is exhausted/i)
+
+    const detail = runtime.getObjectiveDetail({
+      objectiveId: started.objective.objectiveId
+    })
+    const subagent = detail?.subagents.find((candidate) => candidate.specialization === 'compare-analyst')
+    const toolExecutions = db.prepare(
+      `select tool_name as toolName, status
+       from agent_tool_executions
+       where objective_id = ?
+       order by created_at asc`
+    ).all(started.objective.objectiveId) as Array<{ toolName: string; status: string }>
+
+    expect(subagent?.status).toBe('failed')
+    expect(toolExecutions).toEqual([
+      { toolName: 'run_compare', status: 'completed' },
+      { toolName: 'summarize_compare_results', status: 'blocked' }
+    ])
+
+    db.close()
+  })
+
   it('includes the requesting subagent in nested child subthreads and records the goal as agent-to-agent', async () => {
     const db = setupDatabase()
     const createdAt = '2026-03-30T00:00:00.000Z'
@@ -612,7 +1292,7 @@ describe('objective runtime service', () => {
       subagentRegistry: createSubagentRegistryService()
     })
 
-    const started = runtime.startObjective({
+    const started = await runtime.startObjective({
       title: 'Let a subagent delegate bounded local evidence work',
       objectiveKind: 'evidence_investigation',
       prompt: 'Allow a subagent to delegate a bounded follow-up evidence check.',
@@ -753,7 +1433,7 @@ describe('objective runtime service', () => {
       subagentRegistry: createSubagentRegistryService()
     })
 
-    const started = runtime.startObjective({
+    const started = await runtime.startObjective({
       title: 'Blend external verification with local evidence',
       objectiveKind: 'evidence_investigation',
       prompt: 'Verify the external claim and let the verifier delegate a local evidence cross-check.',
@@ -874,7 +1554,7 @@ describe('objective runtime service', () => {
       subagentRegistry: createSubagentRegistryService()
     })
 
-    const started = runtime.startObjective({
+    const started = await runtime.startObjective({
       title: 'Blend local evidence with external cross-check',
       objectiveKind: 'evidence_investigation',
       prompt: 'Let the evidence checker delegate an external cross-check before finalizing.',

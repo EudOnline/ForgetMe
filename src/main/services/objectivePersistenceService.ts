@@ -326,6 +326,7 @@ type ObjectiveDetail = AgentObjectiveRecord & {
   proposals: AgentProposalRecord[]
   checkpoints: AgentCheckpointRecord[]
   subagents: AgentSubagentRecord[]
+  toolExecutions?: AgentToolExecutionRecord[]
 }
 
 type ThreadDetail = AgentThreadRecord & {
@@ -335,6 +336,7 @@ type ThreadDetail = AgentThreadRecord & {
   votes: AgentVoteRecord[]
   checkpoints: AgentCheckpointRecord[]
   subagents: AgentSubagentRecord[]
+  toolExecutions?: AgentToolExecutionRecord[]
 }
 
 function inTransaction<T>(db: ArchiveDatabase, callback: () => T) {
@@ -838,6 +840,50 @@ function listSubagentRowsByThread(db: ArchiveDatabase, threadId: string) {
     where thread_id = ?
     order by created_at asc, id asc`
   ).all(threadId) as AgentSubagentRow[]
+}
+
+function listToolExecutionRowsByObjective(db: ArchiveDatabase, objectiveId: string) {
+  return db.prepare(
+    `select
+      id,
+      objective_id as objectiveId,
+      thread_id as threadId,
+      proposal_id as proposalId,
+      requested_by_participant_id as requestedByParticipantId,
+      tool_name as toolName,
+      tool_policy_id as toolPolicyId,
+      status,
+      input_payload_json as inputPayloadJson,
+      output_payload_json as outputPayloadJson,
+      artifact_refs_json as artifactRefsJson,
+      created_at as createdAt,
+      completed_at as completedAt
+    from agent_tool_executions
+    where objective_id = ?
+    order by created_at asc, id asc`
+  ).all(objectiveId) as AgentToolExecutionRow[]
+}
+
+function listToolExecutionRowsByThread(db: ArchiveDatabase, threadId: string) {
+  return db.prepare(
+    `select
+      id,
+      objective_id as objectiveId,
+      thread_id as threadId,
+      proposal_id as proposalId,
+      requested_by_participant_id as requestedByParticipantId,
+      tool_name as toolName,
+      tool_policy_id as toolPolicyId,
+      status,
+      input_payload_json as inputPayloadJson,
+      output_payload_json as outputPayloadJson,
+      artifact_refs_json as artifactRefsJson,
+      created_at as createdAt,
+      completed_at as completedAt
+    from agent_tool_executions
+    where thread_id = ?
+    order by created_at asc, id asc`
+  ).all(threadId) as AgentToolExecutionRow[]
 }
 
 export function createObjective(db: ArchiveDatabase, input: CreateObjectiveInput): AgentObjectiveRecord {
@@ -1543,7 +1589,8 @@ export function getObjectiveDetail(db: ArchiveDatabase, input: GetAgentObjective
     participants: listParticipantRowsForObjective(db, input.objectiveId).map(mapThreadParticipantRow),
     proposals: listProposalRowsByObjective(db, input.objectiveId).map(mapProposalRow),
     checkpoints: listCheckpointRowsByObjective(db, input.objectiveId).map(mapCheckpointRow),
-    subagents: listSubagentRowsByObjective(db, input.objectiveId).map(mapSubagentRow)
+    subagents: listSubagentRowsByObjective(db, input.objectiveId).map(mapSubagentRow),
+    toolExecutions: listToolExecutionRowsByObjective(db, input.objectiveId).map(mapToolExecutionRow)
   }
 }
 
@@ -1560,7 +1607,8 @@ export function getThreadDetail(db: ArchiveDatabase, input: GetAgentThreadInput)
     proposals: listProposalRowsByThread(db, input.threadId).map(mapProposalRow),
     votes: listVoteRows(db, input.threadId).map(mapVoteRow),
     checkpoints: listCheckpointRowsByThread(db, input.threadId).map(mapCheckpointRow),
-    subagents: listSubagentRowsByThread(db, input.threadId).map(mapSubagentRow)
+    subagents: listSubagentRowsByThread(db, input.threadId).map(mapSubagentRow),
+    toolExecutions: listToolExecutionRowsByThread(db, input.threadId).map(mapToolExecutionRow)
   }
 }
 

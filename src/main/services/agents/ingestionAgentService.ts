@@ -19,6 +19,11 @@ function extractPromptToken(prompt: string, pattern: RegExp, label: string) {
   return match[1] ?? match[0]
 }
 
+function extractOptionalFileId(prompt: string) {
+  const match = prompt.match(/\b(file-[A-Za-z0-9-]+)\b/i)
+  return match?.[1] ?? match?.[0] ?? null
+}
+
 function summarizeEvidence(evidence: DocumentEvidence) {
   const rawExcerpt = evidence.rawText.trim().slice(0, 120) || 'No raw text available.'
   return `Evidence summary for ${evidence.fileName}: ${evidence.approvedFields.length} approved fields, ${evidence.fieldCandidates.length} pending candidates. Excerpt: ${rawExcerpt}`
@@ -41,15 +46,25 @@ export function createIngestionAgentService(
     },
     async receive(context) {
       if (context.objective.objectiveKind === 'evidence_investigation') {
+        const fileId = extractOptionalFileId(context.objective.prompt)
+        if (!fileId) {
+          return {
+            messages: []
+          }
+        }
+
         return {
           messages: [],
-          toolRequests: [
+          spawnRequests: [
             {
-              toolName: 'get_document_evidence',
+              specialization: 'evidence-checker',
+              ownerRole: 'workspace',
               payload: {
-                prompt: context.objective.prompt
+                fileId
               },
-              toolPolicyId: 'local-evidence-policy'
+              requiredApprovals: ['workspace'],
+              allowVetoBy: ['governance'],
+              requiresOperatorConfirmation: false
             }
           ]
         }

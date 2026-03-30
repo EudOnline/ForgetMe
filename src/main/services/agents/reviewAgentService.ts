@@ -78,7 +78,11 @@ export function createReviewAgentService(
       ].includes(taskKind)
     },
     async receive(context) {
-      if (context.objective.objectiveKind === 'review_decision') {
+      const hasOpenProposal = context.proposals.some((proposal) => (
+        proposal.status !== 'committed' && proposal.status !== 'superseded'
+      ))
+
+      if (context.objective.objectiveKind === 'review_decision' && hasOpenProposal) {
         return {
           messages: [
             {

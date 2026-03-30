@@ -9,7 +9,7 @@ import { createExternalVerificationBrokerService } from '../../src/main/services
 import { createObjectiveRuntimeService } from '../../src/main/services/objectiveRuntimeService'
 import { createSubagentRegistryService } from '../../src/main/services/subagentRegistryService'
 
-function seedDeliberationObjective(userDataDir: string) {
+async function seedDeliberationObjective(userDataDir: string) {
   const appPaths = ensureAppPaths(userDataDir)
   const db = openDatabase(path.join(appPaths.sqliteDir, 'archive.sqlite'))
   runMigrations(db)
@@ -29,7 +29,7 @@ function seedDeliberationObjective(userDataDir: string) {
     subagentRegistry: createSubagentRegistryService()
   })
 
-  const started = runtime.startObjective({
+  const started = await runtime.startObjective({
     title: 'Review whether approval is safe',
     objectiveKind: 'review_decision',
     prompt: 'Decide whether approval is safe and whether we need more evidence.',
@@ -69,7 +69,7 @@ async function launchApp(userDataDir: string) {
 
 test('objective workbench shows deliberation checkpoints and agent stances', async () => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-objective-deliberation-e2e-'))
-  seedDeliberationObjective(userDataDir)
+  await seedDeliberationObjective(userDataDir)
 
   const electronApp = await launchApp(userDataDir)
   const page = await electronApp.firstWindow()

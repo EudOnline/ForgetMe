@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentSuggestionRecord } from '../../../src/shared/archiveContracts'
-import { canAutoRunAgentSuggestion } from '../../../src/main/services/agentAutonomyPolicy'
+import {
+  canAutoRunAgentSuggestion,
+  evaluateObjectiveAutonomy
+} from '../../../src/main/services/agentAutonomyPolicy'
 
 function createSuggestion(overrides: Partial<AgentSuggestionRecord> = {}): AgentSuggestionRecord {
   return {
@@ -78,5 +81,48 @@ describe('agentAutonomyPolicy', () => {
         }
       })
     })).toBe(false)
+  })
+
+  it('evaluates objective startup separately from seeded bounded proposal auto-approval', () => {
+    expect(evaluateObjectiveAutonomy({
+      autonomyMode: 'suggest_safe_auto_run',
+      objectiveSeed: {
+        autoStartSafe: true,
+        autoApproveSeededProposal: true,
+        seededProposal: {
+          proposedByParticipantId: 'workspace',
+          proposalKind: 'spawn_subagent',
+          payload: {
+            specialization: 'evidence-checker',
+            fileId: 'file-1'
+          },
+          ownerRole: 'workspace',
+          requiresOperatorConfirmation: false
+        }
+      }
+    })).toEqual({
+      canAutoStartObjective: true,
+      canAutoApproveSeededProposal: true
+    })
+
+    expect(evaluateObjectiveAutonomy({
+      autonomyMode: 'suggest_safe_auto_run',
+      objectiveSeed: {
+        autoStartSafe: true,
+        autoApproveSeededProposal: true,
+        seededProposal: {
+          proposedByParticipantId: 'review',
+          proposalKind: 'approve_safe_group',
+          payload: {
+            groupKey: 'group-safe-42'
+          },
+          ownerRole: 'review',
+          requiresOperatorConfirmation: true
+        }
+      }
+    })).toEqual({
+      canAutoStartObjective: true,
+      canAutoApproveSeededProposal: false
+    })
   })
 })

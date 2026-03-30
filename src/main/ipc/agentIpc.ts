@@ -17,6 +17,7 @@ import {
 } from '../services/agentPersistenceService'
 import { createObjectiveRuntimeService } from '../services/objectiveRuntimeService'
 import { createFacilitatorAgentService } from '../services/agents/facilitatorAgentService'
+import { createRoleAgentRegistryService } from '../services/agents/roleAgentRegistryService'
 import { createExternalVerificationBrokerService } from '../services/externalVerificationBrokerService'
 import { createExternalWebSearchService } from '../services/externalWebSearchService'
 import { createSubagentRegistryService } from '../services/subagentRegistryService'
@@ -44,7 +45,8 @@ function createArchiveObjectiveRuntime(appPaths: AppPaths) {
       searchWeb: externalWebSearch.searchWeb,
       openSourcePage: externalWebSearch.openSourcePage
     }),
-    subagentRegistry: createSubagentRegistryService()
+    subagentRegistry: createSubagentRegistryService(),
+    roleAgentRegistry: createRoleAgentRegistryService()
   })
 
   return {
@@ -101,8 +103,8 @@ export function registerAgentIpc(appPaths: AppPaths) {
 
   ipcMain.handle('archive:createAgentObjective', async (_event, payload) => {
     const input = createAgentObjectiveInputSchema.parse(payload)
-    return withArchiveObjectiveRuntime(appPaths, (runtime) => {
-      const started = runtime.startObjective({
+    return withArchiveObjectiveRuntime(appPaths, async (runtime) => {
+      const started = await runtime.startObjective({
         title: input.title,
         objectiveKind: input.objectiveKind,
         prompt: input.prompt,
