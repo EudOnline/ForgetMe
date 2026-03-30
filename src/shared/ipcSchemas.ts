@@ -65,6 +65,24 @@ const agentSuggestionStatusSchema = z.enum([
   'executed'
 ])
 
+export const agentSuggestionPrioritySchema = z.enum([
+  'low',
+  'medium',
+  'high',
+  'critical'
+])
+
+export const agentRunExecutionOriginSchema = z.enum([
+  'operator_manual',
+  'operator_suggestion',
+  'auto_runner'
+])
+
+export const agentAutonomyModeSchema = z.enum([
+  'manual_only',
+  'suggest_safe_auto_run'
+])
+
 const destructiveReviewTaskKinds: ReadonlySet<AgentTaskKind> = new Set([
   'review.apply_safe_group',
   'review.apply_item_decision'
@@ -158,6 +176,12 @@ export const dismissAgentSuggestionInputSchema = z.object({
 export const runAgentSuggestionInputSchema = z.object({
   suggestionId: z.string().min(1),
   confirmationToken: z.string().min(1).optional()
+})
+
+export const getAgentRuntimeSettingsInputSchema = z.object({}).optional().default({})
+
+export const updateAgentRuntimeSettingsInputSchema = z.object({
+  autonomyMode: agentAutonomyModeSchema
 })
 
 export const memoryWorkspaceScopeSchema = z.discriminatedUnion('kind', [

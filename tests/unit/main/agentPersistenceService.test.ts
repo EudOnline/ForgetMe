@@ -9,13 +9,17 @@ import {
   createAgentRun,
   dismissAgentSuggestion,
   getAgentRun,
+  getAgentRuntimeSettings,
   getAgentSuggestion,
+  incrementAgentSuggestionAttempt,
   listAgentSuggestions,
   listAgentRuns,
   listAgentMemories,
   listAgentPolicyVersions,
+  listRunnableAgentSuggestions,
   markAgentSuggestionExecuted,
   updateAgentRunReplayMetadata,
+  upsertAgentRuntimeSettings,
   upsertAgentSuggestion,
   upsertAgentMemory
 } from '../../../src/main/services/agentPersistenceService'
@@ -175,8 +179,28 @@ describe('agent persistence service', () => {
     expect(listed[0]?.runId).toBe(runId)
     expect(listed[0]?.assignedRoles).toEqual([])
     expect(listed[0]?.latestAssistantResponse).toBeNull()
+    expect(listed[0]?.executionOrigin).toBe('operator_manual')
     expect(detail?.assignedRoles).toEqual([])
     expect(detail?.latestAssistantResponse).toBeNull()
+    expect(detail?.executionOrigin).toBe('operator_manual')
+
+    db.close()
+  })
+
+  it('stores execution origin on runs for audit', () => {
+    const db = setupDatabase()
+
+    const run = createAgentRun(db, {
+      role: 'governance',
+      taskKind: 'governance.summarize_failures',
+      prompt: 'Summarize failures from the safe auto-run lane.',
+      executionOrigin: 'auto_runner'
+    })
+
+    const detail = getAgentRun(db, { runId: run.runId })
+
+    expect(run.executionOrigin).toBe('auto_runner')
+    expect(detail?.executionOrigin).toBe('auto_runner')
 
     db.close()
   })
@@ -273,6 +297,10 @@ describe('agent persistence service', () => {
       },
       dedupeKey: 'review.safe-group::person-1',
       sourceRunId: null,
+      priority: 'medium',
+      rationale: 'A safe review group is ready for manual inspection.',
+      autoRunnable: false,
+      followUpOfSuggestionId: null,
       observedAt: '2026-03-30T00:00:01.000Z'
     })
 
@@ -287,6 +315,10 @@ describe('agent persistence service', () => {
       },
       dedupeKey: 'governance.failed-runs::latest',
       sourceRunId: null,
+      priority: 'high',
+      rationale: 'Repeated enrichment failures are blocking downstream review.',
+      autoRunnable: true,
+      followUpOfSuggestionId: null,
       observedAt: '2026-03-30T00:00:02.000Z'
     })
 
@@ -299,6 +331,12 @@ describe('agent persistence service', () => {
     expect(suggestions[0]).toMatchObject({
       triggerKind: 'governance.failed_runs_detected',
       status: 'suggested',
+      priority: 'high',
+      rationale: 'Repeated enrichment failures are blocking downstream review.',
+      autoRunnable: true,
+      followUpOfSuggestionId: null,
+      attemptCount: 0,
+      cooldownUntil: null,
       taskInput: {
         role: 'governance',
         taskKind: 'governance.summarize_failures',
@@ -324,6 +362,10 @@ describe('agent persistence service', () => {
       },
       dedupeKey: 'ingestion.failed-enrichment::job-1',
       sourceRunId: null,
+      priority: 'critical',
+      rationale: 'A failed enrichment job still blocks downstream work.',
+      autoRunnable: true,
+      followUpOfSuggestionId: null,
       observedAt: '2026-03-30T00:10:00.000Z'
     })
 
@@ -338,6 +380,10 @@ describe('agent persistence service', () => {
       },
       dedupeKey: 'ingestion.failed-enrichment::job-1',
       sourceRunId: null,
+      priority: 'critical',
+      rationale: 'A failed enrichment job still blocks downstream work.',
+      autoRunnable: true,
+      followUpOfSuggestionId: null,
       observedAt: '2026-03-30T00:12:00.000Z'
     })
 
@@ -374,6 +420,10 @@ describe('agent persistence service', () => {
       },
       dedupeKey: 'review.safe-group::dismissed',
       sourceRunId: null,
+      priority: 'medium',
+      rationale: 'A safe group is ready for review.',
+      autoRunnable: false,
+      followUpOfSuggestionId: null,
       observedAt: '2026-03-30T00:20:00.000Z'
     })
     const executed = upsertAgentSuggestion(db, {
@@ -387,6 +437,10 @@ describe('agent persistence service', () => {
       },
       dedupeKey: 'governance.failed-runs::executed',
       sourceRunId: sourceRun.runId,
+      priority: 'high',
+      rationale: 'Recent failures still need a governance summary.',
+      autoRunnable: true,
+      followUpOfSuggestionId: null,
       observedAt: '2026-03-30T00:21:00.000Z'
     })
 
@@ -403,6 +457,117 @@ describe('agent persistence service', () => {
     expect(dismissedRows.map((item) => item.suggestionId)).toEqual([dismissed.suggestionId])
     expect(executedRows.map((item) => item.suggestionId)).toEqual([executed.suggestionId])
     expect(executedRow?.executedRunId).toBe(executedRun.runId)
+
+    db.close()
+  })
+
+  it('creates and updates runtime settings through persistence helpers', () => {
+    const db = setupDatabase()
+
+    const defaultSettings = getAgentRuntimeSettings(db)
+    const updatedSettings = upsertAgentRuntimeSettings(db, {
+      autonomyMode: 'suggest_safe_auto_run',
+      updatedAt: '2026-03-30T00:30:00.000Z'
+    })
+
+    expect(defaultSettings).toMatchObject({
+      settingsId: 'default',
+      autonomyMode: 'manual_only'
+    })
+    expect(updatedSettings).toMatchObject({
+      settingsId: 'default',
+      autonomyMode: 'suggest_safe_auto_run',
+      updatedAt: '2026-03-30T00:30:00.000Z'
+    })
+    expect(getAgentRuntimeSettings(db)).toEqual(updatedSettings)
+
+    db.close()
+  })
+
+  it('tracks follow-up provenance, attempts, and runnable suggestions for audit', () => {
+    const db = setupDatabase()
+
+    const parent = upsertAgentSuggestion(db, {
+      triggerKind: 'review.safe_group_available',
+      role: 'review',
+      taskKind: 'review.suggest_safe_group_action',
+      taskInput: {
+        role: 'review',
+        taskKind: 'review.suggest_safe_group_action',
+        prompt: 'Suggest a safe group action for manual review.'
+      },
+      dedupeKey: 'review.safe-group::parent',
+      sourceRunId: null,
+      priority: 'high',
+      rationale: 'A safe group is ready for follow-up.',
+      autoRunnable: false,
+      followUpOfSuggestionId: null,
+      observedAt: '2026-03-30T00:40:00.000Z'
+    })
+
+    const followUp = upsertAgentSuggestion(db, {
+      triggerKind: 'review.safe_group_available',
+      role: 'review',
+      taskKind: 'review.apply_safe_group',
+      taskInput: {
+        role: 'review',
+        taskKind: 'review.apply_safe_group',
+        prompt: 'Apply the safe group recommendation.',
+        confirmationToken: 'confirm-safe-group'
+      },
+      dedupeKey: 'review.safe-group::parent::apply',
+      sourceRunId: null,
+      priority: 'high',
+      rationale: 'The safe group recommendation is ready to apply manually.',
+      autoRunnable: false,
+      followUpOfSuggestionId: parent.suggestionId,
+      observedAt: '2026-03-30T00:41:00.000Z'
+    })
+
+    const autoRunnable = upsertAgentSuggestion(db, {
+      triggerKind: 'ingestion.failed_enrichment_job',
+      role: 'ingestion',
+      taskKind: 'ingestion.rerun_enrichment',
+      taskInput: {
+        role: 'ingestion',
+        taskKind: 'ingestion.rerun_enrichment',
+        prompt: 'Retry failed enrichment job job-7.'
+      },
+      dedupeKey: 'ingestion.failed-enrichment::job-7',
+      sourceRunId: null,
+      priority: 'high',
+      rationale: 'Repeated enrichment failures are blocking downstream review.',
+      autoRunnable: true,
+      followUpOfSuggestionId: null,
+      observedAt: '2026-03-30T00:42:00.000Z'
+    })
+
+    const initialRunnable = listRunnableAgentSuggestions(db, {
+      now: '2026-03-30T00:42:30.000Z'
+    })
+
+    incrementAgentSuggestionAttempt(db, {
+      suggestionId: autoRunnable.suggestionId,
+      attemptedAt: '2026-03-30T00:43:00.000Z',
+      cooldownUntil: '2026-03-30T00:50:00.000Z'
+    })
+
+    const cooledDown = getAgentSuggestion(db, { suggestionId: autoRunnable.suggestionId })
+    const runnableAfterCooldown = listRunnableAgentSuggestions(db, {
+      now: '2026-03-30T00:44:00.000Z'
+    })
+
+    expect(getAgentSuggestion(db, { suggestionId: followUp.suggestionId })).toMatchObject({
+      followUpOfSuggestionId: parent.suggestionId,
+      autoRunnable: false,
+      priority: 'high'
+    })
+    expect(initialRunnable.map((item) => item.suggestionId)).toEqual([autoRunnable.suggestionId])
+    expect(cooledDown).toMatchObject({
+      attemptCount: 1,
+      cooldownUntil: '2026-03-30T00:50:00.000Z'
+    })
+    expect(runnableAfterCooldown).toEqual([])
 
     db.close()
   })

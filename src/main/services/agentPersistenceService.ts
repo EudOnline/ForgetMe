@@ -1,12 +1,16 @@
 import crypto from 'node:crypto'
 import type {
+  AgentAutonomyMode,
   AgentMemoryRecord,
   AgentMessageRecord,
   AgentPolicyVersionRecord,
   AgentRole,
   AgentRunDetail,
+  AgentRunExecutionOrigin,
   AgentRunRecord,
   AgentRunStatus,
+  AgentRuntimeSettingsRecord,
+  AgentSuggestionPriority,
   AgentSuggestionRecord,
   AgentSuggestionStatus,
   AgentTaskKind,
@@ -29,6 +33,7 @@ type AgentRunRow = {
   assignedRolesJson: string
   latestAssistantResponse: string | null
   status: AgentRunStatus
+  executionOrigin: AgentRunExecutionOrigin | null
   prompt: string
   confirmationToken: string | null
   policyVersion: string | null
@@ -73,9 +78,22 @@ type AgentSuggestionRow = {
   dedupeKey: string
   sourceRunId: string | null
   executedRunId: string | null
+  priority: AgentSuggestionPriority | null
+  rationale: string | null
+  autoRunnable: number | null
+  followUpOfSuggestionId: string | null
+  attemptCount: number | null
+  cooldownUntil: string | null
+  lastAttemptedAt: string | null
   createdAt: string
   updatedAt: string
   lastObservedAt: string
+}
+
+type AgentRuntimeSettingsRow = {
+  settingsId: string
+  autonomyMode: AgentAutonomyMode
+  updatedAt: string
 }
 
 export type CreateAgentRunInput = {
@@ -86,6 +104,7 @@ export type CreateAgentRunInput = {
   assignedRoles?: AgentRole[]
   latestAssistantResponse?: string | null
   prompt: string
+  executionOrigin?: AgentRunExecutionOrigin
   confirmationToken?: string | null
   status?: AgentRunStatus
   policyVersion?: string | null
@@ -102,8 +121,18 @@ export type UpsertAgentSuggestionInput = {
   taskInput: RunAgentTaskInput
   dedupeKey: string
   sourceRunId: string | null
+  priority?: AgentSuggestionPriority
+  rationale?: string
+  autoRunnable?: boolean
+  followUpOfSuggestionId?: string | null
+  attemptCount?: number
+  cooldownUntil?: string | null
+  lastAttemptedAt?: string | null
   observedAt?: string
 }
+
+const DEFAULT_AGENT_RUNTIME_SETTINGS_ID = 'default'
+const DEFAULT_AGENT_AUTONOMY_MODE: AgentAutonomyMode = 'manual_only'
 
 function inTransaction<T>(db: ArchiveDatabase, callback: () => T) {
   db.exec('begin immediate')
@@ -155,6 +184,7 @@ function mapAgentRunRow(row: AgentRunRow): AgentRunRecord {
     assignedRoles: parseAssignedRolesJson(row.assignedRolesJson),
     latestAssistantResponse: row.latestAssistantResponse,
     status: row.status,
+    executionOrigin: row.executionOrigin ?? 'operator_manual',
     prompt: row.prompt,
     confirmationToken: row.confirmationToken,
     policyVersion: row.policyVersion,
@@ -216,9 +246,23 @@ function mapAgentSuggestionRow(row: AgentSuggestionRow): AgentSuggestionRecord {
     dedupeKey: row.dedupeKey,
     sourceRunId: row.sourceRunId,
     executedRunId: row.executedRunId,
+    priority: row.priority ?? 'medium',
+    rationale: row.rationale ?? '',
+    autoRunnable: row.autoRunnable === 1,
+    followUpOfSuggestionId: row.followUpOfSuggestionId,
+    attemptCount: row.attemptCount ?? 0,
+    cooldownUntil: row.cooldownUntil,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     lastObservedAt: row.lastObservedAt
+  }
+}
+
+function mapAgentRuntimeSettingsRow(row: AgentRuntimeSettingsRow): AgentRuntimeSettingsRecord {
+  return {
+    settingsId: row.settingsId,
+    autonomyMode: row.autonomyMode,
+    updatedAt: row.updatedAt
   }
 }
 
@@ -232,6 +276,7 @@ function loadAgentRunRow(db: ArchiveDatabase, runId: string) {
       assigned_roles_json as assignedRolesJson,
       latest_assistant_response as latestAssistantResponse,
       status,
+      execution_origin as executionOrigin,
       prompt,
       confirmation_token as confirmationToken,
       policy_version as policyVersion,
@@ -288,6 +333,13 @@ function loadAgentSuggestionRow(db: ArchiveDatabase, suggestionId: string) {
       dedupe_key as dedupeKey,
       source_run_id as sourceRunId,
       executed_run_id as executedRunId,
+      priority,
+      rationale,
+      auto_runnable as autoRunnable,
+      follow_up_of_suggestion_id as followUpOfSuggestionId,
+      attempt_count as attemptCount,
+      cooldown_until as cooldownUntil,
+      last_attempted_at as lastAttemptedAt,
       created_at as createdAt,
       updated_at as updatedAt,
       last_observed_at as lastObservedAt
@@ -308,12 +360,30 @@ function loadAgentSuggestionRowByDedupeKey(db: ArchiveDatabase, dedupeKey: strin
       dedupe_key as dedupeKey,
       source_run_id as sourceRunId,
       executed_run_id as executedRunId,
+      priority,
+      rationale,
+      auto_runnable as autoRunnable,
+      follow_up_of_suggestion_id as followUpOfSuggestionId,
+      attempt_count as attemptCount,
+      cooldown_until as cooldownUntil,
+      last_attempted_at as lastAttemptedAt,
       created_at as createdAt,
       updated_at as updatedAt,
       last_observed_at as lastObservedAt
      from agent_suggestions
      where dedupe_key = ?`
   ).get(dedupeKey) as AgentSuggestionRow | undefined
+}
+
+function loadAgentRuntimeSettingsRow(db: ArchiveDatabase) {
+  return db.prepare(
+    `select
+      settings_id as settingsId,
+      autonomy_mode as autonomyMode,
+      updated_at as updatedAt
+     from agent_runtime_settings
+     where settings_id = ?`
+  ).get(DEFAULT_AGENT_RUNTIME_SETTINGS_ID) as AgentRuntimeSettingsRow | undefined
 }
 
 export function createAgentRun(
@@ -326,8 +396,8 @@ export function createAgentRun(
 
   db.prepare(
     `insert into agent_runs (
-      id, role, task_kind, target_role, assigned_roles_json, latest_assistant_response, status, prompt, confirmation_token, policy_version, error_message, created_at, updated_at
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      id, role, task_kind, target_role, assigned_roles_json, latest_assistant_response, status, execution_origin, prompt, confirmation_token, policy_version, error_message, created_at, updated_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     runId,
     input.role,
@@ -336,6 +406,7 @@ export function createAgentRun(
     serializeAssignedRoles(input.assignedRoles),
     input.latestAssistantResponse ?? null,
     input.status ?? 'queued',
+    input.executionOrigin ?? 'operator_manual',
     input.prompt,
     input.confirmationToken ?? null,
     input.policyVersion ?? null,
@@ -463,6 +534,7 @@ export function listAgentRuns(
       assigned_roles_json as assignedRolesJson,
       latest_assistant_response as latestAssistantResponse,
       status,
+      execution_origin as executionOrigin,
       prompt,
       confirmation_token as confirmationToken,
       policy_version as policyVersion,
@@ -644,6 +716,13 @@ export function upsertAgentSuggestion(
   const suggestionId = input.suggestionId ?? crypto.randomUUID()
   const observedAt = input.observedAt ?? new Date().toISOString()
   const taskInputJson = JSON.stringify(input.taskInput)
+  const priority = input.priority ?? 'medium'
+  const rationale = input.rationale ?? ''
+  const autoRunnable = input.autoRunnable ?? false
+  const followUpOfSuggestionId = input.followUpOfSuggestionId ?? null
+  const attemptCount = input.attemptCount ?? 0
+  const cooldownUntil = input.cooldownUntil ?? null
+  const lastAttemptedAt = input.lastAttemptedAt ?? null
 
   db.prepare(
     `insert into agent_suggestions (
@@ -656,16 +735,27 @@ export function upsertAgentSuggestion(
       dedupe_key,
       source_run_id,
       executed_run_id,
+      priority,
+      rationale,
+      auto_runnable,
+      follow_up_of_suggestion_id,
+      attempt_count,
+      cooldown_until,
+      last_attempted_at,
       created_at,
       updated_at,
       last_observed_at
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     on conflict(dedupe_key) do update set
       trigger_kind = excluded.trigger_kind,
       role = excluded.role,
       task_kind = excluded.task_kind,
       task_input_json = excluded.task_input_json,
       source_run_id = excluded.source_run_id,
+      priority = excluded.priority,
+      rationale = excluded.rationale,
+      auto_runnable = excluded.auto_runnable,
+      follow_up_of_suggestion_id = excluded.follow_up_of_suggestion_id,
       updated_at = excluded.updated_at,
       last_observed_at = excluded.last_observed_at`
   ).run(
@@ -678,6 +768,13 @@ export function upsertAgentSuggestion(
     input.dedupeKey,
     input.sourceRunId,
     null,
+    priority,
+    rationale,
+    autoRunnable ? 1 : 0,
+    followUpOfSuggestionId,
+    attemptCount,
+    cooldownUntil,
+    lastAttemptedAt,
     observedAt,
     observedAt,
     observedAt
@@ -701,6 +798,13 @@ export function listAgentSuggestions(
       dedupe_key as dedupeKey,
       source_run_id as sourceRunId,
       executed_run_id as executedRunId,
+      priority,
+      rationale,
+      auto_runnable as autoRunnable,
+      follow_up_of_suggestion_id as followUpOfSuggestionId,
+      attempt_count as attemptCount,
+      cooldown_until as cooldownUntil,
+      last_attempted_at as lastAttemptedAt,
       created_at as createdAt,
       updated_at as updatedAt,
       last_observed_at as lastObservedAt
@@ -762,4 +866,111 @@ export function markAgentSuggestionExecuted(
   ).run('executed', input.runId, updatedAt, input.suggestionId)
 
   return getAgentSuggestion(db, { suggestionId: input.suggestionId })
+}
+
+export function getAgentRuntimeSettings(db: ArchiveDatabase): AgentRuntimeSettingsRecord {
+  const existing = loadAgentRuntimeSettingsRow(db)
+  if (existing) {
+    return mapAgentRuntimeSettingsRow(existing)
+  }
+
+  return upsertAgentRuntimeSettings(db, {
+    autonomyMode: DEFAULT_AGENT_AUTONOMY_MODE
+  })
+}
+
+export function upsertAgentRuntimeSettings(db: ArchiveDatabase, input: {
+  autonomyMode: AgentAutonomyMode
+  updatedAt?: string
+}): AgentRuntimeSettingsRecord {
+  const updatedAt = input.updatedAt ?? new Date().toISOString()
+
+  db.prepare(
+    `insert into agent_runtime_settings (
+      settings_id,
+      autonomy_mode,
+      updated_at
+    ) values (?, ?, ?)
+    on conflict(settings_id) do update set
+      autonomy_mode = excluded.autonomy_mode,
+      updated_at = excluded.updated_at`
+  ).run(
+    DEFAULT_AGENT_RUNTIME_SETTINGS_ID,
+    input.autonomyMode,
+    updatedAt
+  )
+
+  return mapAgentRuntimeSettingsRow(loadAgentRuntimeSettingsRow(db)!)
+}
+
+export function incrementAgentSuggestionAttempt(db: ArchiveDatabase, input: {
+  suggestionId: string
+  attemptedAt?: string
+  cooldownUntil?: string | null
+}): AgentSuggestionRecord | null {
+  const attemptedAt = input.attemptedAt ?? new Date().toISOString()
+
+  db.prepare(
+    `update agent_suggestions
+     set attempt_count = attempt_count + 1,
+         last_attempted_at = ?,
+         cooldown_until = ?,
+         updated_at = ?
+     where id = ?`
+  ).run(
+    attemptedAt,
+    input.cooldownUntil ?? null,
+    attemptedAt,
+    input.suggestionId
+  )
+
+  return getAgentSuggestion(db, { suggestionId: input.suggestionId })
+}
+
+export function listRunnableAgentSuggestions(db: ArchiveDatabase, input: {
+  now?: string
+  limit?: number
+} = {}): AgentSuggestionRecord[] {
+  const now = input.now ?? new Date().toISOString()
+  const rows = db.prepare(
+    `select
+      id,
+      trigger_kind as triggerKind,
+      status,
+      role,
+      task_kind as taskKind,
+      task_input_json as taskInputJson,
+      dedupe_key as dedupeKey,
+      source_run_id as sourceRunId,
+      executed_run_id as executedRunId,
+      priority,
+      rationale,
+      auto_runnable as autoRunnable,
+      follow_up_of_suggestion_id as followUpOfSuggestionId,
+      attempt_count as attemptCount,
+      cooldown_until as cooldownUntil,
+      last_attempted_at as lastAttemptedAt,
+      created_at as createdAt,
+      updated_at as updatedAt,
+      last_observed_at as lastObservedAt
+     from agent_suggestions
+     where status = 'suggested'
+       and auto_runnable = 1
+       and (cooldown_until is null or cooldown_until <= ?)
+     order by
+       case priority
+         when 'critical' then 0
+         when 'high' then 1
+         when 'medium' then 2
+         else 3
+       end asc,
+       last_observed_at desc,
+       updated_at desc,
+       created_at desc,
+       id asc`
+  ).all(now) as AgentSuggestionRow[]
+
+  return rows
+    .slice(0, input.limit ?? rows.length)
+    .map(mapAgentSuggestionRow)
 }

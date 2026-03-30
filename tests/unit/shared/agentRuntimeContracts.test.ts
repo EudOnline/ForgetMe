@@ -1,13 +1,17 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import type {
+  AgentAutonomyMode,
   AgentSuggestionRecord,
   AgentMemoryRecord,
   AgentPolicyVersionRecord,
   AgentRunDetail,
+  AgentRuntimeSettingsRecord,
   AgentRunRecord,
+  AgentRunExecutionOrigin,
   AgentSuggestionStatus,
   ArchiveApi,
   DismissAgentSuggestionInput,
+  GetAgentRuntimeSettingsInput,
   GetAgentRunInput,
   ListAgentMemoriesInput,
   ListAgentSuggestionsInput,
@@ -15,17 +19,20 @@ import type {
   ListAgentRunsInput,
   RunAgentSuggestionInput,
   RunAgentTaskInput,
-  RunAgentTaskResult
+  RunAgentTaskResult,
+  UpdateAgentRuntimeSettingsInput
 } from '../../../src/shared/archiveContracts'
 import {
   dismissAgentSuggestionInputSchema,
+  getAgentRuntimeSettingsInputSchema,
   getAgentRunInputSchema,
   listAgentMemoriesInputSchema,
   listAgentSuggestionsInputSchema,
   listAgentPolicyVersionsInputSchema,
   listAgentRunsInputSchema,
   runAgentSuggestionInputSchema,
-  runAgentTaskInputSchema
+  runAgentTaskInputSchema,
+  updateAgentRuntimeSettingsInputSchema
 } from '../../../src/shared/ipcSchemas'
 
 describe('agent runtime shared contracts', () => {
@@ -98,6 +105,16 @@ describe('agent runtime shared contracts', () => {
       suggestionId: 'suggestion-1',
       confirmationToken: 'confirm-1'
     }).success).toBe(true)
+
+    expect(getAgentRuntimeSettingsInputSchema.safeParse({}).success).toBe(true)
+
+    expect(updateAgentRuntimeSettingsInputSchema.safeParse({
+      autonomyMode: 'suggest_safe_auto_run'
+    }).success).toBe(true)
+
+    expect(updateAgentRuntimeSettingsInputSchema.safeParse({
+      autonomyMode: 'fully_autonomous'
+    }).success).toBe(false)
   })
 
   it('extends ArchiveApi with agent-runtime methods', () => {
@@ -124,6 +141,12 @@ describe('agent runtime shared contracts', () => {
     >()
     expectTypeOf<ArchiveApi['runAgentSuggestion']>().toEqualTypeOf<
       (input: RunAgentSuggestionInput) => Promise<RunAgentTaskResult | null>
+    >()
+    expectTypeOf<ArchiveApi['getAgentRuntimeSettings']>().toEqualTypeOf<
+      (input?: GetAgentRuntimeSettingsInput) => Promise<AgentRuntimeSettingsRecord>
+    >()
+    expectTypeOf<ArchiveApi['updateAgentRuntimeSettings']>().toEqualTypeOf<
+      (input: UpdateAgentRuntimeSettingsInput) => Promise<AgentRuntimeSettingsRecord>
     >()
   })
 
@@ -153,6 +176,8 @@ describe('agent runtime shared contracts', () => {
   })
 
   it('models a persisted suggestion with executable task input payload', () => {
+    const autonomyMode: AgentAutonomyMode = 'suggest_safe_auto_run'
+    const executionOrigin: AgentRunExecutionOrigin = 'operator_suggestion'
     const suggestion: AgentSuggestionRecord = {
       suggestionId: 'suggestion-1',
       triggerKind: 'governance.failed_runs_detected',
@@ -167,17 +192,36 @@ describe('agent runtime shared contracts', () => {
       dedupeKey: 'governance.failed_runs_detected::2026-03-30',
       sourceRunId: null,
       executedRunId: null,
+      priority: 'high',
+      rationale: 'Repeated enrichment failures are blocking downstream review.',
+      autoRunnable: true,
+      followUpOfSuggestionId: null,
+      attemptCount: 0,
+      cooldownUntil: null,
       createdAt: '2026-03-30T00:00:00.000Z',
       updatedAt: '2026-03-30T00:00:00.000Z',
       lastObservedAt: '2026-03-30T00:00:00.000Z'
+    }
+    const settings: AgentRuntimeSettingsRecord = {
+      settingsId: 'default',
+      autonomyMode,
+      updatedAt: '2026-03-30T00:00:00.000Z'
     }
 
     const expectedStatus: AgentSuggestionStatus = 'suggested'
 
     expect(suggestion.status).toBe(expectedStatus)
+    expect(settings.autonomyMode).toBe(autonomyMode)
+    expect(executionOrigin).toBe('operator_suggestion')
     expect(suggestion).toMatchObject({
       triggerKind: 'governance.failed_runs_detected',
       status: 'suggested',
+      priority: 'high',
+      rationale: 'Repeated enrichment failures are blocking downstream review.',
+      autoRunnable: true,
+      followUpOfSuggestionId: null,
+      attemptCount: 0,
+      cooldownUntil: null,
       taskInput: {
         role: 'governance',
         taskKind: 'governance.summarize_failures',

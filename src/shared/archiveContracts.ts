@@ -1476,6 +1476,11 @@ export type AgentRunStatus =
   | 'failed'
   | 'cancelled'
 
+export type AgentRunExecutionOrigin =
+  | 'operator_manual'
+  | 'operator_suggestion'
+  | 'auto_runner'
+
 export type AgentRunRecord = {
   runId: string
   role: AgentRole
@@ -1484,6 +1489,7 @@ export type AgentRunRecord = {
   assignedRoles: AgentRole[]
   latestAssistantResponse: string | null
   status: AgentRunStatus
+  executionOrigin: AgentRunExecutionOrigin
   prompt: string
   confirmationToken: string | null
   policyVersion: string | null
@@ -1532,6 +1538,22 @@ export type AgentSuggestionStatus =
   | 'dismissed'
   | 'executed'
 
+export type AgentSuggestionPriority =
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'critical'
+
+export type AgentAutonomyMode =
+  | 'manual_only'
+  | 'suggest_safe_auto_run'
+
+export type AgentRuntimeSettingsRecord = {
+  settingsId: string
+  autonomyMode: AgentAutonomyMode
+  updatedAt: string
+}
+
 export type AgentSuggestionRecord = {
   suggestionId: string
   triggerKind: AgentTriggerKind
@@ -1542,6 +1564,12 @@ export type AgentSuggestionRecord = {
   dedupeKey: string
   sourceRunId: string | null
   executedRunId: string | null
+  priority: AgentSuggestionPriority
+  rationale: string
+  autoRunnable: boolean
+  followUpOfSuggestionId: string | null
+  attemptCount: number
+  cooldownUntil: string | null
   createdAt: string
   updatedAt: string
   lastObservedAt: string
@@ -1606,6 +1634,12 @@ export type RunAgentSuggestionInput = {
   confirmationToken?: string
 }
 
+export type GetAgentRuntimeSettingsInput = {}
+
+export type UpdateAgentRuntimeSettingsInput = {
+  autonomyMode: AgentAutonomyMode
+}
+
 export interface ArchiveApi {
   selectImportFiles: () => Promise<string[]>
   selectBackupExportDestination: () => Promise<string | null>
@@ -1626,6 +1660,8 @@ export interface ArchiveApi {
   refreshAgentSuggestions: () => Promise<AgentSuggestionRecord[]>
   dismissAgentSuggestion: (input: DismissAgentSuggestionInput) => Promise<AgentSuggestionRecord | null>
   runAgentSuggestion: (input: RunAgentSuggestionInput) => Promise<RunAgentTaskResult | null>
+  getAgentRuntimeSettings: (input?: GetAgentRuntimeSettingsInput) => Promise<AgentRuntimeSettingsRecord>
+  updateAgentRuntimeSettings: (input: UpdateAgentRuntimeSettingsInput) => Promise<AgentRuntimeSettingsRecord>
   listImportBatches: () => Promise<ImportBatchSummary[]>
   getImportBatch: (batchId: string) => Promise<ImportBatchSummary | null>
   searchArchive: (input: { query?: string; fileKinds?: string[]; batchId?: string; duplicateClass?: string; personName?: string }) => Promise<ArchiveSearchResult[]>
