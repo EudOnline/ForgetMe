@@ -47,10 +47,10 @@ function buildTaskInputForRole<Role extends AgentRole>(
   } as Extract<RunAgentTaskInput, { role: Role }>
 }
 
-function buildFollowup(input: {
+function buildFollowup<Role extends AgentRole>(input: {
   triggerKind: RankedAgentSuggestionSeed['triggerKind']
-  role: RankedAgentSuggestionSeed['role']
-  taskKind: RankedAgentSuggestionSeed['taskKind']
+  role: Role
+  taskKind: AgentTaskKindByRole[Role]
   prompt: string
   dedupeKey: string
   sourceRunId: string | null

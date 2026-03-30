@@ -89,6 +89,31 @@ function buildSuggestion(overrides?: Partial<Record<string, unknown>>) {
 
 function buildArchiveApi(overrides: Record<string, unknown> = {}) {
   return {
+    createAgentObjective: vi.fn().mockResolvedValue({
+      objectiveId: '',
+      title: '',
+      objectiveKind: 'evidence_investigation',
+      status: 'in_progress',
+      prompt: '',
+      initiatedBy: 'operator',
+      ownerRole: 'workspace',
+      mainThreadId: '',
+      riskLevel: 'medium',
+      budget: null,
+      requiresOperatorInput: false,
+      createdAt: '',
+      updatedAt: '',
+      threads: [],
+      participants: [],
+      proposals: [],
+      checkpoints: [],
+      subagents: []
+    }),
+    listAgentObjectives: vi.fn().mockResolvedValue([]),
+    getAgentObjective: vi.fn().mockResolvedValue(null),
+    getAgentThread: vi.fn().mockResolvedValue(null),
+    respondToAgentProposal: vi.fn().mockResolvedValue(null),
+    confirmAgentProposal: vi.fn().mockResolvedValue(null),
     listAgentRuns: vi.fn().mockResolvedValue([]),
     getAgentRun: vi.fn().mockResolvedValue(null),
     previewAgentTask: vi.fn().mockResolvedValue(buildExecutionPreview()),
@@ -135,9 +160,9 @@ describe('AgentConsolePage', () => {
 
     render(<App />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Agent Console' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Objective Workbench' }))
 
-    expect(await screen.findByRole('heading', { name: 'Agent Console' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Objective Workbench' })).toBeInTheDocument()
   })
 
   it('renders persisted replay metadata, a chronological timeline, and a previous-run comparison', async () => {

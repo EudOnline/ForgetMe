@@ -10,13 +10,13 @@ import type {
 import { getArchiveApi } from './archiveApi'
 import { useI18n } from './i18n'
 import { BatchDetailPage } from './pages/BatchDetailPage'
-import { AgentConsolePage } from './pages/AgentConsolePage'
 import { BatchListPage } from './pages/BatchListPage'
 import { DocumentEvidencePage } from './pages/DocumentEvidencePage'
 import { EnrichmentJobsPage } from './pages/EnrichmentJobsPage'
 import { GroupPortraitPage } from './pages/GroupPortraitPage'
 import { ImportPage } from './pages/ImportPage'
 import { MemoryWorkspacePage } from './pages/MemoryWorkspacePage'
+import { ObjectiveWorkbenchPage } from './pages/ObjectiveWorkbenchPage'
 import { PeoplePage } from './pages/PeoplePage'
 import { PreservationPage } from './pages/PreservationPage'
 import { PersonDetailPage } from './pages/PersonDetailPage'
@@ -38,7 +38,7 @@ type Page =
   | 'enrichment'
   | 'evidence'
   | 'preservation'
-  | 'agent-console'
+  | 'objective-workbench'
 
 export default function App() {
   const { language, setLanguage, t } = useI18n()
@@ -114,7 +114,7 @@ export default function App() {
     preservation: 'page.ops.preservation',
     enrichment: 'page.ops.enrichmentJobs',
     evidence: 'page.evidence.document',
-    'agent-console': 'page.ops.agentConsole'
+    'objective-workbench': 'page.ops.objectiveWorkbench'
   }
 
   return (
@@ -244,8 +244,8 @@ export default function App() {
                 </button>
               </li>
               <li>
-                <button className="fmNavItem" type="button" onClick={() => setPage('agent-console')} aria-current={page === 'agent-console' ? 'page' : undefined}>
-                  {t('nav.agentConsole')}
+                <button className="fmNavItem" type="button" onClick={() => setPage('objective-workbench')} aria-current={page === 'objective-workbench' ? 'page' : undefined}>
+                  {t('nav.objectiveWorkbench')}
                 </button>
               </li>
             </ul>
@@ -305,15 +305,7 @@ export default function App() {
             {page === 'preservation' ? <PreservationPage /> : null}
             {page === 'enrichment' ? <EnrichmentJobsPage onSelectFile={handleSelectEvidenceFile} /> : null}
             {page === 'evidence' ? <DocumentEvidencePage fileId={selectedEvidenceFileId} /> : null}
-            {page === 'agent-console' ? (
-              <AgentConsolePage
-                onOpenReviewQueue={() => setPage('review')}
-                onOpenMemoryWorkspace={(scope) => {
-                  setSelectedMemoryWorkspaceScope(scope)
-                  setPage('memory-workspace')
-                }}
-              />
-            ) : null}
+            {page === 'objective-workbench' ? <ObjectiveWorkbenchPage /> : null}
           </div>
         </section>
       </div>

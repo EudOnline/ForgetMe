@@ -1840,6 +1840,23 @@ export type AgentToolExecutionRecord = {
   completedAt: string | null
 }
 
+export type AgentObjectiveDetail = AgentObjectiveRecord & {
+  threads: AgentThreadRecord[]
+  participants: AgentThreadParticipantRecord[]
+  proposals: AgentProposalRecord[]
+  checkpoints: AgentCheckpointRecord[]
+  subagents: AgentSubagentRecord[]
+}
+
+export type AgentThreadDetail = AgentThreadRecord & {
+  participants: AgentThreadParticipantRecord[]
+  messages: AgentMessageRecordV2[]
+  proposals: AgentProposalRecord[]
+  votes: AgentVoteRecord[]
+  checkpoints: AgentCheckpointRecord[]
+  subagents: AgentSubagentRecord[]
+}
+
 export type CreateAgentObjectiveInput = {
   title: string
   objectiveKind: AgentObjectiveKind
@@ -1992,6 +2009,12 @@ export interface ArchiveApi {
   preflightImportBatch: (input: { sourcePaths: string[] }) => Promise<ImportPreflightResult>
   previewAgentTask: (input: RunAgentTaskInput) => Promise<AgentExecutionPreview>
   runAgentTask: (input: RunAgentTaskInput) => Promise<RunAgentTaskResult>
+  createAgentObjective: (input: CreateAgentObjectiveInput) => Promise<AgentObjectiveDetail>
+  listAgentObjectives: (input?: ListAgentObjectivesInput) => Promise<AgentObjectiveRecord[]>
+  getAgentObjective: (input: GetAgentObjectiveInput) => Promise<AgentObjectiveDetail | null>
+  getAgentThread: (input: GetAgentThreadInput) => Promise<AgentThreadDetail | null>
+  respondToAgentProposal: (input: RespondToAgentProposalInput) => Promise<AgentProposalRecord | null>
+  confirmAgentProposal: (input: ConfirmAgentProposalInput) => Promise<AgentProposalRecord | null>
   listAgentRuns: (input?: ListAgentRunsInput) => Promise<AgentRunRecord[]>
   getAgentRun: (input: GetAgentRunInput) => Promise<AgentRunDetail | null>
   listAgentMemories: (input?: ListAgentMemoriesInput) => Promise<AgentMemoryRecord[]>

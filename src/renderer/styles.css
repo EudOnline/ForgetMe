@@ -559,7 +559,8 @@ html:lang(zh-CN) .fmLangLabel {
 
 .fmContent[data-page="review-workbench"] .fmContentInner,
 .fmContent[data-page="memory-workspace"] .fmContentInner,
-.fmContent[data-page="group-portrait"] .fmContentInner {
+.fmContent[data-page="group-portrait"] .fmContentInner,
+.fmContent[data-page="objective-workbench"] .fmContentInner {
   width: min(1500px, 100%);
 }
 
@@ -882,6 +883,148 @@ input:focus, textarea:focus, select:focus {
   white-space: pre-wrap;
 }
 
+.fmObjectiveWorkbench {
+  display: grid;
+  gap: var(--fm-space-m);
+}
+
+.fmObjectiveWorkbenchHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--fm-space-m);
+}
+
+.fmObjectiveWorkbenchHeader h1 {
+  margin-bottom: 6px;
+}
+
+.fmObjectiveWorkbenchStatus {
+  color: var(--fm-ink-1);
+  font-size: var(--fm-text-sm);
+}
+
+.fmObjectiveWorkbenchError {
+  margin: 0;
+  color: color-mix(in oklch, var(--fm-accent) 40%, #8b1e2d);
+}
+
+.fmObjectiveWorkbenchLayout {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1.1fr) minmax(260px, 340px);
+  gap: var(--fm-space-m);
+  align-items: start;
+}
+
+.fmObjectiveWorkbenchColumn {
+  display: grid;
+  gap: var(--fm-space-m);
+}
+
+.fmObjectiveWorkbenchComposer,
+.fmObjectiveWorkbenchField {
+  display: grid;
+  gap: 8px;
+}
+
+.fmObjectiveWorkbenchComposer textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.fmObjectiveWorkbenchInboxList,
+.fmObjectiveWorkbenchTimeline,
+.fmObjectiveWorkbenchThreadMessages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.fmObjectiveWorkbenchInboxButton,
+.fmObjectiveWorkbenchProposalSelect {
+  width: 100%;
+  text-align: left;
+  display: grid;
+  gap: 6px;
+}
+
+.fmObjectiveWorkbenchInboxButton[aria-pressed="true"],
+.fmObjectiveWorkbenchProposalSelect[aria-pressed="true"] {
+  background: color-mix(in oklch, var(--fm-accent) 14%, var(--fm-paper-0));
+  border-color: color-mix(in oklch, var(--fm-accent) 46%, var(--fm-border));
+}
+
+.fmObjectiveWorkbenchTimelineItem,
+.fmObjectiveWorkbenchProposalCard,
+.fmObjectiveWorkbenchStanceCard,
+.fmObjectiveWorkbenchThreadMessages li {
+  border: 1px solid color-mix(in oklch, var(--fm-border) 82%, var(--fm-accent) 18%);
+  border-radius: var(--fm-radius-m);
+  background: color-mix(in oklch, var(--fm-paper-0) 92%, var(--fm-accent-soft) 8%);
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.fmObjectiveWorkbenchTimelineMeta,
+.fmObjectiveWorkbenchStanceCard header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.fmObjectiveWorkbenchSectionHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--fm-border);
+}
+
+.fmObjectiveWorkbenchThreadMessages li > span {
+  width: fit-content;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--fm-accent) 14%, white 86%);
+  color: var(--fm-ink-1);
+  font-size: var(--fm-text-xs);
+  text-transform: lowercase;
+  letter-spacing: 0.08em;
+}
+
+.fmObjectiveWorkbenchThreadMessages li > p,
+.fmObjectiveWorkbenchTimelineItem p,
+.fmObjectiveWorkbenchProposalCard p,
+.fmObjectiveWorkbenchStanceCard p {
+  margin: 0;
+}
+
+.fmObjectiveWorkbenchStances,
+.fmObjectiveWorkbenchProposalList {
+  display: grid;
+  gap: 10px;
+}
+
+.fmObjectiveWorkbenchThreadTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fmObjectiveWorkbenchThreadTabs button[aria-pressed="true"] {
+  background: color-mix(in oklch, var(--fm-accent) 18%, var(--fm-paper-0));
+  border-color: color-mix(in oklch, var(--fm-accent) 46%, var(--fm-border));
+}
+
+.fmObjectiveWorkbenchProposalFocus {
+  margin: 0;
+  color: var(--fm-ink-1);
+}
+
 .fmImportDropzone {
   display: grid;
   gap: 12px;
@@ -981,5 +1124,17 @@ input:focus, textarea:focus, select:focus {
 @media (max-width: 960px) {
   .fmAgentConsoleLayout {
     grid-template-columns: 1fr;
+  }
+
+  .fmObjectiveWorkbenchLayout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .fmObjectiveWorkbenchHeader,
+  .fmObjectiveWorkbenchSectionHeader {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

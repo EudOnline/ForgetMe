@@ -3,10 +3,19 @@ import type {
   AgentArtifactRef,
   AgentCheckpointKind,
   AgentCheckpointRecord,
+  AgentObjectiveDetail,
+  AgentObjectiveRecord,
   AgentProposalRecord,
   AgentSkillPackId,
+  AgentThreadDetail,
+  ArchiveApi,
+  ConfirmAgentProposalInput,
   CreateAgentObjectiveInput,
-  CreateAgentProposalInput
+  CreateAgentProposalInput,
+  GetAgentObjectiveInput,
+  GetAgentThreadInput,
+  ListAgentObjectivesInput,
+  RespondToAgentProposalInput
 } from '../../../src/shared/archiveContracts'
 import {
   agentCheckpointSummarySchema,
@@ -168,5 +177,26 @@ describe('message-native agent runtime shared contracts', () => {
       'review_decision' | 'evidence_investigation' | 'user_response' | 'policy_change' | 'publication'
     >()
     expectTypeOf<CreateAgentProposalInput['proposalKind']>().toEqualTypeOf<AgentProposalRecord['proposalKind']>()
+  })
+
+  it('extends ArchiveApi with message-native objective methods', () => {
+    expectTypeOf<ArchiveApi['createAgentObjective']>().toEqualTypeOf<
+      (input: CreateAgentObjectiveInput) => Promise<AgentObjectiveDetail>
+    >()
+    expectTypeOf<ArchiveApi['listAgentObjectives']>().toEqualTypeOf<
+      (input?: ListAgentObjectivesInput) => Promise<AgentObjectiveRecord[]>
+    >()
+    expectTypeOf<ArchiveApi['getAgentObjective']>().toEqualTypeOf<
+      (input: GetAgentObjectiveInput) => Promise<AgentObjectiveDetail | null>
+    >()
+    expectTypeOf<ArchiveApi['getAgentThread']>().toEqualTypeOf<
+      (input: GetAgentThreadInput) => Promise<AgentThreadDetail | null>
+    >()
+    expectTypeOf<ArchiveApi['respondToAgentProposal']>().toEqualTypeOf<
+      (input: RespondToAgentProposalInput) => Promise<AgentProposalRecord | null>
+    >()
+    expectTypeOf<ArchiveApi['confirmAgentProposal']>().toEqualTypeOf<
+      (input: ConfirmAgentProposalInput) => Promise<AgentProposalRecord | null>
+    >()
   })
 })

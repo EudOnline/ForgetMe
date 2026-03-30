@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { authorizeToolRequest } from '../../../src/main/services/toolBrokerService'
+import { authorizeToolRequest, resolveToolPolicy } from '../../../src/main/services/toolBrokerService'
 
 describe('toolBrokerService', () => {
+  it('resolves the external verification policy with network search tools enabled', () => {
+    expect(resolveToolPolicy('external-verification-policy')).toEqual({
+      policyId: 'external-verification-policy',
+      allowedTools: ['search_web', 'open_source_page', 'capture_citation_bundle'],
+      allowsNetwork: true
+    })
+  })
+
   it('blocks direct network access when the request is missing an allowed policy', () => {
     const result = authorizeToolRequest({
       role: 'workspace',
@@ -23,11 +31,7 @@ describe('toolBrokerService', () => {
       role: 'ingestion',
       toolName: 'get_document_evidence',
       skillPackIds: ['evidence-checker'],
-      toolPolicy: {
-        policyId: 'local-evidence-policy',
-        allowedTools: ['get_document_evidence'],
-        allowsNetwork: false
-      },
+      toolPolicy: resolveToolPolicy('local-evidence-policy') ?? undefined,
       remainingBudget: {
         maxRounds: 2,
         maxToolCalls: 2,

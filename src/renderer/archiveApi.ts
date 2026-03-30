@@ -1,10 +1,14 @@
 import type {
   AgentExecutionPreview,
   AgentMemoryRecord,
+  AgentObjectiveDetail,
+  AgentObjectiveRecord,
   AgentPolicyVersionRecord,
+  AgentProposalRecord,
   AgentRole,
   AgentSuggestionRecord,
   AgentTaskKind,
+  AgentThreadDetail,
   AgentRunDetail,
   AgentRunRecord,
   ApprovedDraftSendDestination,
@@ -54,11 +58,17 @@ import type {
   RunAgentTaskResult,
   RunAgentSuggestionInput,
   AgentRuntimeSettingsRecord,
+  ConfirmAgentProposalInput,
+  CreateAgentObjectiveInput,
   ReviewConflictGroupSummary,
   ReviewInboxPersonSummary,
   ReviewQueueItem,
   ReviewWorkbenchDetail,
   ReviewWorkbenchListItem,
+  GetAgentObjectiveInput,
+  GetAgentThreadInput,
+  ListAgentObjectivesInput,
+  RespondToAgentProposalInput,
   StructuredFieldCandidate,
   UpdateAgentRuntimeSettingsInput
 } from '../shared/archiveContracts'
@@ -127,6 +137,49 @@ function buildFallbackExecutionPreview(input: RunAgentTaskInput): AgentExecution
   }
 }
 
+function fallbackOwnerRoleForObjective(input: CreateAgentObjectiveInput): AgentRole {
+  if (input.ownerRole) {
+    return input.ownerRole
+  }
+
+  switch (input.objectiveKind) {
+    case 'review_decision':
+      return 'review'
+    case 'policy_change':
+      return 'governance'
+    case 'user_response':
+    case 'publication':
+    case 'evidence_investigation':
+    default:
+      return 'workspace'
+  }
+}
+
+function buildFallbackObjectiveDetail(input: CreateAgentObjectiveInput): AgentObjectiveDetail {
+  const ownerRole = fallbackOwnerRoleForObjective(input)
+
+  return {
+    objectiveId: '',
+    title: input.title,
+    objectiveKind: input.objectiveKind,
+    status: 'in_progress',
+    prompt: input.prompt,
+    initiatedBy: input.initiatedBy ?? 'operator',
+    ownerRole,
+    mainThreadId: '',
+    riskLevel: input.riskLevel ?? 'medium',
+    budget: input.budget ?? null,
+    requiresOperatorInput: false,
+    createdAt: '',
+    updatedAt: '',
+    threads: [],
+    participants: [],
+    proposals: [],
+    checkpoints: [],
+    subagents: []
+  }
+}
+
 const fallbackApi: ArchiveApi = {
   selectImportFiles: async () => [],
   selectContextPackExportDestination: async () => null,
@@ -146,6 +199,12 @@ const fallbackApi: ArchiveApi = {
     assignedRoles: [],
     latestAssistantResponse: null
   }) as RunAgentTaskResult,
+  createAgentObjective: async (input: CreateAgentObjectiveInput) => buildFallbackObjectiveDetail(input),
+  listAgentObjectives: async (_input?: ListAgentObjectivesInput) => [] as AgentObjectiveRecord[],
+  getAgentObjective: async (_input: GetAgentObjectiveInput) => null as AgentObjectiveDetail | null,
+  getAgentThread: async (_input: GetAgentThreadInput) => null as AgentThreadDetail | null,
+  respondToAgentProposal: async (_input: RespondToAgentProposalInput) => null as AgentProposalRecord | null,
+  confirmAgentProposal: async (_input: ConfirmAgentProposalInput) => null as AgentProposalRecord | null,
   listAgentRuns: async (_input?: ListAgentRunsInput) => [] as AgentRunRecord[],
   getAgentRun: async (_input: GetAgentRunInput) => null as AgentRunDetail | null,
   listAgentMemories: async (_input?: ListAgentMemoriesInput) => [] as AgentMemoryRecord[],
@@ -269,6 +328,12 @@ function createIpcArchiveApi(): ArchiveApi | null {
     createImportBatch: (input) => ipcRenderer.invoke('archive:createImportBatch', input),
     previewAgentTask: (input) => ipcRenderer.invoke('archive:previewAgentTask', input),
     runAgentTask: (input) => ipcRenderer.invoke('archive:runAgentTask', input),
+    createAgentObjective: (input) => ipcRenderer.invoke('archive:createAgentObjective', input),
+    listAgentObjectives: (input) => ipcRenderer.invoke('archive:listAgentObjectives', input),
+    getAgentObjective: (input) => ipcRenderer.invoke('archive:getAgentObjective', input),
+    getAgentThread: (input) => ipcRenderer.invoke('archive:getAgentThread', input),
+    respondToAgentProposal: (input) => ipcRenderer.invoke('archive:respondToAgentProposal', input),
+    confirmAgentProposal: (input) => ipcRenderer.invoke('archive:confirmAgentProposal', input),
     listAgentRuns: (input) => ipcRenderer.invoke('archive:listAgentRuns', input),
     getAgentRun: (input) => ipcRenderer.invoke('archive:getAgentRun', input),
     listAgentMemories: (input) => ipcRenderer.invoke('archive:listAgentMemories', input),

@@ -35,6 +35,24 @@ export type ToolPolicy = {
   allowsNetwork: boolean
 }
 
+const TOOL_POLICIES: Record<string, ToolPolicy> = {
+  'external-verification-policy': {
+    policyId: 'external-verification-policy',
+    allowedTools: ['search_web', 'open_source_page', 'capture_citation_bundle'],
+    allowsNetwork: true
+  },
+  'tool-policy-web-1': {
+    policyId: 'tool-policy-web-1',
+    allowedTools: ['search_web', 'open_source_page', 'capture_citation_bundle'],
+    allowsNetwork: true
+  },
+  'local-evidence-policy': {
+    policyId: 'local-evidence-policy',
+    allowedTools: ['get_document_evidence', 'read_evidence_trace', 'summarize_ocr_evidence'],
+    allowsNetwork: false
+  }
+}
+
 export type AuthorizeToolRequestInput = {
   role: AgentRole
   toolName: string
@@ -46,6 +64,14 @@ export type AuthorizeToolRequestInput = {
 export type ToolAuthorizationResult =
   | { status: 'authorized'; reason: null }
   | { status: 'blocked'; reason: string }
+
+export function resolveToolPolicy(policyId?: string | null): ToolPolicy | null {
+  if (!policyId) {
+    return null
+  }
+
+  return TOOL_POLICIES[policyId] ?? null
+}
 
 export function authorizeToolRequest(input: AuthorizeToolRequestInput): ToolAuthorizationResult {
   if (input.remainingBudget.maxToolCalls <= 0 || input.remainingBudget.maxRounds <= 0 || input.remainingBudget.timeoutMs <= 0) {

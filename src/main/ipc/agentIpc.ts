@@ -1,15 +1,21 @@
 import path from 'node:path'
 import { ipcMain } from 'electron'
 import {
+  confirmAgentProposalInputSchema,
+  createAgentObjectiveInputSchema,
   dismissAgentSuggestionInputSchema,
   getAgentRuntimeSettingsInputSchema,
   getAgentRunInputSchema,
+  getAgentObjectiveInputSchema,
+  getAgentThreadInputSchema,
   listAgentMemoriesInputSchema,
+  listAgentObjectivesInputSchema,
   listAgentSuggestionsInputSchema,
   listAgentPolicyVersionsInputSchema,
   listAgentRunsInputSchema,
   previewAgentTaskInputSchema,
   refreshAgentSuggestionsInputSchema,
+  respondToAgentProposalInputSchema,
   runAgentSuggestionInputSchema,
   runAgentTaskInputSchema,
   updateAgentRuntimeSettingsInputSchema
@@ -17,10 +23,15 @@ import {
 import type { RunAgentTaskInput } from '../../shared/archiveContracts'
 import type { AppPaths } from '../services/appPaths'
 import { createAgentRuntime } from '../services/agentRuntimeService'
+import { createObjectiveRuntimeService } from '../services/objectiveRuntimeService'
+import { createFacilitatorAgentService } from '../services/agents/facilitatorAgentService'
 import { createGovernanceAgentService } from '../services/agents/governanceAgentService'
 import { createIngestionAgentService } from '../services/agents/ingestionAgentService'
 import { createReviewAgentService } from '../services/agents/reviewAgentService'
 import { createWorkspaceAgentService } from '../services/agents/workspaceAgentService'
+import { createExternalVerificationBrokerService } from '../services/externalVerificationBrokerService'
+import { createExternalWebSearchService } from '../services/externalWebSearchService'
+import { createSubagentRegistryService } from '../services/subagentRegistryService'
 import { openDatabase, runMigrations } from '../services/db'
 
 function databasePath(appPaths: AppPaths) {
@@ -49,6 +60,27 @@ function createArchiveAgentRuntime(appPaths: AppPaths) {
   }
 }
 
+function createArchiveObjectiveRuntime(appPaths: AppPaths) {
+  const db = openDatabase(databasePath(appPaths))
+  runMigrations(db)
+  const externalWebSearch = createExternalWebSearchService()
+
+  const runtime = createObjectiveRuntimeService({
+    db,
+    facilitator: createFacilitatorAgentService(),
+    externalVerificationBroker: createExternalVerificationBrokerService({
+      searchWeb: externalWebSearch.searchWeb,
+      openSourcePage: externalWebSearch.openSourcePage
+    }),
+    subagentRegistry: createSubagentRegistryService()
+  })
+
+  return {
+    db,
+    runtime
+  }
+}
+
 async function withArchiveAgentRuntime<T>(
   appPaths: AppPaths,
   work: (runtime: ReturnType<typeof createAgentRuntime>) => Promise<T> | T
@@ -62,7 +94,26 @@ async function withArchiveAgentRuntime<T>(
   }
 }
 
+async function withArchiveObjectiveRuntime<T>(
+  appPaths: AppPaths,
+  work: (runtime: ReturnType<typeof createObjectiveRuntimeService>) => Promise<T> | T
+) {
+  const { db, runtime } = createArchiveObjectiveRuntime(appPaths)
+
+  try {
+    return await work(runtime)
+  } finally {
+    db.close()
+  }
+}
+
 export function registerAgentIpc(appPaths: AppPaths) {
+  ipcMain.removeHandler('archive:createAgentObjective')
+  ipcMain.removeHandler('archive:listAgentObjectives')
+  ipcMain.removeHandler('archive:getAgentObjective')
+  ipcMain.removeHandler('archive:getAgentThread')
+  ipcMain.removeHandler('archive:respondToAgentProposal')
+  ipcMain.removeHandler('archive:confirmAgentProposal')
   ipcMain.removeHandler('archive:previewAgentTask')
   ipcMain.removeHandler('archive:runAgentTask')
   ipcMain.removeHandler('archive:listAgentRuns')
@@ -75,6 +126,51 @@ export function registerAgentIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:runAgentSuggestion')
   ipcMain.removeHandler('archive:getAgentRuntimeSettings')
   ipcMain.removeHandler('archive:updateAgentRuntimeSettings')
+
+  ipcMain.handle('archive:createAgentObjective', async (_event, payload) => {
+    const input = createAgentObjectiveInputSchema.parse(payload)
+    return withArchiveObjectiveRuntime(appPaths, (runtime) => {
+      const started = runtime.startObjective({
+        title: input.title,
+        objectiveKind: input.objectiveKind,
+        prompt: input.prompt,
+        initiatedBy: input.initiatedBy
+      })
+      const detail = runtime.getObjectiveDetail({
+        objectiveId: started.objective.objectiveId
+      })
+      if (!detail) {
+        throw new Error(`objective not found after creation: ${started.objective.objectiveId}`)
+      }
+
+      return detail
+    })
+  })
+
+  ipcMain.handle('archive:listAgentObjectives', async (_event, payload) => {
+    const input = listAgentObjectivesInputSchema.parse(payload)
+    return withArchiveObjectiveRuntime(appPaths, (runtime) => runtime.listObjectives(input))
+  })
+
+  ipcMain.handle('archive:getAgentObjective', async (_event, payload) => {
+    const input = getAgentObjectiveInputSchema.parse(payload)
+    return withArchiveObjectiveRuntime(appPaths, (runtime) => runtime.getObjectiveDetail(input))
+  })
+
+  ipcMain.handle('archive:getAgentThread', async (_event, payload) => {
+    const input = getAgentThreadInputSchema.parse(payload)
+    return withArchiveObjectiveRuntime(appPaths, (runtime) => runtime.getThreadDetail(input))
+  })
+
+  ipcMain.handle('archive:respondToAgentProposal', async (_event, payload) => {
+    const input = respondToAgentProposalInputSchema.parse(payload)
+    return withArchiveObjectiveRuntime(appPaths, (runtime) => runtime.respondToAgentProposal(input))
+  })
+
+  ipcMain.handle('archive:confirmAgentProposal', async (_event, payload) => {
+    const input = confirmAgentProposalInputSchema.parse(payload)
+    return withArchiveObjectiveRuntime(appPaths, (runtime) => runtime.confirmAgentProposal(input))
+  })
 
   ipcMain.handle('archive:previewAgentTask', async (_event, payload) => {
     const input = previewAgentTaskInputSchema.parse(payload) as RunAgentTaskInput

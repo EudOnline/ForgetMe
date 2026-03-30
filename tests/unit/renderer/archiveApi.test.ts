@@ -58,6 +58,37 @@ describe('archiveApi agent runtime methods', () => {
 
     const archiveApi = getArchiveApi()
 
+    await expect(archiveApi.createAgentObjective({
+      title: 'Verify an external claim before responding',
+      objectiveKind: 'evidence_investigation',
+      prompt: 'Check the source before we answer the user.',
+      initiatedBy: 'operator'
+    })).resolves.toEqual(expect.objectContaining({
+      objectiveId: '',
+      objectiveKind: 'evidence_investigation',
+      status: 'in_progress',
+      ownerRole: 'workspace'
+    }))
+    await expect(archiveApi.listAgentObjectives({
+      ownerRole: 'workspace'
+    })).resolves.toEqual([])
+    await expect(archiveApi.getAgentObjective({
+      objectiveId: 'objective-1'
+    })).resolves.toBeNull()
+    await expect(archiveApi.getAgentThread({
+      threadId: 'thread-main-1'
+    })).resolves.toBeNull()
+    await expect(archiveApi.respondToAgentProposal({
+      proposalId: 'proposal-1',
+      responderRole: 'governance',
+      response: 'challenge',
+      comment: 'Need a bounded verification policy before this can proceed.'
+    })).resolves.toBeNull()
+    await expect(archiveApi.confirmAgentProposal({
+      proposalId: 'proposal-1',
+      decision: 'confirm',
+      operatorNote: 'Confirmed after reviewing the evidence bundle.'
+    })).resolves.toBeNull()
     await expect(archiveApi.runAgentTask({
       prompt: 'Summarize the highest-priority pending review work',
       role: 'orchestrator'
@@ -118,6 +149,202 @@ describe('archiveApi agent runtime methods', () => {
   })
 
   it('preserves renderer-provided agent runtime methods', async () => {
+    const createAgentObjective = vi.fn().mockResolvedValue({
+      objectiveId: 'objective-1',
+      title: 'Verify an external claim before responding',
+      objectiveKind: 'evidence_investigation',
+      status: 'in_progress',
+      prompt: 'Check the source before we answer the user.',
+      initiatedBy: 'operator',
+      ownerRole: 'workspace',
+      mainThreadId: 'thread-main-1',
+      riskLevel: 'medium',
+      budget: null,
+      requiresOperatorInput: false,
+      createdAt: '2026-03-30T00:00:00.000Z',
+      updatedAt: '2026-03-30T00:00:00.000Z',
+      threads: [
+        {
+          threadId: 'thread-main-1',
+          objectiveId: 'objective-1',
+          parentThreadId: null,
+          threadKind: 'main',
+          ownerRole: 'workspace',
+          title: 'Verify an external claim before responding · Main Thread',
+          status: 'open',
+          createdAt: '2026-03-30T00:00:00.000Z',
+          updatedAt: '2026-03-30T00:00:00.000Z',
+          closedAt: null
+        }
+      ],
+      participants: [],
+      proposals: [],
+      checkpoints: [],
+      subagents: []
+    })
+    const listAgentObjectives = vi.fn().mockResolvedValue([
+      {
+        objectiveId: 'objective-1',
+        title: 'Verify an external claim before responding',
+        objectiveKind: 'evidence_investigation',
+        status: 'in_progress',
+        prompt: 'Check the source before we answer the user.',
+        initiatedBy: 'operator',
+        ownerRole: 'workspace',
+        mainThreadId: 'thread-main-1',
+        riskLevel: 'medium',
+        budget: null,
+        requiresOperatorInput: false,
+        createdAt: '2026-03-30T00:00:00.000Z',
+        updatedAt: '2026-03-30T00:00:00.000Z'
+      }
+    ])
+    const getAgentObjective = vi.fn().mockResolvedValue({
+      objectiveId: 'objective-1',
+      title: 'Verify an external claim before responding',
+      objectiveKind: 'evidence_investigation',
+      status: 'in_progress',
+      prompt: 'Check the source before we answer the user.',
+      initiatedBy: 'operator',
+      ownerRole: 'workspace',
+      mainThreadId: 'thread-main-1',
+      riskLevel: 'medium',
+      budget: null,
+      requiresOperatorInput: false,
+      createdAt: '2026-03-30T00:00:00.000Z',
+      updatedAt: '2026-03-30T00:00:00.000Z',
+      threads: [
+        {
+          threadId: 'thread-main-1',
+          objectiveId: 'objective-1',
+          parentThreadId: null,
+          threadKind: 'main',
+          ownerRole: 'workspace',
+          title: 'Verify an external claim before responding · Main Thread',
+          status: 'open',
+          createdAt: '2026-03-30T00:00:00.000Z',
+          updatedAt: '2026-03-30T00:00:00.000Z',
+          closedAt: null
+        }
+      ],
+      participants: [],
+      proposals: [
+        {
+          proposalId: 'proposal-1',
+          objectiveId: 'objective-1',
+          threadId: 'thread-main-1',
+          proposedByParticipantId: 'workspace',
+          proposalKind: 'verify_external_claim',
+          payload: {
+            claim: 'The external source confirms the announcement date.'
+          },
+          ownerRole: 'workspace',
+          status: 'awaiting_operator',
+          requiredApprovals: ['workspace'],
+          allowVetoBy: ['governance'],
+          requiresOperatorConfirmation: true,
+          toolPolicyId: 'tool-policy-web-1',
+          budget: {
+            maxRounds: 2,
+            maxToolCalls: 3,
+            timeoutMs: 30_000
+          },
+          derivedFromMessageIds: [],
+          artifactRefs: [],
+          createdAt: '2026-03-30T00:00:00.000Z',
+          updatedAt: '2026-03-30T00:00:00.000Z',
+          committedAt: null
+        }
+      ],
+      checkpoints: [],
+      subagents: []
+    })
+    const getAgentThread = vi.fn().mockResolvedValue({
+      threadId: 'thread-main-1',
+      objectiveId: 'objective-1',
+      parentThreadId: null,
+      threadKind: 'main',
+      ownerRole: 'workspace',
+      title: 'Verify an external claim before responding · Main Thread',
+      status: 'open',
+      createdAt: '2026-03-30T00:00:00.000Z',
+      updatedAt: '2026-03-30T00:00:00.000Z',
+      closedAt: null,
+      participants: [],
+      messages: [
+        {
+          messageId: 'message-1',
+          objectiveId: 'objective-1',
+          threadId: 'thread-main-1',
+          fromParticipantId: 'workspace',
+          toParticipantId: null,
+          kind: 'goal',
+          body: 'Check the source before we answer the user.',
+          refs: [],
+          replyToMessageId: null,
+          round: 1,
+          confidence: null,
+          blocking: false,
+          createdAt: '2026-03-30T00:00:00.000Z'
+        }
+      ],
+      proposals: [],
+      votes: [],
+      checkpoints: [],
+      subagents: []
+    })
+    const respondToAgentProposal = vi.fn().mockResolvedValue({
+      proposalId: 'proposal-1',
+      objectiveId: 'objective-1',
+      threadId: 'thread-main-1',
+      proposedByParticipantId: 'workspace',
+      proposalKind: 'verify_external_claim',
+      payload: {
+        claim: 'The external source confirms the announcement date.'
+      },
+      ownerRole: 'workspace',
+      status: 'challenged',
+      requiredApprovals: ['workspace'],
+      allowVetoBy: ['governance'],
+      requiresOperatorConfirmation: true,
+      toolPolicyId: 'tool-policy-web-1',
+      budget: {
+        maxRounds: 2,
+        maxToolCalls: 3,
+        timeoutMs: 30_000
+      },
+      derivedFromMessageIds: [],
+      artifactRefs: [],
+      createdAt: '2026-03-30T00:00:00.000Z',
+      updatedAt: '2026-03-30T00:01:00.000Z',
+      committedAt: null
+    })
+    const confirmAgentProposal = vi.fn().mockResolvedValue({
+      proposalId: 'proposal-1',
+      objectiveId: 'objective-1',
+      threadId: 'thread-main-1',
+      proposedByParticipantId: 'workspace',
+      proposalKind: 'verify_external_claim',
+      payload: {
+        claim: 'The external source confirms the announcement date.'
+      },
+      ownerRole: 'workspace',
+      status: 'committed',
+      requiredApprovals: ['workspace'],
+      allowVetoBy: ['governance'],
+      requiresOperatorConfirmation: true,
+      toolPolicyId: 'tool-policy-web-1',
+      budget: {
+        maxRounds: 2,
+        maxToolCalls: 3,
+        timeoutMs: 30_000
+      },
+      derivedFromMessageIds: [],
+      artifactRefs: [],
+      createdAt: '2026-03-30T00:00:00.000Z',
+      updatedAt: '2026-03-30T00:02:00.000Z',
+      committedAt: '2026-03-30T00:02:00.000Z'
+    })
     const runAgentTask = vi.fn().mockResolvedValue({
       runId: 'run-1',
       status: 'completed',
@@ -270,6 +497,12 @@ describe('archiveApi agent runtime methods', () => {
 
     vi.stubGlobal('window', {
       archiveApi: {
+        createAgentObjective,
+        listAgentObjectives,
+        getAgentObjective,
+        getAgentThread,
+        respondToAgentProposal,
+        confirmAgentProposal,
         previewAgentTask,
         runAgentTask,
         listAgentRuns,
@@ -286,6 +519,32 @@ describe('archiveApi agent runtime methods', () => {
     })
 
     const archiveApi = getArchiveApi()
+    const createdObjective = await archiveApi.createAgentObjective({
+      title: 'Verify an external claim before responding',
+      objectiveKind: 'evidence_investigation',
+      prompt: 'Check the source before we answer the user.',
+      initiatedBy: 'operator'
+    })
+    const objectives = await archiveApi.listAgentObjectives({
+      ownerRole: 'workspace'
+    })
+    const objective = await archiveApi.getAgentObjective({
+      objectiveId: 'objective-1'
+    })
+    const thread = await archiveApi.getAgentThread({
+      threadId: 'thread-main-1'
+    })
+    const challengedProposal = await archiveApi.respondToAgentProposal({
+      proposalId: 'proposal-1',
+      responderRole: 'governance',
+      response: 'challenge',
+      comment: 'Need a bounded verification policy before this can proceed.'
+    })
+    const confirmedProposal = await archiveApi.confirmAgentProposal({
+      proposalId: 'proposal-1',
+      decision: 'confirm',
+      operatorNote: 'Confirmed after reviewing the evidence bundle.'
+    })
     const preview = await archiveApi.previewAgentTask({
       prompt: 'Approve review item rq-1',
       role: 'orchestrator'
@@ -316,6 +575,13 @@ describe('archiveApi agent runtime methods', () => {
       autonomyMode: 'suggest_safe_auto_run'
     })
 
+    expect(createdObjective.objectiveId).toBe('objective-1')
+    expect(createdObjective.mainThreadId).toBe('thread-main-1')
+    expect(objectives[0]?.objectiveId).toBe('objective-1')
+    expect(objective?.proposals[0]?.proposalId).toBe('proposal-1')
+    expect(thread?.messages[0]?.body).toContain('Check the source')
+    expect(challengedProposal?.status).toBe('challenged')
+    expect(confirmedProposal?.status).toBe('committed')
     expect(preview).toEqual({
       taskKind: 'review.apply_item_decision',
       targetRole: 'review',

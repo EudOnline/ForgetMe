@@ -18,6 +18,8 @@ import type {
   AgentRole,
   AgentSubagentRecord,
   AgentSubagentStatus,
+  AgentToolExecutionRecord,
+  AgentToolExecutionStatus,
   AgentThreadParticipantRecord,
   AgentThreadRecord,
   AgentThreadStatus,
@@ -134,6 +136,22 @@ type AgentCheckpointRow = {
   createdAt: string
 }
 
+type AgentToolExecutionRow = {
+  id: string
+  objectiveId: string
+  threadId: string
+  proposalId: string | null
+  requestedByParticipantId: string
+  toolName: string
+  toolPolicyId: string | null
+  status: AgentToolExecutionStatus
+  inputPayloadJson: string
+  outputPayloadJson: string | null
+  artifactRefsJson: string
+  createdAt: string
+  completedAt: string | null
+}
+
 type AgentSubagentRow = {
   id: string
   objectiveId: string
@@ -247,6 +265,30 @@ export type CreateCheckpointInput = {
   createdAt?: string
 }
 
+export type CreateToolExecutionInput = {
+  toolExecutionId?: string
+  objectiveId: string
+  threadId: string
+  proposalId?: string | null
+  requestedByParticipantId: string
+  toolName: string
+  toolPolicyId?: string | null
+  status?: AgentToolExecutionStatus
+  inputPayload: Record<string, unknown>
+  outputPayload?: Record<string, unknown> | null
+  artifactRefs?: AgentArtifactRef[]
+  createdAt?: string
+  completedAt?: string | null
+}
+
+export type UpdateToolExecutionInput = {
+  toolExecutionId: string
+  status: AgentToolExecutionStatus
+  outputPayload?: Record<string, unknown> | null
+  artifactRefs?: AgentArtifactRef[]
+  completedAt?: string | null
+}
+
 export type CreateSubagentInput = {
   subagentId?: string
   objectiveId: string
@@ -261,6 +303,20 @@ export type CreateSubagentInput = {
   status?: AgentSubagentStatus
   summary?: string | null
   createdAt?: string
+  completedAt?: string | null
+}
+
+export type UpdateThreadStatusInput = {
+  threadId: string
+  status: AgentThreadStatus
+  updatedAt?: string
+  closedAt?: string | null
+}
+
+export type UpdateSubagentInput = {
+  subagentId: string
+  status: AgentSubagentStatus
+  summary?: string | null
   completedAt?: string | null
 }
 
@@ -440,6 +496,24 @@ function mapCheckpointRow(row: AgentCheckpointRow): AgentCheckpointRecord {
     relatedProposalId: row.relatedProposalId,
     artifactRefs: parseJsonArray<AgentArtifactRef>(row.artifactRefsJson),
     createdAt: row.createdAt
+  }
+}
+
+function mapToolExecutionRow(row: AgentToolExecutionRow): AgentToolExecutionRecord {
+  return {
+    toolExecutionId: row.id,
+    objectiveId: row.objectiveId,
+    threadId: row.threadId,
+    proposalId: row.proposalId,
+    requestedByParticipantId: row.requestedByParticipantId,
+    toolName: row.toolName,
+    toolPolicyId: row.toolPolicyId,
+    status: row.status,
+    inputPayload: parseJsonObject<Record<string, unknown>>(row.inputPayloadJson) ?? {},
+    outputPayload: parseJsonObject<Record<string, unknown>>(row.outputPayloadJson),
+    artifactRefs: parseJsonArray<AgentArtifactRef>(row.artifactRefsJson),
+    createdAt: row.createdAt,
+    completedAt: row.completedAt
   }
 }
 
@@ -903,6 +977,29 @@ export function createSubthread(db: ArchiveDatabase, input: CreateThreadInput & 
   return mapThreadRow(row)
 }
 
+export function updateThreadStatus(db: ArchiveDatabase, input: UpdateThreadStatusInput): AgentThreadRecord | null {
+  const updatedAt = input.updatedAt ?? nowIso()
+  const closedAt = input.closedAt === undefined
+    ? (input.status === 'completed' || input.status === 'blocked' || input.status === 'cancelled'
+        ? updatedAt
+        : null)
+    : input.closedAt
+
+  db.prepare(
+    `update agent_threads
+    set status = ?, updated_at = ?, closed_at = ?
+    where id = ?`
+  ).run(
+    input.status,
+    updatedAt,
+    closedAt,
+    input.threadId
+  )
+
+  const row = getThreadRow(db, input.threadId)
+  return row ? mapThreadRow(row) : null
+}
+
 export function addThreadParticipants(db: ArchiveDatabase, input: AddThreadParticipantsInput): AgentThreadParticipantRecord[] {
   return inTransaction(db, () => {
     const insert = db.prepare(
@@ -1187,6 +1284,113 @@ export function createCheckpoint(db: ArchiveDatabase, input: CreateCheckpointInp
   return mapCheckpointRow(row)
 }
 
+export function createToolExecution(db: ArchiveDatabase, input: CreateToolExecutionInput): AgentToolExecutionRecord {
+  const toolExecutionId = input.toolExecutionId ?? crypto.randomUUID()
+  const createdAt = input.createdAt ?? nowIso()
+  const completedAt = input.completedAt ?? null
+
+  db.prepare(
+    `insert into agent_tool_executions (
+      id,
+      objective_id,
+      thread_id,
+      proposal_id,
+      requested_by_participant_id,
+      tool_name,
+      tool_policy_id,
+      status,
+      input_payload_json,
+      output_payload_json,
+      artifact_refs_json,
+      created_at,
+      completed_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    toolExecutionId,
+    input.objectiveId,
+    input.threadId,
+    input.proposalId ?? null,
+    input.requestedByParticipantId,
+    input.toolName,
+    input.toolPolicyId ?? null,
+    input.status ?? 'requested',
+    serializeJson(input.inputPayload),
+    input.outputPayload ? serializeJson(input.outputPayload) : null,
+    serializeJson(input.artifactRefs ?? []),
+    createdAt,
+    completedAt
+  )
+
+  const row = db.prepare(
+    `select
+      id,
+      objective_id as objectiveId,
+      thread_id as threadId,
+      proposal_id as proposalId,
+      requested_by_participant_id as requestedByParticipantId,
+      tool_name as toolName,
+      tool_policy_id as toolPolicyId,
+      status,
+      input_payload_json as inputPayloadJson,
+      output_payload_json as outputPayloadJson,
+      artifact_refs_json as artifactRefsJson,
+      created_at as createdAt,
+      completed_at as completedAt
+    from agent_tool_executions
+    where id = ?`
+  ).get(toolExecutionId) as AgentToolExecutionRow | undefined
+
+  if (!row) {
+    throw new Error('failed to create tool execution')
+  }
+
+  return mapToolExecutionRow(row)
+}
+
+export function updateToolExecution(db: ArchiveDatabase, input: UpdateToolExecutionInput): AgentToolExecutionRecord | null {
+  const completedAt = input.completedAt === undefined
+    ? (input.status === 'completed' || input.status === 'failed' || input.status === 'blocked'
+        ? nowIso()
+        : null)
+    : input.completedAt
+
+  db.prepare(
+    `update agent_tool_executions
+    set status = ?,
+        output_payload_json = ?,
+        artifact_refs_json = ?,
+        completed_at = ?
+    where id = ?`
+  ).run(
+    input.status,
+    input.outputPayload ? serializeJson(input.outputPayload) : null,
+    serializeJson(input.artifactRefs ?? []),
+    completedAt,
+    input.toolExecutionId
+  )
+
+  const row = db.prepare(
+    `select
+      id,
+      objective_id as objectiveId,
+      thread_id as threadId,
+      proposal_id as proposalId,
+      requested_by_participant_id as requestedByParticipantId,
+      tool_name as toolName,
+      tool_policy_id as toolPolicyId,
+      status,
+      input_payload_json as inputPayloadJson,
+      output_payload_json as outputPayloadJson,
+      artifact_refs_json as artifactRefsJson,
+      created_at as createdAt,
+      completed_at as completedAt
+    from agent_tool_executions
+    where id = ?`
+  ).get(input.toolExecutionId) as AgentToolExecutionRow | undefined
+
+  return row ? mapToolExecutionRow(row) : null
+}
+
 export function createSubagent(db: ArchiveDatabase, input: CreateSubagentInput): AgentSubagentRecord {
   const subagentId = input.subagentId ?? crypto.randomUUID()
   const createdAt = input.createdAt ?? nowIso()
@@ -1250,6 +1454,47 @@ export function createSubagent(db: ArchiveDatabase, input: CreateSubagentInput):
   }
 
   return mapSubagentRow(row)
+}
+
+export function updateSubagent(db: ArchiveDatabase, input: UpdateSubagentInput): AgentSubagentRecord | null {
+  const completedAt = input.completedAt === undefined
+    ? (input.status === 'completed' || input.status === 'failed' || input.status === 'cancelled'
+        ? nowIso()
+        : null)
+    : input.completedAt
+
+  db.prepare(
+    `update agent_subagents
+    set status = ?, summary = ?, completed_at = ?
+    where id = ?`
+  ).run(
+    input.status,
+    input.summary ?? null,
+    completedAt,
+    input.subagentId
+  )
+
+  const row = db.prepare(
+    `select
+      id,
+      objective_id as objectiveId,
+      thread_id as threadId,
+      parent_thread_id as parentThreadId,
+      parent_agent_role as parentAgentRole,
+      specialization,
+      skill_pack_ids_json as skillPackIdsJson,
+      tool_policy_id as toolPolicyId,
+      budget_json as budgetJson,
+      expected_output_schema as expectedOutputSchema,
+      status,
+      summary,
+      created_at as createdAt,
+      completed_at as completedAt
+    from agent_subagents
+    where id = ?`
+  ).get(input.subagentId) as AgentSubagentRow | undefined
+
+  return row ? mapSubagentRow(row) : null
 }
 
 export function listObjectives(db: ArchiveDatabase, input?: ListAgentObjectivesInput): AgentObjectiveRecord[] {

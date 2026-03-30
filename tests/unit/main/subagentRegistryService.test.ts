@@ -26,4 +26,30 @@ describe('subagentRegistryService', () => {
     ])
     expect(subagent.outputSchema).toBe('webVerificationResultSchema')
   })
+
+  it('builds a spawn_subagent spec from specialization defaults instead of requiring callers to repeat template fields', () => {
+    const registry = createSubagentRegistryService()
+
+    const spec = registry.buildSpawnSubagentSpec({
+      specialization: 'evidence-checker',
+      payload: {
+        fileId: 'file-1'
+      }
+    })
+
+    expect(spec).toEqual({
+      payload: {
+        specialization: 'evidence-checker',
+        skillPackIds: ['evidence-checker'],
+        expectedOutputSchema: 'localEvidenceCheckSchema',
+        fileId: 'file-1'
+      },
+      toolPolicyId: 'local-evidence-policy',
+      budget: {
+        maxRounds: 2,
+        maxToolCalls: 2,
+        timeoutMs: 30_000
+      }
+    })
+  })
 })
