@@ -6,6 +6,7 @@ import type {
   AgentRole,
   AgentRunDetail,
   AgentRunRecord,
+  AgentSuggestionRecord,
   AgentTaskKind,
   ImportPreflightResult,
   MemoryWorkspaceScope,
@@ -21,9 +22,16 @@ type AgentConsolePageProps = {
   onOpenMemoryWorkspace?: (scope: MemoryWorkspaceScope) => void
 }
 
-type PendingSubmission = {
-  input: RunAgentTaskInput
-}
+type PendingSubmission =
+  | {
+    kind: 'task'
+    input: RunAgentTaskInput
+  }
+  | {
+    kind: 'suggestion'
+    suggestionId: string
+    input: RunAgentTaskInput
+  }
 
 const destructiveTaskKinds = new Set<AgentTaskKind>([
   'review.apply_safe_group',
@@ -118,6 +126,21 @@ function summarizePrompt(prompt: string) {
   return `${trimmed.slice(0, 69)}...`
 }
 
+function requiresConfirmation(input: RunAgentTaskInput) {
+  return 'taskKind' in input && Boolean(input.taskKind && destructiveTaskKinds.has(input.taskKind))
+}
+
+function proactiveTriggerLabelKey(triggerKind: AgentSuggestionRecord['triggerKind']) {
+  switch (triggerKind) {
+    case 'governance.failed_runs_detected':
+      return 'agentConsole.proactiveTrigger.governance.failed_runs_detected'
+    case 'review.safe_group_available':
+      return 'agentConsole.proactiveTrigger.review.safe_group_available'
+    case 'ingestion.failed_enrichment_job':
+      return 'agentConsole.proactiveTrigger.ingestion.failed_enrichment_job'
+  }
+}
+
 function inferDisplayRoles(run: Pick<AgentRunRecord, 'role' | 'assignedRoles'> | AgentRunDetail | null) {
   if (!run) {
     return []
@@ -170,6 +193,11 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
   const [executionPreview, setExecutionPreview] = useState<AgentExecutionPreview | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [isPreviewLoading, setIsPreviewLoading] = useState(false)
+  const [suggestions, setSuggestions] = useState<AgentSuggestionRecord[]>([])
+  const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false)
+  const [suggestionsError, setSuggestionsError] = useState<string | null>(null)
+  const [suggestionsStatusMessage, setSuggestionsStatusMessage] = useState<string | null>(null)
+  const [activeSuggestionId, setActiveSuggestionId] = useState<string | null>(null)
 
   const refreshRuns = async (preferredRunId?: string) => {
     const nextRuns = await archiveApi.listAgentRuns()
@@ -177,8 +205,33 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
     setSelectedRunId((current) => preferredRunId ?? current ?? nextRuns[0]?.runId ?? null)
   }
 
+  const loadSuggestions = async () => {
+    setIsSuggestionsLoading(true)
+    setSuggestionsError(null)
+
+    try {
+      const nextSuggestions = await archiveApi.listAgentSuggestions({
+        status: 'suggested'
+      })
+      setSuggestions(nextSuggestions)
+      return nextSuggestions
+    } catch (error) {
+      setSuggestions([])
+      setSuggestionsError(t('agentConsole.proactiveInboxLoadFailed', {
+        message: asErrorMessage(error)
+      }))
+      return []
+    } finally {
+      setIsSuggestionsLoading(false)
+    }
+  }
+
   useEffect(() => {
     void refreshRuns()
+  }, [archiveApi])
+
+  useEffect(() => {
+    void loadSuggestions()
   }, [archiveApi])
 
   useEffect(() => {
@@ -302,6 +355,109 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
     }
   }
 
+  const executeSuggestion = async (suggestionId: string, confirmationTokenValue?: string) => {
+    setIsSubmitting(true)
+    setActiveSuggestionId(suggestionId)
+    setSuggestionsError(null)
+    setSuggestionsStatusMessage(null)
+
+    try {
+      const result = await archiveApi.runAgentSuggestion(
+        confirmationTokenValue
+          ? { suggestionId, confirmationToken: confirmationTokenValue }
+          : { suggestionId }
+      )
+
+      await loadSuggestions()
+
+      if (!result) {
+        setSuggestionsError(t('agentConsole.proactiveInboxMissingSuggestion'))
+        return
+      }
+
+      await refreshRuns(result.runId)
+      setPendingSubmission(null)
+      setConfirmationToken('')
+
+      if (result.status === 'completed') {
+        setSuggestionsStatusMessage(t('agentConsole.proactiveInboxRunCompleted'))
+      } else {
+        setSuggestionsError(t('agentConsole.proactiveInboxRunFailed', {
+          message: result.latestAssistantResponse ?? result.status
+        }))
+      }
+    } catch (error) {
+      setSuggestionsError(t('agentConsole.proactiveInboxRunFailed', {
+        message: asErrorMessage(error)
+      }))
+    } finally {
+      setIsSubmitting(false)
+      setActiveSuggestionId(null)
+    }
+  }
+
+  const handleRefreshSuggestions = async () => {
+    setSuggestionsError(null)
+    setSuggestionsStatusMessage(null)
+    setIsSuggestionsLoading(true)
+
+    try {
+      await archiveApi.refreshAgentSuggestions()
+      await loadSuggestions()
+      setSuggestionsStatusMessage(t('agentConsole.proactiveInboxRefreshed'))
+    } catch (error) {
+      setSuggestionsError(t('agentConsole.proactiveInboxRefreshFailed', {
+        message: asErrorMessage(error)
+      }))
+    } finally {
+      setIsSuggestionsLoading(false)
+    }
+  }
+
+  const handleDismissSuggestion = async (suggestionId: string) => {
+    setIsSubmitting(true)
+    setActiveSuggestionId(suggestionId)
+    setSuggestionsError(null)
+    setSuggestionsStatusMessage(null)
+
+    try {
+      await archiveApi.dismissAgentSuggestion({ suggestionId })
+      await loadSuggestions()
+      setPendingSubmission((current) => {
+        if (current?.kind === 'suggestion' && current.suggestionId === suggestionId) {
+          return null
+        }
+
+        return current
+      })
+      setConfirmationToken('')
+      setSuggestionsStatusMessage(t('agentConsole.proactiveInboxDismissed'))
+    } catch (error) {
+      setSuggestionsError(t('agentConsole.proactiveInboxDismissFailed', {
+        message: asErrorMessage(error)
+      }))
+    } finally {
+      setIsSubmitting(false)
+      setActiveSuggestionId(null)
+    }
+  }
+
+  const handleRunSuggestion = async (suggestion: AgentSuggestionRecord) => {
+    if (requiresConfirmation(suggestion.taskInput)) {
+      setPendingSubmission({
+        kind: 'suggestion',
+        suggestionId: suggestion.suggestionId,
+        input: suggestion.taskInput
+      })
+      setConfirmationToken('')
+      setSuggestionsError(null)
+      setSuggestionsStatusMessage(null)
+      return
+    }
+
+    await executeSuggestion(suggestion.suggestionId)
+  }
+
   const handleSubmit = async () => {
     const nextInput = buildTaskInput(prompt, role)
     if (nextInput.role === 'ingestion' && nextInput.taskKind === 'ingestion.import_batch') {
@@ -348,8 +504,11 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
       }
     }
 
-    if ('taskKind' in nextInput && nextInput.taskKind && destructiveTaskKinds.has(nextInput.taskKind) && !('confirmationToken' in nextInput)) {
-      setPendingSubmission({ input: nextInput })
+    if (requiresConfirmation(nextInput) && !('confirmationToken' in nextInput)) {
+      setPendingSubmission({
+        kind: 'task',
+        input: nextInput
+      })
       setErrorMessage(null)
       return
     }
@@ -359,6 +518,11 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
 
   const handleConfirmRun = async () => {
     if (!pendingSubmission || confirmationToken.trim().length === 0) {
+      return
+    }
+
+    if (pendingSubmission.kind === 'suggestion') {
+      await executeSuggestion(pendingSubmission.suggestionId, confirmationToken.trim())
       return
     }
 
@@ -416,6 +580,59 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
         </aside>
 
         <div className="fmAgentMain">
+          <section className="fmAgentCard" aria-label={t('agentConsole.proactiveInboxTitle')}>
+            <div className="fmAgentActionRow">
+              <h2>{t('agentConsole.proactiveInboxTitle')}</h2>
+              <button
+                type="button"
+                onClick={() => void handleRefreshSuggestions()}
+                disabled={isSubmitting || isSuggestionsLoading}
+              >
+                {t('agentConsole.proactiveInboxRefresh')}
+              </button>
+            </div>
+
+            {suggestionsStatusMessage ? <div role="status">{suggestionsStatusMessage}</div> : null}
+            {suggestionsError ? <div role="alert">{suggestionsError}</div> : null}
+
+            {isSuggestionsLoading ? (
+              <p>{t('common.loading')}</p>
+            ) : suggestions.length === 0 ? (
+              <p>{t('agentConsole.proactiveInboxEmpty')}</p>
+            ) : (
+              <ul className="fmAgentOperationalList">
+                {suggestions.map((suggestion) => {
+                  const isActive = activeSuggestionId === suggestion.suggestionId
+
+                  return (
+                    <li key={suggestion.suggestionId}>
+                      <strong>{t(proactiveTriggerLabelKey(suggestion.triggerKind))}</strong>
+                      <p>{suggestion.taskInput.prompt}</p>
+                      <p>{t('agentConsole.targetRoleLine', { role: suggestion.role })}</p>
+                      <p>{t('agentConsole.previewTaskKindLine', { taskKind: suggestion.taskKind })}</p>
+                      <div className="fmAgentActionRow">
+                        <button
+                          type="button"
+                          onClick={() => void handleRunSuggestion(suggestion)}
+                          disabled={isSubmitting || isSuggestionsLoading || isActive}
+                        >
+                          {t('agentConsole.proactiveInboxRun')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDismissSuggestion(suggestion.suggestionId)}
+                          disabled={isSubmitting || isSuggestionsLoading || isActive}
+                        >
+                          {t('agentConsole.proactiveInboxDismiss')}
+                        </button>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </section>
+
           <section className="fmAgentCard">
             <div className="fmAgentComposer">
               <label className="fmAgentField">
@@ -452,6 +669,9 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
             {pendingSubmission ? (
               <div className="fmAgentConfirm" role="status">
                 <p>{t('agentConsole.confirmationRequired')}</p>
+                {pendingSubmission.kind === 'suggestion' ? (
+                  <p>{summarizePrompt(pendingSubmission.input.prompt)}</p>
+                ) : null}
                 <label className="fmAgentField">
                   <span>{t('agentConsole.confirmationTokenLabel')}</span>
                   <input

@@ -58,6 +58,50 @@ function buildExecutionPreview(overrides?: Partial<Record<string, unknown>>) {
   }
 }
 
+function buildSuggestion(overrides?: Partial<Record<string, unknown>>) {
+  return {
+    suggestionId: 'suggestion-1',
+    triggerKind: 'governance.failed_runs_detected',
+    status: 'suggested',
+    role: 'governance',
+    taskKind: 'governance.summarize_failures',
+    taskInput: {
+      role: 'governance',
+      taskKind: 'governance.summarize_failures',
+      prompt: 'Summarize failed agent runs from the proactive monitor.'
+    },
+    dedupeKey: 'governance.failed-runs::latest',
+    sourceRunId: 'run-failed-1',
+    executedRunId: null,
+    createdAt: '2026-03-30T00:00:00.000Z',
+    updatedAt: '2026-03-30T00:00:00.000Z',
+    lastObservedAt: '2026-03-30T00:00:00.000Z',
+    ...overrides
+  }
+}
+
+function buildArchiveApi(overrides: Record<string, unknown> = {}) {
+  return {
+    listAgentRuns: vi.fn().mockResolvedValue([]),
+    getAgentRun: vi.fn().mockResolvedValue(null),
+    previewAgentTask: vi.fn().mockResolvedValue(buildExecutionPreview()),
+    runAgentTask: vi.fn().mockResolvedValue({
+      runId: '',
+      status: 'queued',
+      targetRole: null,
+      assignedRoles: [],
+      latestAssistantResponse: null
+    }),
+    listAgentMemories: vi.fn().mockResolvedValue([]),
+    listAgentPolicyVersions: vi.fn().mockResolvedValue([]),
+    listAgentSuggestions: vi.fn().mockResolvedValue([]),
+    refreshAgentSuggestions: vi.fn().mockResolvedValue([]),
+    dismissAgentSuggestion: vi.fn().mockResolvedValue(null),
+    runAgentSuggestion: vi.fn().mockResolvedValue(null),
+    ...overrides
+  }
+}
+
 afterEach(() => {
   Reflect.deleteProperty(window, 'archiveApi')
   vi.unstubAllGlobals()
@@ -67,18 +111,8 @@ describe('AgentConsolePage', () => {
   it('appears in navigation and opens from the app shell', async () => {
     Object.assign(window, {
       archiveApi: {
-        listImportBatches: vi.fn().mockResolvedValue([]),
-        listAgentRuns: vi.fn().mockResolvedValue([]),
-        getAgentRun: vi.fn().mockResolvedValue(null),
-        listAgentMemories: vi.fn().mockResolvedValue([]),
-        listAgentPolicyVersions: vi.fn().mockResolvedValue([]),
-        runAgentTask: vi.fn().mockResolvedValue({
-          runId: '',
-          status: 'queued',
-          targetRole: null,
-          assignedRoles: [],
-          latestAssistantResponse: null
-        })
+        ...buildArchiveApi(),
+        listImportBatches: vi.fn().mockResolvedValue([])
       }
     })
 
@@ -160,14 +194,14 @@ describe('AgentConsolePage', () => {
     ])
 
     Object.assign(window, {
-      archiveApi: {
+      archiveApi: buildArchiveApi({
         listAgentRuns,
         getAgentRun,
         previewAgentTask,
         runAgentTask,
         listAgentMemories,
         listAgentPolicyVersions
-      }
+      })
     })
 
     render(<AgentConsolePage />)
@@ -247,14 +281,12 @@ describe('AgentConsolePage', () => {
     }))
 
     Object.assign(window, {
-      archiveApi: {
+      archiveApi: buildArchiveApi({
         listAgentRuns,
         getAgentRun,
         previewAgentTask,
-        runAgentTask,
-        listAgentMemories: vi.fn().mockResolvedValue([]),
-        listAgentPolicyVersions: vi.fn().mockResolvedValue([])
-      }
+        runAgentTask
+      })
     })
 
     render(<AgentConsolePage />)
@@ -298,14 +330,10 @@ describe('AgentConsolePage', () => {
     }))
 
     Object.assign(window, {
-      archiveApi: {
-        listAgentRuns: vi.fn().mockResolvedValue([]),
-        getAgentRun: vi.fn().mockResolvedValue(null),
+      archiveApi: buildArchiveApi({
         previewAgentTask,
-        runAgentTask: vi.fn(),
-        listAgentMemories: vi.fn().mockResolvedValue([]),
-        listAgentPolicyVersions: vi.fn().mockResolvedValue([])
-      }
+        runAgentTask: vi.fn()
+      })
     })
 
     render(<AgentConsolePage />)
@@ -326,6 +354,206 @@ describe('AgentConsolePage', () => {
       prompt: 'Approve safe group group-ready',
       role: 'review',
       taskKind: 'review.apply_safe_group'
+    })
+  })
+
+  it('renders a proactive inbox and lets operators refresh, run, and dismiss suggestions', async () => {
+    const dismissableSuggestion = buildSuggestion({
+      suggestionId: 'suggestion-dismiss',
+      triggerKind: 'ingestion.failed_enrichment_job',
+      role: 'ingestion',
+      taskKind: 'ingestion.rerun_enrichment',
+      taskInput: {
+        role: 'ingestion',
+        taskKind: 'ingestion.rerun_enrichment',
+        prompt: 'Rerun failed enrichment job job-1 for file source.pdf.'
+      },
+      dedupeKey: 'ingestion.failed-enrichment::job-1',
+      sourceRunId: null
+    })
+    const runnableSuggestion = buildSuggestion({
+      suggestionId: 'suggestion-run',
+      taskInput: {
+        role: 'governance',
+        taskKind: 'governance.summarize_failures',
+        prompt: 'Summarize failed agent runs from the proactive monitor.'
+      }
+    })
+    const completedRun = buildRunRecord({
+      runId: 'run-suggestion-1',
+      role: 'governance',
+      taskKind: 'governance.summarize_failures',
+      targetRole: 'governance',
+      assignedRoles: ['governance'],
+      latestAssistantResponse: '1 failed runs need review.',
+      prompt: 'Summarize failed agent runs from the proactive monitor.'
+    })
+    const listAgentSuggestions = vi.fn()
+      .mockResolvedValueOnce([dismissableSuggestion])
+      .mockResolvedValueOnce([runnableSuggestion, dismissableSuggestion])
+      .mockResolvedValueOnce([dismissableSuggestion])
+      .mockResolvedValueOnce([])
+    const refreshAgentSuggestions = vi.fn().mockResolvedValue([runnableSuggestion, dismissableSuggestion])
+    const runAgentSuggestion = vi.fn().mockResolvedValue({
+      runId: 'run-suggestion-1',
+      status: 'completed',
+      targetRole: 'governance',
+      assignedRoles: ['governance'],
+      latestAssistantResponse: '1 failed runs need review.'
+    })
+    const dismissAgentSuggestion = vi.fn().mockResolvedValue({
+      ...dismissableSuggestion,
+      status: 'dismissed'
+    })
+    const listAgentRuns = vi.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([completedRun])
+    const getAgentRun = vi.fn().mockResolvedValue(buildRunDetail({
+      runId: 'run-suggestion-1',
+      role: 'governance',
+      taskKind: 'governance.summarize_failures',
+      targetRole: 'governance',
+      assignedRoles: ['governance'],
+      latestAssistantResponse: '1 failed runs need review.',
+      prompt: 'Summarize failed agent runs from the proactive monitor.',
+      messages: [
+        {
+          messageId: 'message-governance-1',
+          runId: 'run-suggestion-1',
+          ordinal: 1,
+          sender: 'agent',
+          content: '1 failed runs need review.',
+          createdAt: '2026-03-30T00:00:01.000Z'
+        }
+      ]
+    }))
+
+    Object.assign(window, {
+      archiveApi: buildArchiveApi({
+        listAgentRuns,
+        getAgentRun,
+        listAgentSuggestions,
+        refreshAgentSuggestions,
+        dismissAgentSuggestion,
+        runAgentSuggestion
+      })
+    })
+
+    render(<AgentConsolePage />)
+
+    expect(await screen.findByText('Proactive inbox')).toBeInTheDocument()
+    expect(screen.getByText('Rerun failed enrichment job job-1 for file source.pdf.')).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh suggestions' }))
+    })
+
+    await waitFor(() => {
+      expect(refreshAgentSuggestions).toHaveBeenCalledTimes(1)
+    })
+    expect(await screen.findByText('Summarize failed agent runs from the proactive monitor.')).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole('button', { name: 'Run suggestion' })[0]!)
+    })
+
+    await waitFor(() => {
+      expect(runAgentSuggestion).toHaveBeenCalledWith({
+        suggestionId: 'suggestion-run'
+      })
+    })
+    expect((await screen.findAllByText('1 failed runs need review.')).length).toBeGreaterThan(0)
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Dismiss suggestion' }))
+    })
+
+    await waitFor(() => {
+      expect(dismissAgentSuggestion).toHaveBeenCalledWith({
+        suggestionId: 'suggestion-dismiss'
+      })
+    })
+    expect(await screen.findByText('No proactive suggestions right now.')).toBeInTheDocument()
+  })
+
+  it('routes confirmation-gated suggestions through the existing confirmation affordance', async () => {
+    const gatedSuggestion = buildSuggestion({
+      suggestionId: 'suggestion-confirm',
+      triggerKind: 'review.safe_group_available',
+      role: 'review',
+      taskKind: 'review.apply_safe_group',
+      taskInput: {
+        role: 'review',
+        taskKind: 'review.apply_safe_group',
+        prompt: 'Approve safe group group-ready'
+      },
+      dedupeKey: 'review.safe-group::group-ready'
+    })
+    const runAgentSuggestion = vi.fn().mockResolvedValue({
+      runId: 'run-confirmed-suggestion',
+      status: 'completed',
+      targetRole: 'review',
+      assignedRoles: ['review'],
+      latestAssistantResponse: 'Applied safe group group-ready with 2 items.'
+    })
+    const listAgentRuns = vi.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        buildRunRecord({
+          runId: 'run-confirmed-suggestion',
+          role: 'review',
+          taskKind: 'review.apply_safe_group',
+          targetRole: 'review',
+          assignedRoles: ['review'],
+          latestAssistantResponse: 'Applied safe group group-ready with 2 items.',
+          prompt: 'Approve safe group group-ready'
+        })
+      ])
+    const getAgentRun = vi.fn().mockResolvedValue(buildRunDetail({
+      runId: 'run-confirmed-suggestion',
+      role: 'review',
+      taskKind: 'review.apply_safe_group',
+      targetRole: 'review',
+      assignedRoles: ['review'],
+      latestAssistantResponse: 'Applied safe group group-ready with 2 items.',
+      prompt: 'Approve safe group group-ready'
+    }))
+    const listAgentSuggestions = vi.fn()
+      .mockResolvedValueOnce([gatedSuggestion])
+      .mockResolvedValueOnce([])
+
+    Object.assign(window, {
+      archiveApi: buildArchiveApi({
+        listAgentRuns,
+        getAgentRun,
+        listAgentSuggestions,
+        runAgentSuggestion
+      })
+    })
+
+    render(<AgentConsolePage />)
+
+    expect(await screen.findByText('Approve safe group group-ready')).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Run suggestion' }))
+    })
+
+    expect(runAgentSuggestion).not.toHaveBeenCalled()
+    expect(await screen.findByText('Confirmation token required before applying this review action.')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Confirmation token'), {
+      target: { value: 'token-1' }
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Run confirmed action' }))
+    })
+
+    await waitFor(() => {
+      expect(runAgentSuggestion).toHaveBeenCalledWith({
+        suggestionId: 'suggestion-confirm',
+        confirmationToken: 'token-1'
+      })
     })
   })
 
@@ -392,17 +620,15 @@ describe('AgentConsolePage', () => {
     const getAgentRun = vi.fn().mockResolvedValue(null)
 
     Object.assign(window, {
-      archiveApi: {
+      archiveApi: buildArchiveApi({
         selectImportFiles,
         preflightImportBatch,
         createImportBatch,
         listAgentRuns,
         getAgentRun,
         previewAgentTask,
-        runAgentTask,
-        listAgentMemories: vi.fn().mockResolvedValue([]),
-        listAgentPolicyVersions: vi.fn().mockResolvedValue([])
-      }
+        runAgentTask
+      })
     })
 
     render(<AgentConsolePage />)
