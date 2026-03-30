@@ -85,7 +85,9 @@ export function createGovernanceAgentService(
               },
               {
                 sender: 'agent',
-                content: `${failedRuns.length} failed runs need review.`
+                content: failedRuns.length > 0
+                  ? `${failedRuns.length} failed runs need review. Suggested follow-up: Propose policy update: Review repeated runtime failures and tighten policy safeguards.`
+                  : '0 failed runs need review.'
               }
             ]
           }

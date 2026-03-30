@@ -9,7 +9,7 @@ import type { ArchiveDatabase } from './db'
 import { listEnrichmentJobs } from './enrichmentReadService'
 import { listReviewConflictGroups } from './reviewWorkbenchReadService'
 
-type AgentProactiveSuggestionSeed = {
+export type AgentSuggestionSeed = {
   triggerKind: AgentTriggerKind
   role: AgentRole
   taskKind: AgentTaskKind
@@ -21,8 +21,8 @@ type AgentProactiveSuggestionSeed = {
 const GOVERNANCE_FAILURE_SUMMARY_PROMPT = 'Summarize failed agent runs from the proactive monitor.'
 const REVIEW_SAFE_GROUP_PROMPT = 'Check for a safe review group that is ready for approval.'
 
-export function evaluateAgentProactiveSuggestions(db: ArchiveDatabase): AgentProactiveSuggestionSeed[] {
-  const suggestions: AgentProactiveSuggestionSeed[] = []
+export function evaluateAgentProactiveSuggestions(db: ArchiveDatabase): AgentSuggestionSeed[] {
+  const suggestions: AgentSuggestionSeed[] = []
 
   const failedRuns = listAgentRuns(db, { status: 'failed' })
   if (failedRuns.length > 0) {

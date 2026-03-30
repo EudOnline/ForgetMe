@@ -22,6 +22,7 @@ function createRunRecord(): AgentRunRecord {
     assignedRoles: ['governance'],
     latestAssistantResponse: null,
     status: 'running',
+    executionOrigin: 'operator_manual',
     prompt: 'Summarize failures',
     confirmationToken: null,
     policyVersion: null,
@@ -113,7 +114,9 @@ describe('governance agent service', () => {
     })
 
     expect(listRuns).toHaveBeenCalledWith({ status: 'failed' })
-    expect(result.messages?.at(-1)?.content).toContain('2 failed runs')
+    expect(result.messages?.at(-1)?.content).toBe(
+      '2 failed runs need review. Suggested follow-up: Propose policy update: Review repeated runtime failures and tighten policy safeguards.'
+    )
 
     db.close()
   })

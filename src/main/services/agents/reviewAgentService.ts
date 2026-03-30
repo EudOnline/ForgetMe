@@ -110,7 +110,7 @@ export function createReviewAgentService(
               {
                 sender: 'agent',
                 content: safeGroup
-                  ? `Safe review group ready for approval: ${safeGroup.groupKey} (${safeGroup.pendingCount} items).`
+                  ? `Safe review group ready for approval: ${safeGroup.groupKey} (${safeGroup.pendingCount} items). Suggested follow-up: Apply safe group ${safeGroup.groupKey}.`
                   : 'No safe review group is currently ready for batch approval.'
               }
             ]

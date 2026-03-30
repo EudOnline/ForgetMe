@@ -32,6 +32,7 @@ import type {
   DecisionJournalSearchResult,
   DecisionJournalEntry,
   GetAgentRunInput,
+  GetAgentRuntimeSettingsInput,
   ListApprovedPersonaDraftHostedShareLinksInput,
   ListAgentMemoriesInput,
   ListAgentSuggestionsInput,
@@ -52,12 +53,14 @@ import type {
   RunAgentTaskInput,
   RunAgentTaskResult,
   RunAgentSuggestionInput,
+  AgentRuntimeSettingsRecord,
   ReviewConflictGroupSummary,
   ReviewInboxPersonSummary,
   ReviewQueueItem,
   ReviewWorkbenchDetail,
   ReviewWorkbenchListItem,
-  StructuredFieldCandidate
+  StructuredFieldCandidate,
+  UpdateAgentRuntimeSettingsInput
 } from '../shared/archiveContracts'
 
 declare global {
@@ -151,6 +154,16 @@ const fallbackApi: ArchiveApi = {
   refreshAgentSuggestions: async () => [] as AgentSuggestionRecord[],
   dismissAgentSuggestion: async (_input: DismissAgentSuggestionInput) => null as AgentSuggestionRecord | null,
   runAgentSuggestion: async (_input: RunAgentSuggestionInput) => null as RunAgentTaskResult | null,
+  getAgentRuntimeSettings: async (_input?: GetAgentRuntimeSettingsInput) => ({
+    settingsId: 'default',
+    autonomyMode: 'manual_only',
+    updatedAt: ''
+  }) as AgentRuntimeSettingsRecord,
+  updateAgentRuntimeSettings: async (input: UpdateAgentRuntimeSettingsInput) => ({
+    settingsId: 'default',
+    autonomyMode: input.autonomyMode,
+    updatedAt: ''
+  }) as AgentRuntimeSettingsRecord,
   listImportBatches: async () => [] as ImportBatchSummary[],
   getImportBatch: async () => null,
   searchArchive: async () => [] as ArchiveSearchResult[],
@@ -264,6 +277,8 @@ function createIpcArchiveApi(): ArchiveApi | null {
     refreshAgentSuggestions: () => ipcRenderer.invoke('archive:refreshAgentSuggestions'),
     dismissAgentSuggestion: (input) => ipcRenderer.invoke('archive:dismissAgentSuggestion', input),
     runAgentSuggestion: (input) => ipcRenderer.invoke('archive:runAgentSuggestion', input),
+    getAgentRuntimeSettings: (input) => ipcRenderer.invoke('archive:getAgentRuntimeSettings', input),
+    updateAgentRuntimeSettings: (input) => ipcRenderer.invoke('archive:updateAgentRuntimeSettings', input),
     listImportBatches: () => ipcRenderer.invoke('archive:listImportBatches'),
     getImportBatch: (batchId) => ipcRenderer.invoke('archive:getImportBatch', { batchId }),
     searchArchive: (input) => ipcRenderer.invoke('archive:search', input),

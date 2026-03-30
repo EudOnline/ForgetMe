@@ -110,7 +110,10 @@ describe('registerAgentIpc', () => {
       listSuggestions: vi.fn(),
       refreshSuggestions: vi.fn(),
       dismissSuggestion: vi.fn(),
-      runSuggestion: vi.fn()
+      runSuggestion: vi.fn(),
+      getRuntimeSettings: vi.fn(),
+      updateRuntimeSettings: vi.fn(),
+      runNextAutoRunnableSuggestion: vi.fn()
     }
 
     openDatabase.mockReturnValue(db)
@@ -132,6 +135,8 @@ describe('registerAgentIpc', () => {
     expect(handlerMap.has('archive:refreshAgentSuggestions')).toBe(true)
     expect(handlerMap.has('archive:dismissAgentSuggestion')).toBe(true)
     expect(handlerMap.has('archive:runAgentSuggestion')).toBe(true)
+    expect(handlerMap.has('archive:getAgentRuntimeSettings')).toBe(true)
+    expect(handlerMap.has('archive:updateAgentRuntimeSettings')).toBe(true)
 
     const result = await handlerMap.get('archive:runAgentTask')?.({}, {
       prompt: 'Summarize the highest-priority pending review work',
@@ -289,7 +294,18 @@ describe('registerAgentIpc', () => {
         targetRole: 'governance',
         assignedRoles: ['governance'],
         latestAssistantResponse: 'Failures summarized.'
-      })
+      }),
+      getRuntimeSettings: vi.fn().mockReturnValue({
+        settingsId: 'default',
+        autonomyMode: 'manual_only',
+        updatedAt: '2026-03-30T00:00:00.000Z'
+      }),
+      updateRuntimeSettings: vi.fn().mockReturnValue({
+        settingsId: 'default',
+        autonomyMode: 'suggest_safe_auto_run',
+        updatedAt: '2026-03-30T00:05:00.000Z'
+      }),
+      runNextAutoRunnableSuggestion: vi.fn()
     }
 
     openDatabase.mockReturnValue(db)
@@ -325,6 +341,10 @@ describe('registerAgentIpc', () => {
       suggestionId: 'suggestion-1',
       confirmationToken: 'confirm-1'
     })
+    const runtimeSettings = await handlerMap.get('archive:getAgentRuntimeSettings')?.({}, undefined)
+    const updatedRuntimeSettings = await handlerMap.get('archive:updateAgentRuntimeSettings')?.({}, {
+      autonomyMode: 'suggest_safe_auto_run'
+    })
 
     expect(runtime.previewTask).toHaveBeenCalledWith({
       prompt: 'Approve review item rq-1',
@@ -355,6 +375,10 @@ describe('registerAgentIpc', () => {
     expect(runtime.runSuggestion).toHaveBeenCalledWith({
       suggestionId: 'suggestion-1',
       confirmationToken: 'confirm-1'
+    })
+    expect(runtime.getRuntimeSettings).toHaveBeenCalledWith()
+    expect(runtime.updateRuntimeSettings).toHaveBeenCalledWith({
+      autonomyMode: 'suggest_safe_auto_run'
     })
     expect(runs).toEqual([
       expect.objectContaining({
@@ -410,6 +434,16 @@ describe('registerAgentIpc', () => {
       assignedRoles: ['governance'],
       latestAssistantResponse: 'Failures summarized.'
     })
-    expect(close).toHaveBeenCalledTimes(9)
+    expect(runtimeSettings).toEqual({
+      settingsId: 'default',
+      autonomyMode: 'manual_only',
+      updatedAt: '2026-03-30T00:00:00.000Z'
+    })
+    expect(updatedRuntimeSettings).toEqual({
+      settingsId: 'default',
+      autonomyMode: 'suggest_safe_auto_run',
+      updatedAt: '2026-03-30T00:05:00.000Z'
+    })
+    expect(close).toHaveBeenCalledTimes(11)
   })
 })

@@ -22,6 +22,7 @@ function createRunRecord(overrides: Partial<AgentRunRecord> = {}): AgentRunRecor
     assignedRoles: ['review'],
     latestAssistantResponse: null,
     status: 'running',
+    executionOrigin: 'operator_manual',
     prompt: 'Summarize the review queue',
     confirmationToken: null,
     policyVersion: null,
@@ -132,7 +133,9 @@ describe('review agent service', () => {
       assignedRoles: ['review']
     })
 
-    expect(result.messages?.at(-1)?.content).toBe('Safe review group ready for approval: group-safe-42 (4 items).')
+    expect(result.messages?.at(-1)?.content).toBe(
+      'Safe review group ready for approval: group-safe-42 (4 items). Suggested follow-up: Apply safe group group-safe-42.'
+    )
 
     db.close()
   })

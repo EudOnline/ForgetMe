@@ -46,6 +46,7 @@ export function createAgentProactiveRunner(input: {
       })
 
       runtime.refreshSuggestions()
+      await runtime.runNextAutoRunnableSuggestion()
     } finally {
       db.close()
     }

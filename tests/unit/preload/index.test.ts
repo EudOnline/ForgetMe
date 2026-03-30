@@ -221,6 +221,16 @@ describe('preload archiveApi hosted share bridge', () => {
         assignedRoles: ['governance'],
         latestAssistantResponse: 'Failures summarized.'
       })
+      .mockResolvedValueOnce({
+        settingsId: 'default',
+        autonomyMode: 'manual_only',
+        updatedAt: '2026-03-30T00:00:00.000Z'
+      })
+      .mockResolvedValueOnce({
+        settingsId: 'default',
+        autonomyMode: 'suggest_safe_auto_run',
+        updatedAt: '2026-03-30T00:05:00.000Z'
+      })
 
     const archiveApi = exposeInMainWorld.mock.calls[0]?.[1] as {
       previewAgentTask: (input: { prompt: string; role: 'orchestrator' }) => Promise<unknown>
@@ -233,6 +243,8 @@ describe('preload archiveApi hosted share bridge', () => {
       refreshAgentSuggestions: () => Promise<unknown>
       dismissAgentSuggestion: (input: { suggestionId: string }) => Promise<unknown>
       runAgentSuggestion: (input: { suggestionId: string; confirmationToken: string }) => Promise<unknown>
+      getAgentRuntimeSettings: () => Promise<unknown>
+      updateAgentRuntimeSettings: (input: { autonomyMode: 'suggest_safe_auto_run' }) => Promise<unknown>
     }
 
     const preview = await archiveApi.previewAgentTask({
@@ -262,6 +274,10 @@ describe('preload archiveApi hosted share bridge', () => {
     const runSuggestionResult = await archiveApi.runAgentSuggestion({
       suggestionId: 'suggestion-1',
       confirmationToken: 'confirm-1'
+    })
+    const runtimeSettings = await archiveApi.getAgentRuntimeSettings()
+    const updatedRuntimeSettings = await archiveApi.updateAgentRuntimeSettings({
+      autonomyMode: 'suggest_safe_auto_run'
     })
 
     expect(preview).toEqual({
@@ -330,6 +346,16 @@ describe('preload archiveApi hosted share bridge', () => {
       assignedRoles: ['governance'],
       latestAssistantResponse: 'Failures summarized.'
     })
+    expect(runtimeSettings).toEqual({
+      settingsId: 'default',
+      autonomyMode: 'manual_only',
+      updatedAt: '2026-03-30T00:00:00.000Z'
+    })
+    expect(updatedRuntimeSettings).toEqual({
+      settingsId: 'default',
+      autonomyMode: 'suggest_safe_auto_run',
+      updatedAt: '2026-03-30T00:05:00.000Z'
+    })
 
     expect(invoke).toHaveBeenNthCalledWith(1, 'archive:previewAgentTask', {
       prompt: 'Approve review item rq-1',
@@ -364,6 +390,10 @@ describe('preload archiveApi hosted share bridge', () => {
     expect(invoke).toHaveBeenNthCalledWith(10, 'archive:runAgentSuggestion', {
       suggestionId: 'suggestion-1',
       confirmationToken: 'confirm-1'
+    })
+    expect(invoke).toHaveBeenNthCalledWith(11, 'archive:getAgentRuntimeSettings')
+    expect(invoke).toHaveBeenNthCalledWith(12, 'archive:updateAgentRuntimeSettings', {
+      autonomyMode: 'suggest_safe_auto_run'
     })
   })
 })

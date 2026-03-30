@@ -54,6 +54,7 @@ describe('agent runtime service', () => {
     expect(detail?.targetRole).toBe('review')
     expect(detail?.assignedRoles).toEqual(['orchestrator', 'review'])
     expect(detail?.latestAssistantResponse).toBe('1 pending items across 1 conflict groups.')
+    expect(detail?.executionOrigin).toBe('operator_manual')
     expect(detail?.errorMessage).toBeNull()
     expect(detail?.messages.some((message) => message.content.includes('pending review workbench items'))).toBe(true)
 
@@ -96,6 +97,7 @@ describe('agent runtime service', () => {
     expect(runs[0]?.targetRole).toBe('workspace')
     expect(runs[0]?.assignedRoles).toEqual(['orchestrator', 'workspace'])
     expect(runs[0]?.latestAssistantResponse).toBe('Workspace answer ready')
+    expect(runs[0]?.executionOrigin).toBe('operator_manual')
     expect(result.status).toBe('completed')
     expect(result.targetRole).toBe('workspace')
     expect(result.assignedRoles).toEqual(['orchestrator', 'workspace'])
@@ -259,6 +261,9 @@ describe('agent runtime service', () => {
       status: 'suggested',
       role: 'governance',
       taskKind: 'governance.summarize_failures',
+      priority: 'medium',
+      rationale: 'Failed agent runs were detected and should be summarized.',
+      autoRunnable: true,
       taskInput: {
         role: 'governance',
         taskKind: 'governance.summarize_failures',
@@ -342,6 +347,7 @@ describe('agent runtime service', () => {
     expect(dismissed?.status).toBe('dismissed')
     expect(runResult?.status).toBe('completed')
     expect(runResult?.runId).toBeTruthy()
+    expect(runtime.getRun({ runId: runResult?.runId ?? '' })?.executionOrigin).toBe('operator_suggestion')
     expect(dismissedRows.map((item) => item.suggestionId)).toEqual([dismissedSeed.suggestionId])
     expect(executedRows.map((item) => item.suggestionId)).toEqual([runnableSeed.suggestionId])
     expect(executedRows[0]?.executedRunId).toBe(runResult?.runId ?? null)
@@ -382,7 +388,67 @@ describe('agent runtime service', () => {
 
     expect(result?.status).toBe('failed')
     expect(suggestedRows.map((item) => item.suggestionId)).toContain(guardedSuggestion.suggestionId)
+    expect(runtime.listSuggestions().find((item) => item.suggestionId === guardedSuggestion.suggestionId)).toMatchObject({
+      attemptCount: 1,
+      cooldownUntil: expect.any(String)
+    })
     expect(executedRows).toEqual([])
+
+    db.close()
+  })
+
+  it('derives manual follow-up work from successful suggestion runs', async () => {
+    const db = setupDatabase()
+    const reviewAdapter: AgentAdapter = {
+      role: 'review',
+      canHandle: (taskKind) => taskKind === 'review.suggest_safe_group_action',
+      execute: async () => ({
+        messages: [
+          {
+            sender: 'agent',
+            content: 'Safe review group ready for approval: group-safe-42 (4 items). Suggested follow-up: Apply safe group group-safe-42.'
+          }
+        ]
+      })
+    }
+    const runtime = createAgentRuntime({
+      db,
+      adapters: [reviewAdapter]
+    })
+
+    const parentSuggestion = upsertAgentSuggestion(db, {
+      triggerKind: 'review.safe_group_available',
+      role: 'review',
+      taskKind: 'review.suggest_safe_group_action',
+      taskInput: {
+        role: 'review',
+        taskKind: 'review.suggest_safe_group_action',
+        prompt: 'Suggest a safe group action'
+      },
+      dedupeKey: 'review.safe-group::group-safe-42',
+      sourceRunId: null,
+      priority: 'high',
+      rationale: 'A safe review group is ready for review.',
+      autoRunnable: true,
+      followUpOfSuggestionId: null,
+      observedAt: '2026-03-30T00:30:00.000Z'
+    })
+
+    const result = await runtime.runSuggestion({
+      suggestionId: parentSuggestion.suggestionId
+    })
+    const suggestedRows = runtime.listSuggestions({
+      status: 'suggested'
+    })
+
+    expect(result?.status).toBe('completed')
+    expect(suggestedRows).toContainEqual(expect.objectContaining({
+      triggerKind: 'review.safe_group_available',
+      taskKind: 'review.apply_safe_group',
+      autoRunnable: false,
+      followUpOfSuggestionId: parentSuggestion.suggestionId,
+      priority: 'high'
+    }))
 
     db.close()
   })

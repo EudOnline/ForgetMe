@@ -103,6 +103,18 @@ describe('archiveApi agent runtime methods', () => {
       suggestionId: 'suggestion-1',
       confirmationToken: 'confirm-1'
     })).resolves.toBeNull()
+    await expect(archiveApi.getAgentRuntimeSettings()).resolves.toEqual({
+      settingsId: 'default',
+      autonomyMode: 'manual_only',
+      updatedAt: ''
+    })
+    await expect(archiveApi.updateAgentRuntimeSettings({
+      autonomyMode: 'suggest_safe_auto_run'
+    })).resolves.toEqual({
+      settingsId: 'default',
+      autonomyMode: 'suggest_safe_auto_run',
+      updatedAt: ''
+    })
   })
 
   it('preserves renderer-provided agent runtime methods', async () => {
@@ -245,6 +257,16 @@ describe('archiveApi agent runtime methods', () => {
       assignedRoles: ['governance'],
       latestAssistantResponse: 'Failures summarized.'
     })
+    const getAgentRuntimeSettings = vi.fn().mockResolvedValue({
+      settingsId: 'default',
+      autonomyMode: 'manual_only',
+      updatedAt: '2026-03-30T00:00:00.000Z'
+    })
+    const updateAgentRuntimeSettings = vi.fn().mockResolvedValue({
+      settingsId: 'default',
+      autonomyMode: 'suggest_safe_auto_run',
+      updatedAt: '2026-03-30T00:05:00.000Z'
+    })
 
     vi.stubGlobal('window', {
       archiveApi: {
@@ -257,7 +279,9 @@ describe('archiveApi agent runtime methods', () => {
         listAgentSuggestions,
         refreshAgentSuggestions,
         dismissAgentSuggestion,
-        runAgentSuggestion
+        runAgentSuggestion,
+        getAgentRuntimeSettings,
+        updateAgentRuntimeSettings
       }
     })
 
@@ -286,6 +310,10 @@ describe('archiveApi agent runtime methods', () => {
     const runSuggestionResult = await archiveApi.runAgentSuggestion({
       suggestionId: 'suggestion-1',
       confirmationToken: 'confirm-1'
+    })
+    const runtimeSettings = await archiveApi.getAgentRuntimeSettings()
+    const updatedRuntimeSettings = await archiveApi.updateAgentRuntimeSettings({
+      autonomyMode: 'suggest_safe_auto_run'
     })
 
     expect(preview).toEqual({
@@ -320,6 +348,16 @@ describe('archiveApi agent runtime methods', () => {
       targetRole: 'governance',
       assignedRoles: ['governance'],
       latestAssistantResponse: 'Failures summarized.'
+    })
+    expect(runtimeSettings).toEqual({
+      settingsId: 'default',
+      autonomyMode: 'manual_only',
+      updatedAt: '2026-03-30T00:00:00.000Z'
+    })
+    expect(updatedRuntimeSettings).toEqual({
+      settingsId: 'default',
+      autonomyMode: 'suggest_safe_auto_run',
+      updatedAt: '2026-03-30T00:05:00.000Z'
     })
   })
 })

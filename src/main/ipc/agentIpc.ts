@@ -2,6 +2,7 @@ import path from 'node:path'
 import { ipcMain } from 'electron'
 import {
   dismissAgentSuggestionInputSchema,
+  getAgentRuntimeSettingsInputSchema,
   getAgentRunInputSchema,
   listAgentMemoriesInputSchema,
   listAgentSuggestionsInputSchema,
@@ -10,7 +11,8 @@ import {
   previewAgentTaskInputSchema,
   refreshAgentSuggestionsInputSchema,
   runAgentSuggestionInputSchema,
-  runAgentTaskInputSchema
+  runAgentTaskInputSchema,
+  updateAgentRuntimeSettingsInputSchema
 } from '../../shared/ipcSchemas'
 import type { RunAgentTaskInput } from '../../shared/archiveContracts'
 import type { AppPaths } from '../services/appPaths'
@@ -71,6 +73,8 @@ export function registerAgentIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:refreshAgentSuggestions')
   ipcMain.removeHandler('archive:dismissAgentSuggestion')
   ipcMain.removeHandler('archive:runAgentSuggestion')
+  ipcMain.removeHandler('archive:getAgentRuntimeSettings')
+  ipcMain.removeHandler('archive:updateAgentRuntimeSettings')
 
   ipcMain.handle('archive:previewAgentTask', async (_event, payload) => {
     const input = previewAgentTaskInputSchema.parse(payload) as RunAgentTaskInput
@@ -120,5 +124,15 @@ export function registerAgentIpc(appPaths: AppPaths) {
   ipcMain.handle('archive:runAgentSuggestion', async (_event, payload) => {
     const input = runAgentSuggestionInputSchema.parse(payload)
     return withArchiveAgentRuntime(appPaths, (runtime) => runtime.runSuggestion(input))
+  })
+
+  ipcMain.handle('archive:getAgentRuntimeSettings', async (_event, payload) => {
+    getAgentRuntimeSettingsInputSchema.parse(payload)
+    return withArchiveAgentRuntime(appPaths, (runtime) => runtime.getRuntimeSettings())
+  })
+
+  ipcMain.handle('archive:updateAgentRuntimeSettings', async (_event, payload) => {
+    const input = updateAgentRuntimeSettingsInputSchema.parse(payload)
+    return withArchiveAgentRuntime(appPaths, (runtime) => runtime.updateRuntimeSettings(input))
   })
 }

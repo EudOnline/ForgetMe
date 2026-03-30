@@ -1,11 +1,13 @@
 import type {
   AgentExecutionPreview,
+  AgentRuntimeSettingsRecord,
   AgentSuggestionRecord,
   AgentRole,
   AgentPolicyVersionRecord,
   AgentRunDetail,
   AgentRunRecord,
   DismissAgentSuggestionInput,
+  UpdateAgentRuntimeSettingsInput,
   GetAgentRunInput,
   ListAgentMemoriesInput,
   ListAgentSuggestionsInput,
@@ -19,18 +21,28 @@ import {
   appendAgentMessage,
   createAgentRun,
   dismissAgentSuggestion,
+  getAgentRuntimeSettings,
   getAgentRun,
+  incrementAgentSuggestionAttempt,
   getAgentSuggestion,
   listAgentMemories,
+  listRunnableAgentSuggestions,
   listAgentSuggestions,
   listAgentPolicyVersions,
   listAgentRuns,
+  upsertAgentRuntimeSettings,
   upsertAgentSuggestion,
   markAgentSuggestionExecuted,
   updateAgentRunReplayMetadata,
   updateAgentRunStatus
 } from './agentPersistenceService'
+import { canAutoRunAgentSuggestion } from './agentAutonomyPolicy'
 import { evaluateAgentProactiveSuggestions } from './agentProactiveTriggerService'
+import { deriveAgentSuggestionFollowups } from './agentSuggestionFollowupService'
+import {
+  computeSuggestionCooldownUntil,
+  rankAgentSuggestions
+} from './agentSuggestionRankingService'
 import {
   inferAgentReplayMetadata,
   planAgentExecution,
@@ -50,9 +62,12 @@ export type AgentRuntime = {
   listMemories(input?: ListAgentMemoriesInput): ReturnType<typeof listAgentMemories>
   listPolicyVersions(input?: ListAgentPolicyVersionsInput): AgentPolicyVersionRecord[]
   listSuggestions(input?: ListAgentSuggestionsInput): AgentSuggestionRecord[]
+  getRuntimeSettings(): AgentRuntimeSettingsRecord
+  updateRuntimeSettings(input: UpdateAgentRuntimeSettingsInput): AgentRuntimeSettingsRecord
   refreshSuggestions(): AgentSuggestionRecord[]
   dismissSuggestion(input: DismissAgentSuggestionInput): AgentSuggestionRecord | null
   runSuggestion(input: RunAgentSuggestionInput): Promise<AgentRuntimeRunResult | null>
+  runNextAutoRunnableSuggestion(): Promise<AgentRuntimeRunResult | null>
 }
 
 type CreateAgentRuntimeInput = {
@@ -60,13 +75,18 @@ type CreateAgentRuntimeInput = {
   adapters: AgentAdapter[]
 }
 
-function createRuntimeRun(db: ArchiveDatabase, input: RunAgentTaskInput) {
+function createRuntimeRun(
+  db: ArchiveDatabase,
+  input: RunAgentTaskInput,
+  executionOrigin: 'operator_manual' | 'operator_suggestion' | 'auto_runner'
+) {
   try {
     return createAgentRun(db, {
       role: input.role,
       taskKind: input.taskKind ?? null,
       prompt: input.prompt,
       confirmationToken: input.confirmationToken ?? null,
+      executionOrigin,
       status: 'running'
     })
   } catch (error) {
@@ -78,6 +98,7 @@ function createRuntimeRun(db: ArchiveDatabase, input: RunAgentTaskInput) {
       role: input.role,
       prompt: input.prompt,
       confirmationToken: input.confirmationToken ?? null,
+      executionOrigin,
       status: 'running'
     })
   }
@@ -93,135 +114,200 @@ function appendMessages(db: ArchiveDatabase, runId: string, messages: Array<{ se
   }
 }
 
+function persistFollowupSuggestions(db: ArchiveDatabase, input: {
+  runId: string
+  parentSuggestionId: string
+}) {
+  const followupSuggestions = deriveAgentSuggestionFollowups(db, {
+    runId: input.runId,
+    parentSuggestionId: input.parentSuggestionId
+  })
+  for (const followupSuggestion of followupSuggestions) {
+    upsertAgentSuggestion(db, {
+      triggerKind: followupSuggestion.triggerKind,
+      role: followupSuggestion.role,
+      taskKind: followupSuggestion.taskKind,
+      taskInput: followupSuggestion.taskInput,
+      dedupeKey: followupSuggestion.dedupeKey,
+      sourceRunId: followupSuggestion.sourceRunId ?? null,
+      priority: followupSuggestion.priority,
+      rationale: followupSuggestion.rationale,
+      autoRunnable: followupSuggestion.autoRunnable,
+      followUpOfSuggestionId: followupSuggestion.followUpOfSuggestionId,
+      cooldownUntil: followupSuggestion.cooldownUntil
+    })
+  }
+}
+
 export function createAgentRuntime(input: CreateAgentRuntimeInput): AgentRuntime {
+  const executeTask = async (
+    taskInput: RunAgentTaskInput,
+    executionOrigin: 'operator_manual' | 'operator_suggestion' | 'auto_runner'
+  ) => {
+    let run = createRuntimeRun(input.db, taskInput, executionOrigin)
+    let assignedRoles: AgentRole[] = [taskInput.role]
+    let targetRole: AgentRole | null = null
+    let latestAssistantResponse: string | null = null
+
+    try {
+      const replayMetadata = inferAgentReplayMetadata(taskInput)
+      assignedRoles = replayMetadata.assignedRoles
+      targetRole = replayMetadata.targetRole
+    } catch {
+      // Keep defaults for invalid inputs where delegation cannot be inferred.
+    }
+
+    appendMessages(input.db, run.runId, [
+      {
+        sender: 'user',
+        content: taskInput.prompt
+      }
+    ])
+
+    try {
+      const plan = planAgentExecution(taskInput)
+      assignedRoles = plan.assignedRoles
+      targetRole = plan.targetRole
+
+      const replayRun = updateAgentRunReplayMetadata(input.db, {
+        runId: run.runId,
+        targetRole,
+        assignedRoles,
+        latestAssistantResponse: null
+      })
+      if (replayRun) {
+        run = replayRun
+      }
+
+      appendMessages(input.db, run.runId, plan.messages)
+
+      const adapter = input.adapters.find((item) => item.role === plan.targetRole && item.canHandle(plan.taskKind))
+      if (!adapter) {
+        throw new Error(`No agent adapter registered for task kind "${plan.taskKind}"`)
+      }
+
+      const result = await adapter.execute({
+        db: input.db,
+        run,
+        input: taskInput,
+        taskKind: plan.taskKind,
+        assignedRoles
+      })
+
+      appendMessages(input.db, run.runId, result.messages ?? [])
+
+      const latestAgentMessage = [...(result.messages ?? [])]
+        .reverse()
+        .find((message) => message.sender === 'agent')
+      if (latestAgentMessage?.content) {
+        latestAssistantResponse = latestAgentMessage.content
+      } else {
+        latestAssistantResponse = summarizeAgentExecution(plan, result)
+        appendMessages(input.db, run.runId, [
+          {
+            sender: 'agent',
+            content: latestAssistantResponse
+          }
+        ])
+      }
+
+      const finalizedRun = updateAgentRunReplayMetadata(input.db, {
+        runId: run.runId,
+        targetRole,
+        assignedRoles,
+        latestAssistantResponse
+      })
+      if (finalizedRun) {
+        run = finalizedRun
+      }
+
+      updateAgentRunStatus(input.db, {
+        runId: run.runId,
+        status: 'completed'
+      })
+
+      return {
+        runId: run.runId,
+        status: 'completed' as const,
+        targetRole,
+        assignedRoles,
+        latestAssistantResponse
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'agent runtime failed'
+
+      appendMessages(input.db, run.runId, [
+        {
+          sender: 'system',
+          content: `Run failed: ${errorMessage}`
+        }
+      ])
+
+      const replayRun = updateAgentRunReplayMetadata(input.db, {
+        runId: run.runId,
+        targetRole,
+        assignedRoles,
+        latestAssistantResponse
+      })
+      if (replayRun) {
+        run = replayRun
+      }
+
+      updateAgentRunStatus(input.db, {
+        runId: run.runId,
+        status: 'failed',
+        errorMessage
+      })
+
+      return {
+        runId: run.runId,
+        status: 'failed' as const,
+        targetRole,
+        assignedRoles,
+        latestAssistantResponse
+      }
+    }
+  }
+
+  const runPersistedSuggestion = async (inputSuggestion: AgentSuggestionRecord, runSuggestionInput: {
+    confirmationToken?: string
+    executionOrigin: 'operator_suggestion' | 'auto_runner'
+  }) => {
+    const taskInput = runSuggestionInput.confirmationToken
+      ? { ...inputSuggestion.taskInput, confirmationToken: runSuggestionInput.confirmationToken }
+      : inputSuggestion.taskInput
+    const result = await executeTask(taskInput, runSuggestionInput.executionOrigin)
+
+    if (result.status === 'completed') {
+      markAgentSuggestionExecuted(input.db, {
+        suggestionId: inputSuggestion.suggestionId,
+        runId: result.runId
+      })
+    } else {
+      incrementAgentSuggestionAttempt(input.db, {
+        suggestionId: inputSuggestion.suggestionId,
+        cooldownUntil: computeSuggestionCooldownUntil({
+          taskKind: inputSuggestion.taskKind,
+          attemptCount: inputSuggestion.attemptCount + 1,
+          now: new Date().toISOString()
+        })
+      })
+    }
+
+    persistFollowupSuggestions(input.db, {
+      runId: result.runId,
+      parentSuggestionId: inputSuggestion.suggestionId
+    })
+
+    return result
+  }
+
   return {
     previewTask(taskInput) {
       return previewAgentExecution(taskInput)
     },
     async runTask(taskInput) {
-      let run = createRuntimeRun(input.db, taskInput)
-      let assignedRoles: AgentRole[] = [taskInput.role]
-      let targetRole: AgentRole | null = null
-      let latestAssistantResponse: string | null = null
-
-      try {
-        const replayMetadata = inferAgentReplayMetadata(taskInput)
-        assignedRoles = replayMetadata.assignedRoles
-        targetRole = replayMetadata.targetRole
-      } catch {
-        // Keep defaults for invalid inputs where delegation cannot be inferred.
-      }
-
-      appendMessages(input.db, run.runId, [
-        {
-          sender: 'user',
-          content: taskInput.prompt
-        }
-      ])
-
-      try {
-        const plan = planAgentExecution(taskInput)
-        assignedRoles = plan.assignedRoles
-        targetRole = plan.targetRole
-
-        const replayRun = updateAgentRunReplayMetadata(input.db, {
-          runId: run.runId,
-          targetRole,
-          assignedRoles,
-          latestAssistantResponse: null
-        })
-        if (replayRun) {
-          run = replayRun
-        }
-
-        appendMessages(input.db, run.runId, plan.messages)
-
-        const adapter = input.adapters.find((item) => item.role === plan.targetRole && item.canHandle(plan.taskKind))
-        if (!adapter) {
-          throw new Error(`No agent adapter registered for task kind "${plan.taskKind}"`)
-        }
-
-        const result = await adapter.execute({
-          db: input.db,
-          run,
-          input: taskInput,
-          taskKind: plan.taskKind,
-          assignedRoles
-        })
-
-        appendMessages(input.db, run.runId, result.messages ?? [])
-
-        const latestAgentMessage = [...(result.messages ?? [])]
-          .reverse()
-          .find((message) => message.sender === 'agent')
-        if (latestAgentMessage?.content) {
-          latestAssistantResponse = latestAgentMessage.content
-        } else {
-          latestAssistantResponse = summarizeAgentExecution(plan, result)
-          appendMessages(input.db, run.runId, [
-            {
-              sender: 'agent',
-              content: latestAssistantResponse
-            }
-          ])
-        }
-
-        const finalizedRun = updateAgentRunReplayMetadata(input.db, {
-          runId: run.runId,
-          targetRole,
-          assignedRoles,
-          latestAssistantResponse
-        })
-        if (finalizedRun) {
-          run = finalizedRun
-        }
-
-        updateAgentRunStatus(input.db, {
-          runId: run.runId,
-          status: 'completed'
-        })
-
-        return {
-          runId: run.runId,
-          status: 'completed',
-          targetRole,
-          assignedRoles,
-          latestAssistantResponse
-        }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'agent runtime failed'
-
-        appendMessages(input.db, run.runId, [
-          {
-            sender: 'system',
-            content: `Run failed: ${errorMessage}`
-          }
-        ])
-
-        const replayRun = updateAgentRunReplayMetadata(input.db, {
-          runId: run.runId,
-          targetRole,
-          assignedRoles,
-          latestAssistantResponse
-        })
-        if (replayRun) {
-          run = replayRun
-        }
-
-        updateAgentRunStatus(input.db, {
-          runId: run.runId,
-          status: 'failed',
-          errorMessage
-        })
-
-        return {
-          runId: run.runId,
-          status: 'failed',
-          targetRole,
-          assignedRoles,
-          latestAssistantResponse
-        }
-      }
+      return executeTask(taskInput, 'operator_manual')
     },
     listRuns(listInput = {}) {
       return listAgentRuns(input.db, listInput)
@@ -238,14 +324,33 @@ export function createAgentRuntime(input: CreateAgentRuntimeInput): AgentRuntime
     listSuggestions(suggestionsInput = {}) {
       return listAgentSuggestions(input.db, suggestionsInput)
     },
+    getRuntimeSettings() {
+      return getAgentRuntimeSettings(input.db)
+    },
+    updateRuntimeSettings(runtimeSettingsInput) {
+      return upsertAgentRuntimeSettings(input.db, runtimeSettingsInput)
+    },
     refreshSuggestions() {
-      return evaluateAgentProactiveSuggestions(input.db).map((suggestion) => upsertAgentSuggestion(input.db, {
+      const rankedSuggestions = rankAgentSuggestions(
+        evaluateAgentProactiveSuggestions(input.db),
+        {
+          existingSuggestions: listAgentSuggestions(input.db),
+          now: new Date().toISOString()
+        }
+      )
+
+      return rankedSuggestions.map((suggestion) => upsertAgentSuggestion(input.db, {
         triggerKind: suggestion.triggerKind,
         role: suggestion.role,
         taskKind: suggestion.taskKind,
         taskInput: suggestion.taskInput,
         dedupeKey: suggestion.dedupeKey,
-        sourceRunId: suggestion.sourceRunId ?? null
+        sourceRunId: suggestion.sourceRunId ?? null,
+        priority: suggestion.priority,
+        rationale: suggestion.rationale,
+        autoRunnable: suggestion.autoRunnable,
+        followUpOfSuggestionId: suggestion.followUpOfSuggestionId,
+        cooldownUntil: suggestion.cooldownUntil
       }))
     },
     dismissSuggestion(dismissInput) {
@@ -257,19 +362,33 @@ export function createAgentRuntime(input: CreateAgentRuntimeInput): AgentRuntime
         return null
       }
 
-      const taskInput = runSuggestionInput.confirmationToken
-        ? { ...suggestion.taskInput, confirmationToken: runSuggestionInput.confirmationToken }
-        : suggestion.taskInput
-      const result = await this.runTask(taskInput)
+      return runPersistedSuggestion(suggestion, {
+        confirmationToken: runSuggestionInput.confirmationToken,
+        executionOrigin: 'operator_suggestion'
+      })
+    },
+    async runNextAutoRunnableSuggestion() {
+      const settings = getAgentRuntimeSettings(input.db)
+      const runnableSuggestions = listRunnableAgentSuggestions(input.db, {
+        limit: 20
+      })
 
-      if (result.status === 'completed') {
-        markAgentSuggestionExecuted(input.db, {
-          suggestionId: suggestion.suggestionId,
-          runId: result.runId
+      for (const suggestion of runnableSuggestions) {
+        const preview = previewAgentExecution(suggestion.taskInput)
+        if (!canAutoRunAgentSuggestion({
+          autonomyMode: settings.autonomyMode,
+          suggestion,
+          requiresConfirmation: preview.requiresConfirmation
+        })) {
+          continue
+        }
+
+        return runPersistedSuggestion(suggestion, {
+          executionOrigin: 'auto_runner'
         })
       }
 
-      return result
+      return null
     }
   }
 }
