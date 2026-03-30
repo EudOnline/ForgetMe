@@ -1,3 +1,8 @@
+import type {
+  AgentMessageRecordV2,
+  AgentThreadParticipantRecord
+} from '../../shared/archiveContracts'
+
 export type QueueThreadDeliveriesInput = {
   threadId: string
   messageId: string
@@ -15,6 +20,14 @@ export type ThreadDelivery = {
   kind: string
   to: string
   blocking?: boolean
+}
+
+export type ExpandMessageDeliveriesInput = {
+  message: Pick<
+    AgentMessageRecordV2,
+    'threadId' | 'messageId' | 'fromParticipantId' | 'toParticipantId' | 'kind' | 'blocking'
+  >
+  participants: Array<Pick<AgentThreadParticipantRecord, 'participantId' | 'leftAt'>>
 }
 
 export function queueThreadDeliveries(input: QueueThreadDeliveriesInput): ThreadDelivery[] {
@@ -43,4 +56,18 @@ export function queueThreadDeliveries(input: QueueThreadDeliveriesInput): Thread
       to: participantId,
       blocking
     }))
+}
+
+export function expandMessageDeliveries(input: ExpandMessageDeliveriesInput): ThreadDelivery[] {
+  return queueThreadDeliveries({
+    threadId: input.message.threadId,
+    messageId: input.message.messageId,
+    from: input.message.fromParticipantId,
+    kind: input.message.kind,
+    participantIds: input.participants
+      .filter((participant) => participant.leftAt === null)
+      .map((participant) => participant.participantId),
+    to: input.message.toParticipantId ?? undefined,
+    blocking: input.message.blocking
+  })
 }
