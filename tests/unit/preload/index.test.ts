@@ -92,6 +92,12 @@ describe('preload archiveApi hosted share bridge', () => {
 
     invoke
       .mockResolvedValueOnce({
+        taskKind: 'review.apply_item_decision',
+        targetRole: 'review',
+        assignedRoles: ['orchestrator', 'review'],
+        requiresConfirmation: true
+      })
+      .mockResolvedValueOnce({
         runId: 'run-1',
         status: 'completed',
         targetRole: 'review',
@@ -152,6 +158,7 @@ describe('preload archiveApi hosted share bridge', () => {
       ])
 
     const archiveApi = exposeInMainWorld.mock.calls[0]?.[1] as {
+      previewAgentTask: (input: { prompt: string; role: 'orchestrator' }) => Promise<unknown>
       runAgentTask: (input: { prompt: string; role: 'orchestrator' }) => Promise<unknown>
       listAgentRuns: (input: { role: 'review' }) => Promise<unknown>
       getAgentRun: (input: { runId: string }) => Promise<unknown>
@@ -159,6 +166,10 @@ describe('preload archiveApi hosted share bridge', () => {
       listAgentPolicyVersions: (input: { role: 'governance'; policyKey: string }) => Promise<unknown>
     }
 
+    const preview = await archiveApi.previewAgentTask({
+      prompt: 'Approve review item rq-1',
+      role: 'orchestrator'
+    })
     const runResult = await archiveApi.runAgentTask({
       prompt: 'Summarize the highest-priority pending review work',
       role: 'orchestrator'
@@ -171,6 +182,12 @@ describe('preload archiveApi hosted share bridge', () => {
       policyKey: 'governance.review.policy'
     })
 
+    expect(preview).toEqual({
+      taskKind: 'review.apply_item_decision',
+      targetRole: 'review',
+      assignedRoles: ['orchestrator', 'review'],
+      requiresConfirmation: true
+    })
     expect(runResult).toEqual({
       runId: 'run-1',
       status: 'completed',
@@ -207,20 +224,24 @@ describe('preload archiveApi hosted share bridge', () => {
       })
     ])
 
-    expect(invoke).toHaveBeenNthCalledWith(1, 'archive:runAgentTask', {
+    expect(invoke).toHaveBeenNthCalledWith(1, 'archive:previewAgentTask', {
+      prompt: 'Approve review item rq-1',
+      role: 'orchestrator'
+    })
+    expect(invoke).toHaveBeenNthCalledWith(2, 'archive:runAgentTask', {
       prompt: 'Summarize the highest-priority pending review work',
       role: 'orchestrator'
     })
-    expect(invoke).toHaveBeenNthCalledWith(2, 'archive:listAgentRuns', {
+    expect(invoke).toHaveBeenNthCalledWith(3, 'archive:listAgentRuns', {
       role: 'review'
     })
-    expect(invoke).toHaveBeenNthCalledWith(3, 'archive:getAgentRun', {
+    expect(invoke).toHaveBeenNthCalledWith(4, 'archive:getAgentRun', {
       runId: 'run-1'
     })
-    expect(invoke).toHaveBeenNthCalledWith(4, 'archive:listAgentMemories', {
+    expect(invoke).toHaveBeenNthCalledWith(5, 'archive:listAgentMemories', {
       role: 'governance'
     })
-    expect(invoke).toHaveBeenNthCalledWith(5, 'archive:listAgentPolicyVersions', {
+    expect(invoke).toHaveBeenNthCalledWith(6, 'archive:listAgentPolicyVersions', {
       role: 'governance',
       policyKey: 'governance.review.policy'
     })

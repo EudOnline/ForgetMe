@@ -115,6 +115,8 @@ export const runAgentTaskInputSchema = z.object({
   }
 })
 
+export const previewAgentTaskInputSchema = runAgentTaskInputSchema
+
 export const listAgentRunsInputSchema = z.object({
   role: agentRoleSchema.optional(),
   status: agentRunStatusSchema.optional(),

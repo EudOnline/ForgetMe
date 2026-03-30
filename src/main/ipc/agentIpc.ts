@@ -5,6 +5,7 @@ import {
   listAgentMemoriesInputSchema,
   listAgentPolicyVersionsInputSchema,
   listAgentRunsInputSchema,
+  previewAgentTaskInputSchema,
   runAgentTaskInputSchema
 } from '../../shared/ipcSchemas'
 import type { RunAgentTaskInput } from '../../shared/archiveContracts'
@@ -56,11 +57,17 @@ async function withArchiveAgentRuntime<T>(
 }
 
 export function registerAgentIpc(appPaths: AppPaths) {
+  ipcMain.removeHandler('archive:previewAgentTask')
   ipcMain.removeHandler('archive:runAgentTask')
   ipcMain.removeHandler('archive:listAgentRuns')
   ipcMain.removeHandler('archive:getAgentRun')
   ipcMain.removeHandler('archive:listAgentMemories')
   ipcMain.removeHandler('archive:listAgentPolicyVersions')
+
+  ipcMain.handle('archive:previewAgentTask', async (_event, payload) => {
+    const input = previewAgentTaskInputSchema.parse(payload) as RunAgentTaskInput
+    return withArchiveAgentRuntime(appPaths, (runtime) => runtime.previewTask(input))
+  })
 
   ipcMain.handle('archive:runAgentTask', async (_event, payload) => {
     const input = runAgentTaskInputSchema.parse(payload) as RunAgentTaskInput

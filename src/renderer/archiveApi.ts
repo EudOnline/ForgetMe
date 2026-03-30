@@ -1,6 +1,9 @@
 import type {
+  AgentExecutionPreview,
   AgentMemoryRecord,
   AgentPolicyVersionRecord,
+  AgentRole,
+  AgentTaskKind,
   AgentRunDetail,
   AgentRunRecord,
   ApprovedDraftSendDestination,
@@ -59,6 +62,64 @@ declare global {
   }
 }
 
+const destructiveTaskKinds = new Set<AgentTaskKind>([
+  'review.apply_safe_group',
+  'review.apply_item_decision'
+])
+
+function fallbackTaskKindForInput(input: RunAgentTaskInput): AgentTaskKind {
+  if (input.taskKind) {
+    return input.taskKind
+  }
+
+  switch (input.role) {
+    case 'orchestrator':
+      return 'workspace.ask_memory'
+    case 'ingestion':
+      return 'ingestion.import_batch'
+    case 'review':
+      return 'review.summarize_queue'
+    case 'workspace':
+      return 'workspace.ask_memory'
+    case 'governance':
+      return 'governance.summarize_failures'
+  }
+}
+
+function roleForTaskKind(taskKind: AgentTaskKind): AgentRole {
+  if (taskKind.startsWith('ingestion.')) {
+    return 'ingestion'
+  }
+
+  if (taskKind.startsWith('review.')) {
+    return 'review'
+  }
+
+  if (taskKind.startsWith('workspace.')) {
+    return 'workspace'
+  }
+
+  if (taskKind.startsWith('governance.')) {
+    return 'governance'
+  }
+
+  return 'orchestrator'
+}
+
+function buildFallbackExecutionPreview(input: RunAgentTaskInput): AgentExecutionPreview {
+  const taskKind = fallbackTaskKindForInput(input)
+  const targetRole = input.role === 'orchestrator' ? roleForTaskKind(taskKind) : input.role
+
+  return {
+    taskKind,
+    targetRole,
+    assignedRoles: input.role === 'orchestrator' && targetRole !== 'orchestrator'
+      ? ['orchestrator', targetRole]
+      : [targetRole],
+    requiresConfirmation: destructiveTaskKinds.has(taskKind)
+  }
+}
+
 const fallbackApi: ArchiveApi = {
   selectImportFiles: async () => [],
   selectContextPackExportDestination: async () => null,
@@ -70,6 +131,7 @@ const fallbackApi: ArchiveApi = {
   runRecoveryDrill: async (_input: { exportRoot: string; targetRoot: string; overwrite?: boolean; encryptionPassword?: string }) => null as RestoreRunResult | null,
   preflightImportBatch: async (_input: { sourcePaths: string[] }) => ({ items: [], summary: { totalCount: 0, supportedCount: 0, unsupportedCount: 0 } }) as ImportPreflightResult,
   createImportBatch: async (_input: CreateImportBatchInput) => ({ batchId: '', sourceLabel: '', createdAt: '', files: [] }),
+  previewAgentTask: async (input: RunAgentTaskInput) => buildFallbackExecutionPreview(input),
   runAgentTask: async (_input: RunAgentTaskInput) => ({
     runId: '',
     status: 'queued' as const,
@@ -184,6 +246,7 @@ function createIpcArchiveApi(): ArchiveApi | null {
     runRecoveryDrill: (input) => ipcRenderer.invoke('archive:runRecoveryDrill', input),
     preflightImportBatch: (input) => ipcRenderer.invoke('archive:preflightImportBatch', input),
     createImportBatch: (input) => ipcRenderer.invoke('archive:createImportBatch', input),
+    previewAgentTask: (input) => ipcRenderer.invoke('archive:previewAgentTask', input),
     runAgentTask: (input) => ipcRenderer.invoke('archive:runAgentTask', input),
     listAgentRuns: (input) => ipcRenderer.invoke('archive:listAgentRuns', input),
     getAgentRun: (input) => ipcRenderer.invoke('archive:getAgentRun', input),

@@ -1,4 +1,5 @@
 import type {
+  AgentExecutionPreview,
   AgentRole,
   AgentPolicyVersionRecord,
   AgentRunDetail,
@@ -23,6 +24,7 @@ import {
 import {
   inferAgentReplayMetadata,
   planAgentExecution,
+  previewAgentExecution,
   summarizeAgentExecution
 } from './agentOrchestratorService'
 import type { AgentAdapter } from './agents/agentTypes'
@@ -31,6 +33,7 @@ import type { ArchiveDatabase } from './db'
 export type AgentRuntimeRunResult = RunAgentTaskResult
 
 export type AgentRuntime = {
+  previewTask(input: RunAgentTaskInput): AgentExecutionPreview
   runTask(input: RunAgentTaskInput): Promise<AgentRuntimeRunResult>
   listRuns(input?: ListAgentRunsInput): AgentRunRecord[]
   getRun(input: GetAgentRunInput): AgentRunDetail | null
@@ -78,6 +81,9 @@ function appendMessages(db: ArchiveDatabase, runId: string, messages: Array<{ se
 
 export function createAgentRuntime(input: CreateAgentRuntimeInput): AgentRuntime {
   return {
+    previewTask(taskInput) {
+      return previewAgentExecution(taskInput)
+    },
     async runTask(taskInput) {
       let run = createRuntimeRun(input.db, taskInput)
       let assignedRoles: AgentRole[] = [taskInput.role]

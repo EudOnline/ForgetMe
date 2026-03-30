@@ -205,6 +205,29 @@ describe('agent runtime service', () => {
     db.close()
   })
 
+  it('previews execution routing without persisting a run row', () => {
+    const db = setupDatabase()
+    const runtime = createAgentRuntime({
+      db,
+      adapters: []
+    })
+
+    const preview = runtime.previewTask({
+      prompt: 'Approve review item rq-1',
+      role: 'orchestrator'
+    })
+
+    expect(preview).toEqual({
+      taskKind: 'review.apply_item_decision',
+      targetRole: 'review',
+      assignedRoles: ['orchestrator', 'review'],
+      requiresConfirmation: true
+    })
+    expect(runtime.listRuns()).toEqual([])
+
+    db.close()
+  })
+
   it('infers review.apply_item_decision for approve/reject prompts with explicit review item ids', async () => {
     const db = setupDatabase()
     let delegatedTaskKind: AgentTaskKind | null = null

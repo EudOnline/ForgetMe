@@ -1,14 +1,12 @@
 import type {
+  AgentExecutionPreview,
   AgentRole,
   AgentTaskKind,
   RunAgentTaskInput
 } from '../../shared/archiveContracts'
 import type { AgentAdapterMessage, AgentAdapterResult } from './agents/agentTypes'
 
-export type AgentExecutionPlan = {
-  taskKind: AgentTaskKind
-  targetRole: AgentRole
-  assignedRoles: AgentRole[]
+export type AgentExecutionPlan = AgentExecutionPreview & {
   messages: AgentAdapterMessage[]
 }
 
@@ -99,7 +97,7 @@ function assertSafeDelegation(input: {
   }
 }
 
-function resolveAgentExecutionTarget(input: RunAgentTaskInput): Pick<AgentExecutionPlan, 'taskKind' | 'targetRole' | 'assignedRoles'> {
+function resolveAgentExecutionTarget(input: RunAgentTaskInput): Pick<AgentExecutionPreview, 'taskKind' | 'targetRole' | 'assignedRoles'> {
   if (input.role === 'orchestrator') {
     const inferredReviewTaskKind = inferReviewTaskKindFromPrompt(input.prompt)
     const taskKind = input.taskKind && input.taskKind !== 'orchestrator.plan_next_action'
@@ -131,8 +129,23 @@ function resolveAgentExecutionTarget(input: RunAgentTaskInput): Pick<AgentExecut
   }
 }
 
+function requiresConfirmation(taskKind: AgentTaskKind) {
+  return destructiveTaskKinds.has(taskKind)
+}
+
+export function previewAgentExecution(input: RunAgentTaskInput): AgentExecutionPreview {
+  const resolved = resolveAgentExecutionTarget(input)
+
+  return {
+    taskKind: resolved.taskKind,
+    targetRole: resolved.targetRole,
+    assignedRoles: resolved.assignedRoles,
+    requiresConfirmation: requiresConfirmation(resolved.taskKind)
+  }
+}
+
 export function inferAgentReplayMetadata(input: RunAgentTaskInput): AgentReplayMetadata {
-  const plan = resolveAgentExecutionTarget(input)
+  const plan = previewAgentExecution(input)
   return {
     targetRole: plan.targetRole,
     assignedRoles: plan.assignedRoles
@@ -140,7 +153,7 @@ export function inferAgentReplayMetadata(input: RunAgentTaskInput): AgentReplayM
 }
 
 export function planAgentExecution(input: RunAgentTaskInput): AgentExecutionPlan {
-  const plan = resolveAgentExecutionTarget(input)
+  const plan = previewAgentExecution(input)
 
   assertSafeDelegation({
     taskKind: plan.taskKind,
@@ -148,9 +161,7 @@ export function planAgentExecution(input: RunAgentTaskInput): AgentExecutionPlan
   })
 
   return {
-    taskKind: plan.taskKind,
-    targetRole: plan.targetRole,
-    assignedRoles: plan.assignedRoles,
+    ...plan,
     messages: [
       {
         sender: 'system',

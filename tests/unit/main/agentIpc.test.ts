@@ -90,6 +90,12 @@ describe('registerAgentIpc', () => {
     const workspaceAdapter = { role: 'workspace' }
     const governanceAdapter = { role: 'governance' }
     const runtime = {
+      previewTask: vi.fn().mockReturnValue({
+        taskKind: 'review.apply_item_decision',
+        targetRole: 'review',
+        assignedRoles: ['orchestrator', 'review'],
+        requiresConfirmation: true
+      }),
       runTask: vi.fn().mockResolvedValue({
         runId: 'run-1',
         status: 'completed',
@@ -113,6 +119,7 @@ describe('registerAgentIpc', () => {
     registerAgentIpc(appPathsFixture())
 
     expect(handlerMap.has('archive:runAgentTask')).toBe(true)
+    expect(handlerMap.has('archive:previewAgentTask')).toBe(true)
     expect(handlerMap.has('archive:listAgentRuns')).toBe(true)
     expect(handlerMap.has('archive:getAgentRun')).toBe(true)
     expect(handlerMap.has('archive:listAgentMemories')).toBe(true)
@@ -152,6 +159,12 @@ describe('registerAgentIpc', () => {
     const db = { close }
     const runtime = {
       runTask: vi.fn(),
+      previewTask: vi.fn().mockReturnValue({
+        taskKind: 'review.apply_item_decision',
+        targetRole: 'review',
+        assignedRoles: ['orchestrator', 'review'],
+        requiresConfirmation: true
+      }),
       listRuns: vi.fn().mockReturnValue([
         {
           runId: 'run-1',
@@ -215,6 +228,10 @@ describe('registerAgentIpc', () => {
 
     registerAgentIpc(appPathsFixture())
 
+    const preview = await handlerMap.get('archive:previewAgentTask')?.({}, {
+      prompt: 'Approve review item rq-1',
+      role: 'orchestrator'
+    })
     const runs = await handlerMap.get('archive:listAgentRuns')?.({}, { role: 'review', limit: 5 })
     const detail = await handlerMap.get('archive:getAgentRun')?.({}, { runId: 'run-1' })
     const memories = await handlerMap.get('archive:listAgentMemories')?.({}, { role: 'governance' })
@@ -223,6 +240,16 @@ describe('registerAgentIpc', () => {
       policyKey: 'governance.review.policy'
     })
 
+    expect(runtime.previewTask).toHaveBeenCalledWith({
+      prompt: 'Approve review item rq-1',
+      role: 'orchestrator'
+    })
+    expect(preview).toEqual({
+      taskKind: 'review.apply_item_decision',
+      targetRole: 'review',
+      assignedRoles: ['orchestrator', 'review'],
+      requiresConfirmation: true
+    })
     expect(runtime.listRuns).toHaveBeenCalledWith({ role: 'review', limit: 5 })
     expect(runtime.getRun).toHaveBeenCalledWith({ runId: 'run-1' })
     expect(runtime.listMemories).toHaveBeenCalledWith({ role: 'governance' })
@@ -259,6 +286,6 @@ describe('registerAgentIpc', () => {
         policyKey: 'governance.review.policy'
       })
     ])
-    expect(close).toHaveBeenCalledTimes(4)
+    expect(close).toHaveBeenCalledTimes(5)
   })
 })

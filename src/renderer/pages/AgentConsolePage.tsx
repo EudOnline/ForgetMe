@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type {
+  AgentExecutionPreview,
   AgentMemoryRecord,
   AgentPolicyVersionRecord,
   AgentRole,
@@ -166,6 +167,9 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
   const [policyVersions, setPolicyVersions] = useState<AgentPolicyVersionRecord[]>([])
   const [operationalStateError, setOperationalStateError] = useState<string | null>(null)
   const [isOperationalStateLoading, setIsOperationalStateLoading] = useState(false)
+  const [executionPreview, setExecutionPreview] = useState<AgentExecutionPreview | null>(null)
+  const [previewError, setPreviewError] = useState<string | null>(null)
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false)
 
   const refreshRuns = async (preferredRunId?: string) => {
     const nextRuns = await archiveApi.listAgentRuns()
@@ -207,6 +211,44 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
       setIngestionResultMessage(null)
     }
   }, [role])
+
+  useEffect(() => {
+    const trimmedPrompt = prompt.trim()
+    if (trimmedPrompt.length === 0) {
+      setExecutionPreview(null)
+      setPreviewError(null)
+      setIsPreviewLoading(false)
+      return
+    }
+
+    let cancelled = false
+    const previewInput = buildTaskInput(trimmedPrompt, role)
+    setIsPreviewLoading(true)
+    setPreviewError(null)
+
+    archiveApi.previewAgentTask(previewInput).then((nextPreview) => {
+      if (cancelled) {
+        return
+      }
+
+      setExecutionPreview(nextPreview)
+    }).catch((error: unknown) => {
+      if (cancelled) {
+        return
+      }
+
+      setExecutionPreview(null)
+      setPreviewError(asErrorMessage(error))
+    }).finally(() => {
+      if (!cancelled) {
+        setIsPreviewLoading(false)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [archiveApi, prompt, role])
 
   const operationalStateRole = selectedRunDetail?.targetRole ?? selectedRunDetail?.role ?? role
 
@@ -433,6 +475,26 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
                     {t('common.cancel')}
                   </button>
                 </div>
+              </div>
+            ) : null}
+
+            {(prompt.trim().length > 0 || isPreviewLoading || previewError) ? (
+              <div className="fmAgentPreview" role="status">
+                <h2>{t('agentConsole.executionPreviewTitle')}</h2>
+                {isPreviewLoading ? (
+                  <p>{t('common.loading')}</p>
+                ) : previewError ? (
+                  <p>{t('agentConsole.executionPreviewFailed', { message: previewError })}</p>
+                ) : executionPreview ? (
+                  <>
+                    <p>{t('agentConsole.previewTaskKindLine', { taskKind: executionPreview.taskKind })}</p>
+                    <p>{t('agentConsole.targetRoleLine', { role: executionPreview.targetRole })}</p>
+                    <p>{t('agentConsole.assignedRolesLine', { roles: executionPreview.assignedRoles.join(', ') || t('common.none') })}</p>
+                    <p>{executionPreview.requiresConfirmation
+                      ? t('agentConsole.previewRequiresConfirmation')
+                      : t('agentConsole.previewNoConfirmation')}</p>
+                  </>
+                ) : null}
               </div>
             ) : null}
 

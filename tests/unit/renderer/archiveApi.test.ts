@@ -68,6 +68,16 @@ describe('archiveApi agent runtime methods', () => {
       assignedRoles: [],
       latestAssistantResponse: null
     })
+    await expect(archiveApi.previewAgentTask({
+      prompt: 'Approve review item rq-1',
+      role: 'review',
+      taskKind: 'review.apply_item_decision'
+    })).resolves.toEqual({
+      taskKind: 'review.apply_item_decision',
+      targetRole: 'review',
+      assignedRoles: ['review'],
+      requiresConfirmation: true
+    })
     await expect(archiveApi.listAgentRuns({
       role: 'review'
     })).resolves.toEqual([])
@@ -89,6 +99,12 @@ describe('archiveApi agent runtime methods', () => {
       targetRole: 'review',
       assignedRoles: ['orchestrator', 'review'],
       latestAssistantResponse: '1 pending items across 1 conflict groups.'
+    })
+    const previewAgentTask = vi.fn().mockResolvedValue({
+      taskKind: 'review.apply_item_decision',
+      targetRole: 'review',
+      assignedRoles: ['orchestrator', 'review'],
+      requiresConfirmation: true
     })
     const listAgentRuns = vi.fn().mockResolvedValue([
       {
@@ -154,6 +170,7 @@ describe('archiveApi agent runtime methods', () => {
 
     vi.stubGlobal('window', {
       archiveApi: {
+        previewAgentTask,
         runAgentTask,
         listAgentRuns,
         getAgentRun,
@@ -163,6 +180,10 @@ describe('archiveApi agent runtime methods', () => {
     })
 
     const archiveApi = getArchiveApi()
+    const preview = await archiveApi.previewAgentTask({
+      prompt: 'Approve review item rq-1',
+      role: 'orchestrator'
+    })
     const run = await archiveApi.runAgentTask({
       prompt: 'Summarize the highest-priority pending review work',
       role: 'orchestrator'
@@ -172,6 +193,12 @@ describe('archiveApi agent runtime methods', () => {
     const memories = await archiveApi.listAgentMemories({ role: 'governance' })
     const policyVersions = await archiveApi.listAgentPolicyVersions({ role: 'governance' })
 
+    expect(preview).toEqual({
+      taskKind: 'review.apply_item_decision',
+      targetRole: 'review',
+      assignedRoles: ['orchestrator', 'review'],
+      requiresConfirmation: true
+    })
     expect(run).toEqual({
       runId: 'run-1',
       status: 'completed',

@@ -12,6 +12,7 @@ const archiveApi: ArchiveApi = {
   runRecoveryDrill: (input) => ipcRenderer.invoke('archive:runRecoveryDrill', input),
   preflightImportBatch: (input) => ipcRenderer.invoke('archive:preflightImportBatch', input),
   createImportBatch: (input) => ipcRenderer.invoke('archive:createImportBatch', input),
+  previewAgentTask: (input) => ipcRenderer.invoke('archive:previewAgentTask', input),
   runAgentTask: (input) => ipcRenderer.invoke('archive:runAgentTask', input),
   listAgentRuns: (input) => ipcRenderer.invoke('archive:listAgentRuns', input),
   getAgentRun: (input) => ipcRenderer.invoke('archive:getAgentRun', input),

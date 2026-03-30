@@ -1539,6 +1539,13 @@ export type RunAgentTaskResult = {
   latestAssistantResponse: string | null
 }
 
+export type AgentExecutionPreview = {
+  taskKind: AgentTaskKind
+  targetRole: AgentRole
+  assignedRoles: AgentRole[]
+  requiresConfirmation: boolean
+}
+
 export type ListAgentRunsInput = {
   role?: AgentRole
   status?: AgentRunStatus
@@ -1569,6 +1576,7 @@ export interface ArchiveApi {
   runRecoveryDrill: (input: { exportRoot: string; targetRoot: string; overwrite?: boolean; encryptionPassword?: string }) => Promise<RestoreRunResult | null>
   createImportBatch: (input: CreateImportBatchInput) => Promise<ImportBatchSummary>
   preflightImportBatch: (input: { sourcePaths: string[] }) => Promise<ImportPreflightResult>
+  previewAgentTask: (input: RunAgentTaskInput) => Promise<AgentExecutionPreview>
   runAgentTask: (input: RunAgentTaskInput) => Promise<RunAgentTaskResult>
   listAgentRuns: (input?: ListAgentRunsInput) => Promise<AgentRunRecord[]>
   getAgentRun: (input: GetAgentRunInput) => Promise<AgentRunDetail | null>

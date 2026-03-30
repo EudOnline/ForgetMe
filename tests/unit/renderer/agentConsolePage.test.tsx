@@ -48,6 +48,16 @@ function buildRunDetail(overrides?: Partial<Record<string, unknown>>) {
   }
 }
 
+function buildExecutionPreview(overrides?: Partial<Record<string, unknown>>) {
+  return {
+    taskKind: 'review.summarize_queue',
+    targetRole: 'review',
+    assignedRoles: ['orchestrator', 'review'],
+    requiresConfirmation: false,
+    ...overrides
+  }
+}
+
 afterEach(() => {
   Reflect.deleteProperty(window, 'archiveApi')
   vi.unstubAllGlobals()
@@ -94,6 +104,7 @@ describe('AgentConsolePage', () => {
       assignedRoles: [],
       latestAssistantResponse: null
     })
+    const previewAgentTask = vi.fn().mockResolvedValue(buildExecutionPreview())
     const listAgentRuns = vi.fn()
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([
@@ -152,6 +163,7 @@ describe('AgentConsolePage', () => {
       archiveApi: {
         listAgentRuns,
         getAgentRun,
+        previewAgentTask,
         runAgentTask,
         listAgentMemories,
         listAgentPolicyVersions
@@ -177,7 +189,7 @@ describe('AgentConsolePage', () => {
     expect((await screen.findAllByText('Status: completed')).length).toBeGreaterThan(0)
     expect(screen.getAllByText('Assigned roles: orchestrator, review').length).toBeGreaterThan(0)
     expect(screen.getAllByText('1 pending items across 1 conflict groups.').length).toBeGreaterThan(0)
-    expect(screen.getByText('Target role: review')).toBeInTheDocument()
+    expect(screen.getAllByText('Target role: review').length).toBeGreaterThan(0)
     expect(screen.getByText('Compared with previous review run')).toBeInTheDocument()
     expect(screen.getByText('Message timeline')).toBeInTheDocument()
     expect(screen.getByText('Operational memory')).toBeInTheDocument()
@@ -200,6 +212,12 @@ describe('AgentConsolePage', () => {
       assignedRoles: ['review'],
       latestAssistantResponse: 'Applied safe group group-ready with 2 items.'
     })
+    const previewAgentTask = vi.fn().mockResolvedValue(buildExecutionPreview({
+      taskKind: 'review.apply_safe_group',
+      targetRole: 'review',
+      assignedRoles: ['review'],
+      requiresConfirmation: true
+    }))
     const listAgentRuns = vi.fn().mockResolvedValue([
       buildRunRecord({
         runId: 'run-apply-1',
@@ -232,6 +250,7 @@ describe('AgentConsolePage', () => {
       archiveApi: {
         listAgentRuns,
         getAgentRun,
+        previewAgentTask,
         runAgentTask,
         listAgentMemories: vi.fn().mockResolvedValue([]),
         listAgentPolicyVersions: vi.fn().mockResolvedValue([])
@@ -267,6 +286,46 @@ describe('AgentConsolePage', () => {
         taskKind: 'review.apply_safe_group',
         confirmationToken: 'token-1'
       })
+    })
+  })
+
+  it('shows an execution preview before submit and flags confirmation-gated work', async () => {
+    const previewAgentTask = vi.fn().mockResolvedValue(buildExecutionPreview({
+      taskKind: 'review.apply_safe_group',
+      targetRole: 'review',
+      assignedRoles: ['review'],
+      requiresConfirmation: true
+    }))
+
+    Object.assign(window, {
+      archiveApi: {
+        listAgentRuns: vi.fn().mockResolvedValue([]),
+        getAgentRun: vi.fn().mockResolvedValue(null),
+        previewAgentTask,
+        runAgentTask: vi.fn(),
+        listAgentMemories: vi.fn().mockResolvedValue([]),
+        listAgentPolicyVersions: vi.fn().mockResolvedValue([])
+      }
+    })
+
+    render(<AgentConsolePage />)
+
+    fireEvent.change(screen.getByLabelText('Role override'), {
+      target: { value: 'review' }
+    })
+    fireEvent.change(screen.getByLabelText('Agent prompt'), {
+      target: { value: 'Approve safe group group-ready' }
+    })
+
+    expect(await screen.findByText('Execution preview')).toBeInTheDocument()
+    expect(screen.getByText('Task kind: review.apply_safe_group')).toBeInTheDocument()
+    expect(screen.getByText('Target role: review')).toBeInTheDocument()
+    expect(screen.getByText('Assigned roles: review')).toBeInTheDocument()
+    expect(screen.getByText('Requires confirmation before execution.')).toBeInTheDocument()
+    expect(previewAgentTask).toHaveBeenCalledWith({
+      prompt: 'Approve safe group group-ready',
+      role: 'review',
+      taskKind: 'review.apply_safe_group'
     })
   })
 
@@ -323,6 +382,12 @@ describe('AgentConsolePage', () => {
       }
     })
     const runAgentTask = vi.fn()
+    const previewAgentTask = vi.fn().mockResolvedValue(buildExecutionPreview({
+      taskKind: 'ingestion.import_batch',
+      targetRole: 'ingestion',
+      assignedRoles: ['ingestion'],
+      requiresConfirmation: false
+    }))
     const listAgentRuns = vi.fn().mockResolvedValue([])
     const getAgentRun = vi.fn().mockResolvedValue(null)
 
@@ -333,6 +398,7 @@ describe('AgentConsolePage', () => {
         createImportBatch,
         listAgentRuns,
         getAgentRun,
+        previewAgentTask,
         runAgentTask,
         listAgentMemories: vi.fn().mockResolvedValue([]),
         listAgentPolicyVersions: vi.fn().mockResolvedValue([])
