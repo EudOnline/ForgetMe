@@ -1,16 +1,11 @@
 import type {
-  AgentExecutionPreview,
   AgentMemoryRecord,
   AgentObjectiveDetail,
   AgentObjectiveRecord,
   AgentPolicyVersionRecord,
   AgentProposalRecord,
   AgentRole,
-  AgentSuggestionRecord,
-  AgentTaskKind,
   AgentThreadDetail,
-  AgentRunDetail,
-  AgentRunRecord,
   ApprovedDraftSendDestination,
   ApprovedPersonaDraftHandoffRecord,
   ApprovedPersonaDraftHostedShareLinkRecord,
@@ -35,15 +30,10 @@ import type {
   CreateImportBatchInput,
   DecisionJournalSearchResult,
   DecisionJournalEntry,
-  GetAgentRunInput,
-  GetAgentRuntimeSettingsInput,
   ListApprovedPersonaDraftHostedShareLinksInput,
   ListAgentMemoriesInput,
-  ListAgentSuggestionsInput,
   ListAgentPolicyVersionsInput,
-  ListAgentRunsInput,
   ApprovedDraftHostedShareHostStatus,
-  DismissAgentSuggestionInput,
   OpenApprovedDraftHostedShareLinkInput,
   OpenApprovedDraftHostedShareLinkResult,
   RevokeApprovedPersonaDraftHostedShareLinkInput,
@@ -54,10 +44,6 @@ import type {
   ProfileAttributeCandidate,
   ProviderEgressArtifact,
   RestoreRunResult,
-  RunAgentTaskInput,
-  RunAgentTaskResult,
-  RunAgentSuggestionInput,
-  AgentRuntimeSettingsRecord,
   ConfirmAgentProposalInput,
   CreateAgentObjectiveInput,
   ReviewConflictGroupSummary,
@@ -69,71 +55,12 @@ import type {
   GetAgentThreadInput,
   ListAgentObjectivesInput,
   RespondToAgentProposalInput,
-  StructuredFieldCandidate,
-  UpdateAgentRuntimeSettingsInput
+  StructuredFieldCandidate
 } from '../shared/archiveContracts'
 
 declare global {
   interface Window {
     require?: (moduleName: string) => any
-  }
-}
-
-const destructiveTaskKinds = new Set<AgentTaskKind>([
-  'review.apply_safe_group',
-  'review.apply_item_decision'
-])
-
-function fallbackTaskKindForInput(input: RunAgentTaskInput): AgentTaskKind {
-  if (input.taskKind) {
-    return input.taskKind
-  }
-
-  switch (input.role) {
-    case 'orchestrator':
-      return 'workspace.ask_memory'
-    case 'ingestion':
-      return 'ingestion.import_batch'
-    case 'review':
-      return 'review.summarize_queue'
-    case 'workspace':
-      return 'workspace.ask_memory'
-    case 'governance':
-      return 'governance.summarize_failures'
-  }
-}
-
-function roleForTaskKind(taskKind: AgentTaskKind): AgentRole {
-  if (taskKind.startsWith('ingestion.')) {
-    return 'ingestion'
-  }
-
-  if (taskKind.startsWith('review.')) {
-    return 'review'
-  }
-
-  if (taskKind.startsWith('workspace.')) {
-    return 'workspace'
-  }
-
-  if (taskKind.startsWith('governance.')) {
-    return 'governance'
-  }
-
-  return 'orchestrator'
-}
-
-function buildFallbackExecutionPreview(input: RunAgentTaskInput): AgentExecutionPreview {
-  const taskKind = fallbackTaskKindForInput(input)
-  const targetRole = input.role === 'orchestrator' ? roleForTaskKind(taskKind) : input.role
-
-  return {
-    taskKind,
-    targetRole,
-    assignedRoles: input.role === 'orchestrator' && targetRole !== 'orchestrator'
-      ? ['orchestrator', targetRole]
-      : [targetRole],
-    requiresConfirmation: destructiveTaskKinds.has(taskKind)
   }
 }
 
@@ -191,38 +118,14 @@ const fallbackApi: ArchiveApi = {
   runRecoveryDrill: async (_input: { exportRoot: string; targetRoot: string; overwrite?: boolean; encryptionPassword?: string }) => null as RestoreRunResult | null,
   preflightImportBatch: async (_input: { sourcePaths: string[] }) => ({ items: [], summary: { totalCount: 0, supportedCount: 0, unsupportedCount: 0 } }) as ImportPreflightResult,
   createImportBatch: async (_input: CreateImportBatchInput) => ({ batchId: '', sourceLabel: '', createdAt: '', files: [] }),
-  previewAgentTask: async (input: RunAgentTaskInput) => buildFallbackExecutionPreview(input),
-  runAgentTask: async (_input: RunAgentTaskInput) => ({
-    runId: '',
-    status: 'queued' as const,
-    targetRole: null,
-    assignedRoles: [],
-    latestAssistantResponse: null
-  }) as RunAgentTaskResult,
   createAgentObjective: async (input: CreateAgentObjectiveInput) => buildFallbackObjectiveDetail(input),
   listAgentObjectives: async (_input?: ListAgentObjectivesInput) => [] as AgentObjectiveRecord[],
   getAgentObjective: async (_input: GetAgentObjectiveInput) => null as AgentObjectiveDetail | null,
   getAgentThread: async (_input: GetAgentThreadInput) => null as AgentThreadDetail | null,
   respondToAgentProposal: async (_input: RespondToAgentProposalInput) => null as AgentProposalRecord | null,
   confirmAgentProposal: async (_input: ConfirmAgentProposalInput) => null as AgentProposalRecord | null,
-  listAgentRuns: async (_input?: ListAgentRunsInput) => [] as AgentRunRecord[],
-  getAgentRun: async (_input: GetAgentRunInput) => null as AgentRunDetail | null,
   listAgentMemories: async (_input?: ListAgentMemoriesInput) => [] as AgentMemoryRecord[],
   listAgentPolicyVersions: async (_input?: ListAgentPolicyVersionsInput) => [] as AgentPolicyVersionRecord[],
-  listAgentSuggestions: async (_input?: ListAgentSuggestionsInput) => [] as AgentSuggestionRecord[],
-  refreshAgentSuggestions: async () => [] as AgentSuggestionRecord[],
-  dismissAgentSuggestion: async (_input: DismissAgentSuggestionInput) => null as AgentSuggestionRecord | null,
-  runAgentSuggestion: async (_input: RunAgentSuggestionInput) => null as RunAgentTaskResult | null,
-  getAgentRuntimeSettings: async (_input?: GetAgentRuntimeSettingsInput) => ({
-    settingsId: 'default',
-    autonomyMode: 'manual_only',
-    updatedAt: ''
-  }) as AgentRuntimeSettingsRecord,
-  updateAgentRuntimeSettings: async (input: UpdateAgentRuntimeSettingsInput) => ({
-    settingsId: 'default',
-    autonomyMode: input.autonomyMode,
-    updatedAt: ''
-  }) as AgentRuntimeSettingsRecord,
   listImportBatches: async () => [] as ImportBatchSummary[],
   getImportBatch: async () => null,
   searchArchive: async () => [] as ArchiveSearchResult[],
@@ -326,24 +229,14 @@ function createIpcArchiveApi(): ArchiveApi | null {
     runRecoveryDrill: (input) => ipcRenderer.invoke('archive:runRecoveryDrill', input),
     preflightImportBatch: (input) => ipcRenderer.invoke('archive:preflightImportBatch', input),
     createImportBatch: (input) => ipcRenderer.invoke('archive:createImportBatch', input),
-    previewAgentTask: (input) => ipcRenderer.invoke('archive:previewAgentTask', input),
-    runAgentTask: (input) => ipcRenderer.invoke('archive:runAgentTask', input),
     createAgentObjective: (input) => ipcRenderer.invoke('archive:createAgentObjective', input),
     listAgentObjectives: (input) => ipcRenderer.invoke('archive:listAgentObjectives', input),
     getAgentObjective: (input) => ipcRenderer.invoke('archive:getAgentObjective', input),
     getAgentThread: (input) => ipcRenderer.invoke('archive:getAgentThread', input),
     respondToAgentProposal: (input) => ipcRenderer.invoke('archive:respondToAgentProposal', input),
     confirmAgentProposal: (input) => ipcRenderer.invoke('archive:confirmAgentProposal', input),
-    listAgentRuns: (input) => ipcRenderer.invoke('archive:listAgentRuns', input),
-    getAgentRun: (input) => ipcRenderer.invoke('archive:getAgentRun', input),
     listAgentMemories: (input) => ipcRenderer.invoke('archive:listAgentMemories', input),
     listAgentPolicyVersions: (input) => ipcRenderer.invoke('archive:listAgentPolicyVersions', input),
-    listAgentSuggestions: (input) => ipcRenderer.invoke('archive:listAgentSuggestions', input),
-    refreshAgentSuggestions: () => ipcRenderer.invoke('archive:refreshAgentSuggestions'),
-    dismissAgentSuggestion: (input) => ipcRenderer.invoke('archive:dismissAgentSuggestion', input),
-    runAgentSuggestion: (input) => ipcRenderer.invoke('archive:runAgentSuggestion', input),
-    getAgentRuntimeSettings: (input) => ipcRenderer.invoke('archive:getAgentRuntimeSettings', input),
-    updateAgentRuntimeSettings: (input) => ipcRenderer.invoke('archive:updateAgentRuntimeSettings', input),
     listImportBatches: () => ipcRenderer.invoke('archive:listImportBatches'),
     getImportBatch: (batchId) => ipcRenderer.invoke('archive:getImportBatch', { batchId }),
     searchArchive: (input) => ipcRenderer.invoke('archive:search', input),

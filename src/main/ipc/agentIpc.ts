@@ -3,32 +3,20 @@ import { ipcMain } from 'electron'
 import {
   confirmAgentProposalInputSchema,
   createAgentObjectiveInputSchema,
-  dismissAgentSuggestionInputSchema,
-  getAgentRuntimeSettingsInputSchema,
-  getAgentRunInputSchema,
   getAgentObjectiveInputSchema,
   getAgentThreadInputSchema,
   listAgentMemoriesInputSchema,
   listAgentObjectivesInputSchema,
-  listAgentSuggestionsInputSchema,
   listAgentPolicyVersionsInputSchema,
-  listAgentRunsInputSchema,
-  previewAgentTaskInputSchema,
-  refreshAgentSuggestionsInputSchema,
   respondToAgentProposalInputSchema,
-  runAgentSuggestionInputSchema,
-  runAgentTaskInputSchema,
-  updateAgentRuntimeSettingsInputSchema
 } from '../../shared/ipcSchemas'
-import type { RunAgentTaskInput } from '../../shared/archiveContracts'
 import type { AppPaths } from '../services/appPaths'
-import { createAgentRuntime } from '../services/agentRuntimeService'
+import {
+  listAgentMemories,
+  listAgentPolicyVersions
+} from '../services/agentPersistenceService'
 import { createObjectiveRuntimeService } from '../services/objectiveRuntimeService'
 import { createFacilitatorAgentService } from '../services/agents/facilitatorAgentService'
-import { createGovernanceAgentService } from '../services/agents/governanceAgentService'
-import { createIngestionAgentService } from '../services/agents/ingestionAgentService'
-import { createReviewAgentService } from '../services/agents/reviewAgentService'
-import { createWorkspaceAgentService } from '../services/agents/workspaceAgentService'
 import { createExternalVerificationBrokerService } from '../services/externalVerificationBrokerService'
 import { createExternalWebSearchService } from '../services/externalWebSearchService'
 import { createSubagentRegistryService } from '../services/subagentRegistryService'
@@ -38,31 +26,15 @@ function databasePath(appPaths: AppPaths) {
   return path.join(appPaths.sqliteDir, 'archive.sqlite')
 }
 
-function createArchiveAgentRuntime(appPaths: AppPaths) {
+function openArchiveDatabase(appPaths: AppPaths) {
   const db = openDatabase(databasePath(appPaths))
   runMigrations(db)
 
-  const runtime = createAgentRuntime({
-    db,
-    adapters: [
-      createIngestionAgentService(),
-      createReviewAgentService(),
-      createWorkspaceAgentService({
-        publicationRoot: path.join(appPaths.root, 'agent-draft-publications')
-      }),
-      createGovernanceAgentService()
-    ]
-  })
-
-  return {
-    db,
-    runtime
-  }
+  return db
 }
 
 function createArchiveObjectiveRuntime(appPaths: AppPaths) {
-  const db = openDatabase(databasePath(appPaths))
-  runMigrations(db)
+  const db = openArchiveDatabase(appPaths)
   const externalWebSearch = createExternalWebSearchService()
 
   const runtime = createObjectiveRuntimeService({
@@ -81,14 +53,14 @@ function createArchiveObjectiveRuntime(appPaths: AppPaths) {
   }
 }
 
-async function withArchiveAgentRuntime<T>(
+async function withArchiveDatabase<T>(
   appPaths: AppPaths,
-  work: (runtime: ReturnType<typeof createAgentRuntime>) => Promise<T> | T
+  work: (db: ReturnType<typeof openArchiveDatabase>) => Promise<T> | T
 ) {
-  const { db, runtime } = createArchiveAgentRuntime(appPaths)
+  const db = openArchiveDatabase(appPaths)
 
   try {
-    return await work(runtime)
+    return await work(db)
   } finally {
     db.close()
   }
@@ -172,63 +144,13 @@ export function registerAgentIpc(appPaths: AppPaths) {
     return withArchiveObjectiveRuntime(appPaths, (runtime) => runtime.confirmAgentProposal(input))
   })
 
-  ipcMain.handle('archive:previewAgentTask', async (_event, payload) => {
-    const input = previewAgentTaskInputSchema.parse(payload) as RunAgentTaskInput
-    return withArchiveAgentRuntime(appPaths, (runtime) => runtime.previewTask(input))
-  })
-
-  ipcMain.handle('archive:runAgentTask', async (_event, payload) => {
-    const input = runAgentTaskInputSchema.parse(payload) as RunAgentTaskInput
-    return withArchiveAgentRuntime(appPaths, (runtime) => runtime.runTask(input))
-  })
-
-  ipcMain.handle('archive:listAgentRuns', async (_event, payload) => {
-    const input = listAgentRunsInputSchema.parse(payload)
-    return withArchiveAgentRuntime(appPaths, (runtime) => runtime.listRuns(input))
-  })
-
-  ipcMain.handle('archive:getAgentRun', async (_event, payload) => {
-    const input = getAgentRunInputSchema.parse(payload)
-    return withArchiveAgentRuntime(appPaths, (runtime) => runtime.getRun(input))
-  })
-
   ipcMain.handle('archive:listAgentMemories', async (_event, payload) => {
     const input = listAgentMemoriesInputSchema.parse(payload)
-    return withArchiveAgentRuntime(appPaths, (runtime) => runtime.listMemories(input))
+    return withArchiveDatabase(appPaths, (db) => listAgentMemories(db, input))
   })
 
   ipcMain.handle('archive:listAgentPolicyVersions', async (_event, payload) => {
     const input = listAgentPolicyVersionsInputSchema.parse(payload)
-    return withArchiveAgentRuntime(appPaths, (runtime) => runtime.listPolicyVersions(input))
-  })
-
-  ipcMain.handle('archive:listAgentSuggestions', async (_event, payload) => {
-    const input = listAgentSuggestionsInputSchema.parse(payload)
-    return withArchiveAgentRuntime(appPaths, (runtime) => runtime.listSuggestions(input))
-  })
-
-  ipcMain.handle('archive:refreshAgentSuggestions', async (_event, payload) => {
-    refreshAgentSuggestionsInputSchema.parse(payload)
-    return withArchiveAgentRuntime(appPaths, (runtime) => runtime.refreshSuggestions())
-  })
-
-  ipcMain.handle('archive:dismissAgentSuggestion', async (_event, payload) => {
-    const input = dismissAgentSuggestionInputSchema.parse(payload)
-    return withArchiveAgentRuntime(appPaths, (runtime) => runtime.dismissSuggestion(input))
-  })
-
-  ipcMain.handle('archive:runAgentSuggestion', async (_event, payload) => {
-    const input = runAgentSuggestionInputSchema.parse(payload)
-    return withArchiveAgentRuntime(appPaths, (runtime) => runtime.runSuggestion(input))
-  })
-
-  ipcMain.handle('archive:getAgentRuntimeSettings', async (_event, payload) => {
-    getAgentRuntimeSettingsInputSchema.parse(payload)
-    return withArchiveAgentRuntime(appPaths, (runtime) => runtime.getRuntimeSettings())
-  })
-
-  ipcMain.handle('archive:updateAgentRuntimeSettings', async (_event, payload) => {
-    const input = updateAgentRuntimeSettingsInputSchema.parse(payload)
-    return withArchiveAgentRuntime(appPaths, (runtime) => runtime.updateRuntimeSettings(input))
+    return withArchiveDatabase(appPaths, (db) => listAgentPolicyVersions(db, input))
   })
 }

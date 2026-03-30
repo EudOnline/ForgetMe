@@ -12,7 +12,6 @@ import { registerReviewIpc } from './ipc/reviewIpc'
 import { registerSearchIpc } from './ipc/searchIpc'
 import { ensureAppPaths } from './services/appPaths'
 import { createApprovedDraftProviderSendRetryRunner } from './services/approvedDraftProviderSendRetryRunnerService'
-import { createAgentProactiveRunner } from './services/agentProactiveRunnerService'
 import { createEnrichmentRunner } from './services/enrichmentRunnerService'
 
 const e2eUserDataDir = process.env.FORGETME_E2E_USER_DATA_DIR?.trim() || null
@@ -67,7 +66,6 @@ const createWindow = () => {
 
 let enrichmentRunner: ReturnType<typeof createEnrichmentRunner> | null = null
 let approvedDraftProviderSendRetryRunner: ReturnType<typeof createApprovedDraftProviderSendRetryRunner> | null = null
-let agentProactiveRunner: ReturnType<typeof createAgentProactiveRunner> | null = null
 
 app.whenReady().then(() => {
   const appPaths = ensureAppPaths(resolveAppDataRoot())
@@ -80,7 +78,6 @@ app.whenReady().then(() => {
   registerPeopleIpc(appPaths)
   registerReviewIpc(appPaths)
   registerSearchIpc(appPaths)
-  agentProactiveRunner = createAgentProactiveRunner({ appPaths })
   enrichmentRunner = createEnrichmentRunner({ appPaths })
   approvedDraftProviderSendRetryRunner = createApprovedDraftProviderSendRetryRunner({ appPaths })
   createWindow()
@@ -93,7 +90,6 @@ app.whenReady().then(() => {
 })
 
 app.on('before-quit', () => {
-  agentProactiveRunner?.stop()
   enrichmentRunner?.stop()
   approvedDraftProviderSendRetryRunner?.stop()
 })

@@ -266,24 +266,19 @@ npm run build
 - quote-backed evidence reads, advice-mode responses, and persona-request guardrails with reviewed draft sandbox flows
 - approved-draft publication, provider-send, hosted-share creation, hosted-share revoke, and replay-safe share-surface access from the same workspace
 
-### Five-Agent Runtime Baseline
+### Message-Native Objective Runtime Baseline
 
-`Agent Console` adds one agent-facing surface on top of the existing local-first archive.
+`Objective Workbench` replaces the old run-centric agent surface with an `objective / thread / message / proposal` runtime.
 
-- `orchestrator` delegates user goals into the safest matching role instead of bypassing existing services
-- `ingestion` plans imports, reruns enrichment, and summarizes document evidence
-- `review` summarizes queue pressure, suggests safe-group actions, executes item-level approve/reject decisions through the existing review queue service, and keeps destructive review actions confirmation-gated
-- `workspace` reuses `Memory Workspace`, compare, and approved-draft publication flows
-- `governance` records operational feedback, summarizes failed runs, and drafts policy versions without auto-activation
+- a facilitator starts scoped objectives and keeps deliberation inside explicit threads instead of raw console runs
+- proposals can pause for governance challenge, operator confirmation, or external verification before any mutation happens
+- external verification is brokered through a bounded web-search boundary with captured evidence and source tracing
+- subagents stay constrained to proposal-scoped work, while objective checkpoints keep the operator focused on key decisions
+- objective state, thread messages, proposals, checkpoints, operational memories, and policy history are all persisted in SQLite
 
-Agent runs, agent messages, operational memories, and policy drafts are persisted in SQLite so the console can replay recent work without inventing a second source of truth. Persisted run metadata now includes delegated role assignment and the latest assistant summary so replay stays durable across navigation and app relaunches.
-`role` records who initiated execution, while `targetRole` records which role actually handled delegated work (for example, an `orchestrator` run can target `review`).
-Approved truth remains review-gated: agents do not directly mutate approved fact tables, and high-risk review actions still require an explicit confirmation token.
-Phase scope remains local-first: this slice still does not introduce a background autonomous scheduler.
+### Objective Runtime Traffic via LiteLLM
 
-### Agent Traffic via LiteLLM
-
-Agent traffic still flows through the existing `LiteLLM` gateway and the same provider configuration:
+Objective-runtime traffic still flows through the existing `LiteLLM` gateway and the same provider configuration:
 
 - `FORGETME_LITELLM_BASE_URL`
 - `FORGETME_DEFAULT_MODEL_PROVIDER`
@@ -293,13 +288,14 @@ Agent traffic still flows through the existing `LiteLLM` gateway and the same pr
 - `OPENROUTER_API_KEY`
 
 Optional role-scoped routing for `memory_dialogue` can use env vars such as `FORGETME_MODEL_MEMORY_DIALOGUE_WORKSPACE_SILICONFLOW`.
-The gateway also forwards agent metadata headers like role, run id, policy version, and memory profile so outbound model traffic stays auditable.
+The gateway also forwards objective/runtime metadata so outbound model traffic stays auditable.
 
-### Five-Agent Verification
+### Message-Native Objective Runtime Verification
 
 ```bash
-npm run test:unit -- tests/unit/main/agentRuntimeService.test.ts tests/unit/main/ingestionAgentService.test.ts tests/unit/main/reviewAgentService.test.ts tests/unit/main/workspaceAgentService.test.ts tests/unit/main/governanceAgentService.test.ts tests/unit/main/agentIpc.test.ts tests/unit/renderer/agentConsolePage.test.tsx
-npm run test:e2e:agent
+npm run test:unit -- tests/unit/main/agentIpc.test.ts tests/unit/preload/index.test.ts tests/unit/renderer/archiveApi.test.ts tests/unit/repo/objectiveRuntimeCleanup.test.ts
+npm run test:e2e -- tests/e2e/objective-workbench-deliberation-flow.spec.ts tests/e2e/objective-workbench-external-verification-flow.spec.ts tests/e2e/objective-workbench-operator-confirmation-flow.spec.ts
+npm run build
 ```
 
 ### Completion Verification

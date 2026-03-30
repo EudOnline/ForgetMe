@@ -53,10 +53,11 @@ describe('archiveApi preservation methods', () => {
 })
 
 describe('archiveApi agent runtime methods', () => {
-  it('exposes agent runtime methods in the fallback API', async () => {
+  it('exposes only objective runtime methods in the fallback API', async () => {
     vi.stubGlobal('window', {})
 
     const archiveApi = getArchiveApi()
+    const archiveApiRecord = archiveApi as unknown as Record<string, unknown>
 
     await expect(archiveApi.createAgentObjective({
       title: 'Verify an external claim before responding',
@@ -89,66 +90,20 @@ describe('archiveApi agent runtime methods', () => {
       decision: 'confirm',
       operatorNote: 'Confirmed after reviewing the evidence bundle.'
     })).resolves.toBeNull()
-    await expect(archiveApi.runAgentTask({
-      prompt: 'Summarize the highest-priority pending review work',
-      role: 'orchestrator'
-    })).resolves.toEqual({
-      runId: '',
-      status: 'queued',
-      targetRole: null,
-      assignedRoles: [],
-      latestAssistantResponse: null
-    })
-    await expect(archiveApi.previewAgentTask({
-      prompt: 'Approve review item rq-1',
-      role: 'review',
-      taskKind: 'review.apply_item_decision'
-    })).resolves.toEqual({
-      taskKind: 'review.apply_item_decision',
-      targetRole: 'review',
-      assignedRoles: ['review'],
-      requiresConfirmation: true
-    })
-    await expect(archiveApi.listAgentRuns({
-      role: 'review'
-    })).resolves.toEqual([])
-    await expect(archiveApi.getAgentRun({
-      runId: 'run-1'
-    })).resolves.toBeNull()
-    await expect(archiveApi.listAgentMemories({
-      role: 'governance'
-    })).resolves.toEqual([])
-    await expect(archiveApi.listAgentPolicyVersions({
-      role: 'governance'
-    })).resolves.toEqual([])
-    await expect(archiveApi.listAgentSuggestions({
-      role: 'governance',
-      status: 'suggested',
-      limit: 10
-    })).resolves.toEqual([])
-    await expect(archiveApi.refreshAgentSuggestions()).resolves.toEqual([])
-    await expect(archiveApi.dismissAgentSuggestion({
-      suggestionId: 'suggestion-1'
-    })).resolves.toBeNull()
-    await expect(archiveApi.runAgentSuggestion({
-      suggestionId: 'suggestion-1',
-      confirmationToken: 'confirm-1'
-    })).resolves.toBeNull()
-    await expect(archiveApi.getAgentRuntimeSettings()).resolves.toEqual({
-      settingsId: 'default',
-      autonomyMode: 'manual_only',
-      updatedAt: ''
-    })
-    await expect(archiveApi.updateAgentRuntimeSettings({
-      autonomyMode: 'suggest_safe_auto_run'
-    })).resolves.toEqual({
-      settingsId: 'default',
-      autonomyMode: 'suggest_safe_auto_run',
-      updatedAt: ''
-    })
+
+    expect('previewAgentTask' in archiveApiRecord).toBe(false)
+    expect('runAgentTask' in archiveApiRecord).toBe(false)
+    expect('listAgentRuns' in archiveApiRecord).toBe(false)
+    expect('getAgentRun' in archiveApiRecord).toBe(false)
+    expect('listAgentSuggestions' in archiveApiRecord).toBe(false)
+    expect('refreshAgentSuggestions' in archiveApiRecord).toBe(false)
+    expect('dismissAgentSuggestion' in archiveApiRecord).toBe(false)
+    expect('runAgentSuggestion' in archiveApiRecord).toBe(false)
+    expect('getAgentRuntimeSettings' in archiveApiRecord).toBe(false)
+    expect('updateAgentRuntimeSettings' in archiveApiRecord).toBe(false)
   })
 
-  it('preserves renderer-provided agent runtime methods', async () => {
+  it('preserves renderer-provided objective runtime methods and omits old execution APIs', async () => {
     const createAgentObjective = vi.fn().mockResolvedValue({
       objectiveId: 'objective-1',
       title: 'Verify an external claim before responding',
@@ -345,155 +300,6 @@ describe('archiveApi agent runtime methods', () => {
       updatedAt: '2026-03-30T00:02:00.000Z',
       committedAt: '2026-03-30T00:02:00.000Z'
     })
-    const runAgentTask = vi.fn().mockResolvedValue({
-      runId: 'run-1',
-      status: 'completed',
-      targetRole: 'review',
-      assignedRoles: ['orchestrator', 'review'],
-      latestAssistantResponse: '1 pending items across 1 conflict groups.'
-    })
-    const previewAgentTask = vi.fn().mockResolvedValue({
-      taskKind: 'review.apply_item_decision',
-      targetRole: 'review',
-      assignedRoles: ['orchestrator', 'review'],
-      requiresConfirmation: true
-    })
-    const listAgentRuns = vi.fn().mockResolvedValue([
-      {
-        runId: 'run-1',
-        role: 'orchestrator',
-        taskKind: 'review.summarize_queue',
-        targetRole: 'review',
-        assignedRoles: ['orchestrator', 'review'],
-        latestAssistantResponse: '1 pending items across 1 conflict groups.',
-        status: 'completed',
-        prompt: 'Summarize the highest-priority pending review work',
-        confirmationToken: null,
-        policyVersion: null,
-        errorMessage: null,
-        createdAt: '2026-03-29T00:00:00.000Z',
-        updatedAt: '2026-03-29T00:00:00.000Z'
-      }
-    ])
-    const getAgentRun = vi.fn().mockResolvedValue({
-      runId: 'run-1',
-      role: 'orchestrator',
-      taskKind: 'review.summarize_queue',
-      targetRole: 'review',
-      assignedRoles: ['orchestrator', 'review'],
-      latestAssistantResponse: '1 pending items across 1 conflict groups.',
-      status: 'completed',
-      prompt: 'Summarize the highest-priority pending review work',
-      confirmationToken: null,
-      policyVersion: null,
-      errorMessage: null,
-      createdAt: '2026-03-29T00:00:00.000Z',
-      updatedAt: '2026-03-29T00:00:00.000Z',
-      messages: [
-        {
-          messageId: 'message-1',
-          runId: 'run-1',
-          ordinal: 1,
-          sender: 'agent',
-          content: '1 pending items across 1 conflict groups.',
-          createdAt: '2026-03-29T00:00:00.000Z'
-        }
-      ]
-    })
-    const listAgentMemories = vi.fn().mockResolvedValue([
-      {
-        memoryId: 'memory-1',
-        role: 'governance',
-        memoryKey: 'governance.feedback',
-        memoryValue: 'Prefer queue summaries first.',
-        createdAt: '2026-03-29T00:00:00.000Z',
-        updatedAt: '2026-03-29T00:00:00.000Z'
-      }
-    ])
-    const listAgentPolicyVersions = vi.fn().mockResolvedValue([
-      {
-        policyVersionId: 'policy-1',
-        role: 'governance',
-        policyKey: 'governance.review.policy',
-        policyBody: 'Prefer queue summaries first.',
-        createdAt: '2026-03-29T00:00:01.000Z'
-      }
-    ])
-    const listAgentSuggestions = vi.fn().mockResolvedValue([
-      {
-        suggestionId: 'suggestion-1',
-        triggerKind: 'governance.failed_runs_detected',
-        status: 'suggested',
-        role: 'governance',
-        taskKind: 'governance.summarize_failures',
-        taskInput: {
-          role: 'governance',
-          taskKind: 'governance.summarize_failures',
-          prompt: 'Summarize failed agent runs from the proactive monitor.'
-        },
-        dedupeKey: 'governance.failed-runs::latest',
-        sourceRunId: null,
-        executedRunId: null,
-        createdAt: '2026-03-30T00:00:00.000Z',
-        updatedAt: '2026-03-30T00:00:00.000Z',
-        lastObservedAt: '2026-03-30T00:00:00.000Z'
-      }
-    ])
-    const refreshAgentSuggestions = vi.fn().mockResolvedValue([
-      {
-        suggestionId: 'suggestion-1',
-        triggerKind: 'governance.failed_runs_detected',
-        status: 'suggested',
-        role: 'governance',
-        taskKind: 'governance.summarize_failures',
-        taskInput: {
-          role: 'governance',
-          taskKind: 'governance.summarize_failures',
-          prompt: 'Summarize failed agent runs from the proactive monitor.'
-        },
-        dedupeKey: 'governance.failed-runs::latest',
-        sourceRunId: null,
-        executedRunId: null,
-        createdAt: '2026-03-30T00:00:00.000Z',
-        updatedAt: '2026-03-30T00:00:00.000Z',
-        lastObservedAt: '2026-03-30T00:00:00.000Z'
-      }
-    ])
-    const dismissAgentSuggestion = vi.fn().mockResolvedValue({
-      suggestionId: 'suggestion-1',
-      triggerKind: 'governance.failed_runs_detected',
-      status: 'dismissed',
-      role: 'governance',
-      taskKind: 'governance.summarize_failures',
-      taskInput: {
-        role: 'governance',
-        taskKind: 'governance.summarize_failures',
-        prompt: 'Summarize failed agent runs from the proactive monitor.'
-      },
-      dedupeKey: 'governance.failed-runs::latest',
-      sourceRunId: null,
-      executedRunId: null,
-      createdAt: '2026-03-30T00:00:00.000Z',
-      updatedAt: '2026-03-30T00:00:05.000Z',
-      lastObservedAt: '2026-03-30T00:00:00.000Z'
-    })
-    const runAgentSuggestion = vi.fn().mockResolvedValue({
-      runId: 'run-from-suggestion-1',
-      status: 'completed',
-      targetRole: 'governance',
-      assignedRoles: ['governance'],
-      latestAssistantResponse: 'Failures summarized.'
-    })
-    const getAgentRuntimeSettings = vi.fn().mockResolvedValue({
-      settingsId: 'default',
-      autonomyMode: 'manual_only',
-      updatedAt: '2026-03-30T00:00:00.000Z'
-    })
-    const updateAgentRuntimeSettings = vi.fn().mockResolvedValue({
-      settingsId: 'default',
-      autonomyMode: 'suggest_safe_auto_run',
-      updatedAt: '2026-03-30T00:05:00.000Z'
-    })
 
     vi.stubGlobal('window', {
       archiveApi: {
@@ -502,23 +308,12 @@ describe('archiveApi agent runtime methods', () => {
         getAgentObjective,
         getAgentThread,
         respondToAgentProposal,
-        confirmAgentProposal,
-        previewAgentTask,
-        runAgentTask,
-        listAgentRuns,
-        getAgentRun,
-        listAgentMemories,
-        listAgentPolicyVersions,
-        listAgentSuggestions,
-        refreshAgentSuggestions,
-        dismissAgentSuggestion,
-        runAgentSuggestion,
-        getAgentRuntimeSettings,
-        updateAgentRuntimeSettings
+        confirmAgentProposal
       }
     })
 
     const archiveApi = getArchiveApi()
+    const archiveApiRecord = archiveApi as unknown as Record<string, unknown>
     const createdObjective = await archiveApi.createAgentObjective({
       title: 'Verify an external claim before responding',
       objectiveKind: 'evidence_investigation',
@@ -545,35 +340,6 @@ describe('archiveApi agent runtime methods', () => {
       decision: 'confirm',
       operatorNote: 'Confirmed after reviewing the evidence bundle.'
     })
-    const preview = await archiveApi.previewAgentTask({
-      prompt: 'Approve review item rq-1',
-      role: 'orchestrator'
-    })
-    const run = await archiveApi.runAgentTask({
-      prompt: 'Summarize the highest-priority pending review work',
-      role: 'orchestrator'
-    })
-    const runs = await archiveApi.listAgentRuns({ role: 'review' })
-    const detail = await archiveApi.getAgentRun({ runId: 'run-1' })
-    const memories = await archiveApi.listAgentMemories({ role: 'governance' })
-    const policyVersions = await archiveApi.listAgentPolicyVersions({ role: 'governance' })
-    const suggestions = await archiveApi.listAgentSuggestions({
-      role: 'governance',
-      status: 'suggested',
-      limit: 10
-    })
-    const refreshedSuggestions = await archiveApi.refreshAgentSuggestions()
-    const dismissed = await archiveApi.dismissAgentSuggestion({
-      suggestionId: 'suggestion-1'
-    })
-    const runSuggestionResult = await archiveApi.runAgentSuggestion({
-      suggestionId: 'suggestion-1',
-      confirmationToken: 'confirm-1'
-    })
-    const runtimeSettings = await archiveApi.getAgentRuntimeSettings()
-    const updatedRuntimeSettings = await archiveApi.updateAgentRuntimeSettings({
-      autonomyMode: 'suggest_safe_auto_run'
-    })
 
     expect(createdObjective.objectiveId).toBe('objective-1')
     expect(createdObjective.mainThreadId).toBe('thread-main-1')
@@ -582,49 +348,16 @@ describe('archiveApi agent runtime methods', () => {
     expect(thread?.messages[0]?.body).toContain('Check the source')
     expect(challengedProposal?.status).toBe('challenged')
     expect(confirmedProposal?.status).toBe('committed')
-    expect(preview).toEqual({
-      taskKind: 'review.apply_item_decision',
-      targetRole: 'review',
-      assignedRoles: ['orchestrator', 'review'],
-      requiresConfirmation: true
-    })
-    expect(run).toEqual({
-      runId: 'run-1',
-      status: 'completed',
-      targetRole: 'review',
-      assignedRoles: ['orchestrator', 'review'],
-      latestAssistantResponse: '1 pending items across 1 conflict groups.'
-    })
-    expect(runs[0]?.runId).toBe('run-1')
-    expect(runs[0]?.targetRole).toBe('review')
-    expect(runs[0]?.assignedRoles).toEqual(['orchestrator', 'review'])
-    expect(runs[0]?.latestAssistantResponse).toBe('1 pending items across 1 conflict groups.')
-    expect(detail?.targetRole).toBe('review')
-    expect(detail?.assignedRoles).toEqual(['orchestrator', 'review'])
-    expect(detail?.latestAssistantResponse).toBe('1 pending items across 1 conflict groups.')
-    expect(detail?.messages[0]?.content).toContain('pending items')
-    expect(memories[0]?.memoryKey).toBe('governance.feedback')
-    expect(policyVersions[0]?.policyKey).toBe('governance.review.policy')
-    expect(suggestions[0]?.suggestionId).toBe('suggestion-1')
-    expect(refreshedSuggestions[0]?.suggestionId).toBe('suggestion-1')
-    expect(dismissed?.status).toBe('dismissed')
-    expect(runSuggestionResult).toEqual({
-      runId: 'run-from-suggestion-1',
-      status: 'completed',
-      targetRole: 'governance',
-      assignedRoles: ['governance'],
-      latestAssistantResponse: 'Failures summarized.'
-    })
-    expect(runtimeSettings).toEqual({
-      settingsId: 'default',
-      autonomyMode: 'manual_only',
-      updatedAt: '2026-03-30T00:00:00.000Z'
-    })
-    expect(updatedRuntimeSettings).toEqual({
-      settingsId: 'default',
-      autonomyMode: 'suggest_safe_auto_run',
-      updatedAt: '2026-03-30T00:05:00.000Z'
-    })
+    expect('previewAgentTask' in archiveApiRecord).toBe(false)
+    expect('runAgentTask' in archiveApiRecord).toBe(false)
+    expect('listAgentRuns' in archiveApiRecord).toBe(false)
+    expect('getAgentRun' in archiveApiRecord).toBe(false)
+    expect('listAgentSuggestions' in archiveApiRecord).toBe(false)
+    expect('refreshAgentSuggestions' in archiveApiRecord).toBe(false)
+    expect('dismissAgentSuggestion' in archiveApiRecord).toBe(false)
+    expect('runAgentSuggestion' in archiveApiRecord).toBe(false)
+    expect('getAgentRuntimeSettings' in archiveApiRecord).toBe(false)
+    expect('updateAgentRuntimeSettings' in archiveApiRecord).toBe(false)
   })
 })
 
