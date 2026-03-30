@@ -39,7 +39,9 @@ test('agent console confirmation-gates destructive review item actions and repla
   let page = await electronApp.firstWindow()
 
   await page.getByText('Choose Files').click()
-  await expect(page.getByRole('button', { name: 'chat-agent-console-replay.json' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Import Supported Files' })).toBeVisible()
+  await page.getByRole('button', { name: 'Import Supported Files' }).click()
+  await expect(page.getByText('Imported 1 file')).toBeVisible()
 
   await page.getByRole('button', { name: 'Enrichment Jobs' }).click()
   await expect(page.getByText('completed')).toBeVisible({ timeout: 15_000 })
@@ -73,6 +75,7 @@ test('agent console confirmation-gates destructive review item actions and repla
   await expect(page.getByRole('heading', { name: 'Agent Console' })).toBeVisible()
   await page.getByLabel('Role override').selectOption('review')
   await page.getByLabel('Agent prompt').fill(`Approve review item ${queueItemId}`)
+  await expect(page.getByText('Execution preview')).toBeVisible()
   await page.getByRole('button', { name: 'Run agent task' }).click()
 
   await expect(page.getByText('Confirmation token required before applying this review action.')).toBeVisible()

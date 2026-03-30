@@ -26,6 +26,9 @@ test('agent console runs a real ingestion import after file picking and prefligh
 
   await page.getByLabel('Role override').selectOption('ingestion')
   await page.getByLabel('Agent prompt').fill('Import these files into the archive')
+  await expect(page.getByText('Execution preview')).toBeVisible()
+  await expect(page.getByText('Task kind: ingestion.import_batch')).toBeVisible()
+  await expect(page.getByText('No confirmation required.')).toBeVisible()
   await page.getByRole('button', { name: 'Run agent task' }).click()
 
   await expect(page.getByText('1 supported, 1 unsupported')).toBeVisible()
