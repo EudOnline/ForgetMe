@@ -187,7 +187,7 @@ export function createReviewAgentService(
           const result = rejectItem(context.db, {
             queueItemId,
             actor: 'agent:review',
-            note: 'Rejected through Agent Console'
+            note: 'Rejected through objective runtime'
           })
 
           return {

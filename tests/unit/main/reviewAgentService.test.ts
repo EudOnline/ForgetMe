@@ -285,7 +285,7 @@ describe('review agent service', () => {
     expect(rejectReviewItem).toHaveBeenCalledWith(db, {
       queueItemId: 'rq-2',
       actor: 'agent:review',
-      note: 'Rejected through Agent Console'
+      note: 'Rejected through objective runtime'
     })
     expect(approveReviewItem).not.toHaveBeenCalled()
     expect(result.messages?.at(-1)?.content).toContain('rq-2')

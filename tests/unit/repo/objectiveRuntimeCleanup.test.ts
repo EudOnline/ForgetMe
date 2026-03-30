@@ -26,4 +26,15 @@ describe('message-native objective runtime cleanup', () => {
       'npm run test:e2e -- tests/e2e/objective-workbench-deliberation-flow.spec.ts tests/e2e/objective-workbench-external-verification-flow.spec.ts tests/e2e/objective-workbench-operator-confirmation-flow.spec.ts'
     )
   })
+
+  it('removes stale agent-console UI strings and key usage from the active renderer', () => {
+    const i18n = readRepoFile('src/renderer/i18n.tsx')
+    const importPage = readRepoFile('src/renderer/pages/ImportPage.tsx')
+
+    expect(i18n).not.toContain('nav.agentConsole')
+    expect(i18n).not.toContain('page.ops.agentConsole')
+    expect(i18n).not.toContain('agentConsole.')
+    expect(importPage).not.toContain("t('agentConsole.openReviewQueue')")
+    expect(importPage).toContain("t('import.outcome.openReviewQueue')")
+  })
 })

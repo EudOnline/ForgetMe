@@ -302,7 +302,7 @@ export function ImportPage(props: {
                   props.onOpenReviewQueue?.()
                 }}
               >
-                {t('agentConsole.openReviewQueue')}
+                {t('import.outcome.openReviewQueue')}
               </button>
             ) : null}
             <button type="button" onClick={handleImportMore}>
