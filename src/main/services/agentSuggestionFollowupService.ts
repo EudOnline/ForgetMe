@@ -1,4 +1,9 @@
-import type { AgentTaskKind } from '../../shared/archiveContracts'
+import type {
+  AgentRole,
+  AgentTaskKind,
+  AgentTaskKindByRole,
+  RunAgentTaskInput
+} from '../../shared/archiveContracts'
 import {
   getAgentRun,
   getAgentSuggestion,
@@ -30,13 +35,25 @@ function hasFollowupForParent(db: ArchiveDatabase, input: {
   })
 }
 
+function buildTaskInputForRole<Role extends AgentRole>(
+  role: Role,
+  taskKind: AgentTaskKindByRole[Role],
+  prompt: string
+): Extract<RunAgentTaskInput, { role: Role }> {
+  return {
+    role,
+    taskKind,
+    prompt
+  } as Extract<RunAgentTaskInput, { role: Role }>
+}
+
 function buildFollowup(input: {
   triggerKind: RankedAgentSuggestionSeed['triggerKind']
   role: RankedAgentSuggestionSeed['role']
   taskKind: RankedAgentSuggestionSeed['taskKind']
   prompt: string
   dedupeKey: string
-  sourceRunId: string
+  sourceRunId: string | null
   priority: RankedAgentSuggestionSeed['priority']
   rationale: string
   autoRunnable: boolean
@@ -46,13 +63,9 @@ function buildFollowup(input: {
     triggerKind: input.triggerKind,
     role: input.role,
     taskKind: input.taskKind,
-    taskInput: {
-      role: input.role,
-      taskKind: input.taskKind,
-      prompt: input.prompt
-    },
+    taskInput: buildTaskInputForRole(input.role, input.taskKind, input.prompt),
     dedupeKey: input.dedupeKey,
-    sourceRunId: input.sourceRunId,
+    sourceRunId: input.sourceRunId ?? null,
     priority: input.priority,
     rationale: input.rationale,
     autoRunnable: input.autoRunnable,

@@ -108,7 +108,10 @@ describe('agentSuggestionFollowupService', () => {
       rationale: '1 failed runs remain after the summary and may require a policy update.'
     }))
 
-    upsertAgentSuggestion(db, firstPass[0]!)
+    upsertAgentSuggestion(db, {
+      ...firstPass[0]!,
+      sourceRunId: firstPass[0]?.sourceRunId ?? null
+    })
 
     const secondPass = deriveAgentSuggestionFollowups(db, {
       runId: summaryRun.runId,
