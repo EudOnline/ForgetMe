@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import type {
+  AgentAutonomyMode,
   AgentExecutionPreview,
   AgentMemoryRecord,
   AgentPolicyVersionRecord,
   AgentRole,
   AgentRunDetail,
+  AgentRunExecutionOrigin,
   AgentRunRecord,
+  AgentRuntimeSettingsRecord,
   AgentSuggestionRecord,
   AgentTaskKind,
   ImportPreflightResult,
@@ -141,6 +144,39 @@ function proactiveTriggerLabelKey(triggerKind: AgentSuggestionRecord['triggerKin
   }
 }
 
+function autonomyModeLabelKey(mode: AgentAutonomyMode) {
+  switch (mode) {
+    case 'manual_only':
+      return 'agentConsole.autonomyMode.manual_only'
+    case 'suggest_safe_auto_run':
+      return 'agentConsole.autonomyMode.suggest_safe_auto_run'
+  }
+}
+
+function priorityLabelKey(priority: AgentSuggestionRecord['priority']) {
+  switch (priority) {
+    case 'low':
+      return 'agentConsole.priority.low'
+    case 'medium':
+      return 'agentConsole.priority.medium'
+    case 'high':
+      return 'agentConsole.priority.high'
+    case 'critical':
+      return 'agentConsole.priority.critical'
+  }
+}
+
+function executionOriginLabelKey(origin: AgentRunExecutionOrigin) {
+  switch (origin) {
+    case 'operator_manual':
+      return 'agentConsole.executionOrigin.operator_manual'
+    case 'operator_suggestion':
+      return 'agentConsole.executionOrigin.operator_suggestion'
+    case 'auto_runner':
+      return 'agentConsole.executionOrigin.auto_runner'
+  }
+}
+
 function inferDisplayRoles(run: Pick<AgentRunRecord, 'role' | 'assignedRoles'> | AgentRunDetail | null) {
   if (!run) {
     return []
@@ -198,6 +234,10 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null)
   const [suggestionsStatusMessage, setSuggestionsStatusMessage] = useState<string | null>(null)
   const [activeSuggestionId, setActiveSuggestionId] = useState<string | null>(null)
+  const [runtimeSettings, setRuntimeSettings] = useState<AgentRuntimeSettingsRecord | null>(null)
+  const [isRuntimeSettingsLoading, setIsRuntimeSettingsLoading] = useState(false)
+  const [runtimeSettingsError, setRuntimeSettingsError] = useState<string | null>(null)
+  const [runtimeSettingsStatusMessage, setRuntimeSettingsStatusMessage] = useState<string | null>(null)
 
   const refreshRuns = async (preferredRunId?: string) => {
     const nextRuns = await archiveApi.listAgentRuns()
@@ -226,12 +266,35 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
     }
   }
 
+  const loadRuntimeSettings = async () => {
+    setIsRuntimeSettingsLoading(true)
+    setRuntimeSettingsError(null)
+
+    try {
+      const nextSettings = await archiveApi.getAgentRuntimeSettings()
+      setRuntimeSettings(nextSettings)
+      return nextSettings
+    } catch (error) {
+      setRuntimeSettings(null)
+      setRuntimeSettingsError(t('agentConsole.autonomyModeLoadFailed', {
+        message: asErrorMessage(error)
+      }))
+      return null
+    } finally {
+      setIsRuntimeSettingsLoading(false)
+    }
+  }
+
   useEffect(() => {
     void refreshRuns()
   }, [archiveApi])
 
   useEffect(() => {
     void loadSuggestions()
+  }, [archiveApi])
+
+  useEffect(() => {
+    void loadRuntimeSettings()
   }, [archiveApi])
 
   useEffect(() => {
@@ -414,6 +477,29 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
     }
   }
 
+  const handleAutonomyModeChange = async (autonomyMode: AgentAutonomyMode) => {
+    setIsRuntimeSettingsLoading(true)
+    setRuntimeSettingsError(null)
+    setRuntimeSettingsStatusMessage(null)
+
+    try {
+      const nextSettings = await archiveApi.updateAgentRuntimeSettings({ autonomyMode })
+      setRuntimeSettings(nextSettings)
+      await archiveApi.refreshAgentSuggestions()
+      await loadSuggestions()
+      await refreshRuns()
+      setRuntimeSettingsStatusMessage(t('agentConsole.autonomyModeUpdated', {
+        mode: t(autonomyModeLabelKey(nextSettings.autonomyMode))
+      }))
+    } catch (error) {
+      setRuntimeSettingsError(t('agentConsole.autonomyModeUpdateFailed', {
+        message: asErrorMessage(error)
+      }))
+    } finally {
+      setIsRuntimeSettingsLoading(false)
+    }
+  }
+
   const handleDismissSuggestion = async (suggestionId: string) => {
     setIsSubmitting(true)
     setActiveSuggestionId(suggestionId)
@@ -565,6 +651,9 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
                     >
                       <span className="fmAgentRunPrompt">{summarizePrompt(run.prompt)}</span>
                       <span className="fmAgentRunMeta">{t('agentConsole.statusLine', { status: run.status })}</span>
+                      <span className="fmAgentRunMeta">{t('agentConsole.executionOriginLine', {
+                        origin: t(executionOriginLabelKey(run.executionOrigin))
+                      })}</span>
                       {runRoles.length ? (
                         <span className="fmAgentRunMeta">{t('agentConsole.assignedRolesLine', { roles: runRoles.join(', ') })}</span>
                       ) : null}
@@ -592,6 +681,21 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
               </button>
             </div>
 
+            <label className="fmAgentField">
+              <span>{t('agentConsole.autonomyModeTitle')}</span>
+              <select
+                aria-label={t('agentConsole.autonomyModeTitle')}
+                value={runtimeSettings?.autonomyMode ?? 'manual_only'}
+                onChange={(event) => void handleAutonomyModeChange(event.target.value as AgentAutonomyMode)}
+                disabled={isSubmitting || isSuggestionsLoading || isRuntimeSettingsLoading}
+              >
+                <option value="manual_only">{t('agentConsole.autonomyMode.manual_only')}</option>
+                <option value="suggest_safe_auto_run">{t('agentConsole.autonomyMode.suggest_safe_auto_run')}</option>
+              </select>
+            </label>
+
+            {runtimeSettingsStatusMessage ? <div role="status">{runtimeSettingsStatusMessage}</div> : null}
+            {runtimeSettingsError ? <div role="alert">{runtimeSettingsError}</div> : null}
             {suggestionsStatusMessage ? <div role="status">{suggestionsStatusMessage}</div> : null}
             {suggestionsError ? <div role="alert">{suggestionsError}</div> : null}
 
@@ -610,6 +714,20 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
                       <p>{suggestion.taskInput.prompt}</p>
                       <p>{t('agentConsole.targetRoleLine', { role: suggestion.role })}</p>
                       <p>{t('agentConsole.previewTaskKindLine', { taskKind: suggestion.taskKind })}</p>
+                      <p>{t('agentConsole.priorityLine', {
+                        priority: t(priorityLabelKey(suggestion.priority))
+                      })}</p>
+                      <p>{t('agentConsole.rationaleLine', {
+                        rationale: suggestion.rationale || t('common.none')
+                      })}</p>
+                      <p>{t('agentConsole.autoRunEligibilityLine', {
+                        value: suggestion.autoRunnable ? t('common.yes') : t('common.no')
+                      })}</p>
+                      {suggestion.followUpOfSuggestionId ? (
+                        <p>{t('agentConsole.followUpLine', {
+                          suggestionId: suggestion.followUpOfSuggestionId
+                        })}</p>
+                      ) : null}
                       <div className="fmAgentActionRow">
                         <button
                           type="button"
@@ -728,6 +846,9 @@ export function AgentConsolePage(props: AgentConsolePageProps) {
             {selectedRunDetail ? (
               <div className="fmAgentDetail">
                 <p>{t('agentConsole.statusLine', { status: selectedRunDetail.status })}</p>
+                <p>{t('agentConsole.executionOriginLine', {
+                  origin: t(executionOriginLabelKey(selectedRunDetail.executionOrigin))
+                })}</p>
                 <p>{t('agentConsole.assignedRolesLine', { roles: displayRoles.join(', ') || t('common.none') })}</p>
                 <p>{t('agentConsole.targetRoleLine', { role: selectedRunDetail.targetRole ?? selectedRunDetail.role })}</p>
 

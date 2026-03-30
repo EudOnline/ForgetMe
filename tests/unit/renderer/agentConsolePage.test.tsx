@@ -13,6 +13,7 @@ function buildRunRecord(overrides?: Partial<Record<string, unknown>>) {
     assignedRoles: ['orchestrator', 'review'],
     latestAssistantResponse: '1 pending items across 1 conflict groups.',
     status: 'completed',
+    executionOrigin: 'operator_manual',
     prompt: 'Summarize the highest-priority pending review work',
     confirmationToken: null,
     policyVersion: null,
@@ -73,6 +74,12 @@ function buildSuggestion(overrides?: Partial<Record<string, unknown>>) {
     dedupeKey: 'governance.failed-runs::latest',
     sourceRunId: 'run-failed-1',
     executedRunId: null,
+    priority: 'medium',
+    rationale: 'Failed agent runs were detected and should be summarized.',
+    autoRunnable: true,
+    followUpOfSuggestionId: null,
+    attemptCount: 0,
+    cooldownUntil: null,
     createdAt: '2026-03-30T00:00:00.000Z',
     updatedAt: '2026-03-30T00:00:00.000Z',
     lastObservedAt: '2026-03-30T00:00:00.000Z',
@@ -98,6 +105,16 @@ function buildArchiveApi(overrides: Record<string, unknown> = {}) {
     refreshAgentSuggestions: vi.fn().mockResolvedValue([]),
     dismissAgentSuggestion: vi.fn().mockResolvedValue(null),
     runAgentSuggestion: vi.fn().mockResolvedValue(null),
+    getAgentRuntimeSettings: vi.fn().mockResolvedValue({
+      settingsId: 'default',
+      autonomyMode: 'manual_only',
+      updatedAt: '2026-03-30T00:00:00.000Z'
+    }),
+    updateAgentRuntimeSettings: vi.fn().mockResolvedValue({
+      settingsId: 'default',
+      autonomyMode: 'suggest_safe_auto_run',
+      updatedAt: '2026-03-30T00:05:00.000Z'
+    }),
     ...overrides
   }
 }
@@ -555,6 +572,101 @@ describe('AgentConsolePage', () => {
         confirmationToken: 'token-1'
       })
     })
+  })
+
+  it('shows guided-autonomy controls, metadata, and auto-run audit details', async () => {
+    const autoRunHistory = buildRunRecord({
+      runId: 'run-auto-1',
+      role: 'governance',
+      taskKind: 'governance.summarize_failures',
+      targetRole: 'governance',
+      assignedRoles: ['governance'],
+      latestAssistantResponse: '0 failed runs need review.',
+      executionOrigin: 'auto_runner',
+      prompt: 'Summarize failed agent runs from the proactive monitor.'
+    })
+    const autoRunDetail = buildRunDetail({
+      ...autoRunHistory,
+      messages: [
+        {
+          messageId: 'message-auto-1',
+          runId: 'run-auto-1',
+          ordinal: 1,
+          sender: 'agent',
+          content: '0 failed runs need review.',
+          createdAt: '2026-03-30T00:00:01.000Z'
+        }
+      ]
+    })
+    const parentSuggestion = buildSuggestion({
+      suggestionId: 'suggestion-parent',
+      priority: 'high',
+      rationale: 'Repeated enrichment failures are blocking downstream review.',
+      autoRunnable: true
+    })
+    const followupSuggestion = buildSuggestion({
+      suggestionId: 'suggestion-followup',
+      triggerKind: 'review.safe_group_available',
+      role: 'review',
+      taskKind: 'review.apply_safe_group',
+      taskInput: {
+        role: 'review',
+        taskKind: 'review.apply_safe_group',
+        prompt: 'Apply safe group group-safe-42.'
+      },
+      dedupeKey: 'review.safe-group::group-safe-42::follow-up',
+      priority: 'high',
+      rationale: 'The safe group recommendation is ready to apply manually.',
+      autoRunnable: false,
+      followUpOfSuggestionId: 'suggestion-parent'
+    })
+    const listAgentRuns = vi.fn().mockResolvedValue([autoRunHistory])
+    const getAgentRun = vi.fn().mockResolvedValue(autoRunDetail)
+    const listAgentSuggestions = vi.fn().mockResolvedValue([followupSuggestion, parentSuggestion])
+    const refreshAgentSuggestions = vi.fn().mockResolvedValue([followupSuggestion, parentSuggestion])
+    const updateAgentRuntimeSettings = vi.fn().mockResolvedValue({
+      settingsId: 'default',
+      autonomyMode: 'suggest_safe_auto_run',
+      updatedAt: '2026-03-30T00:05:00.000Z'
+    })
+
+    Object.assign(window, {
+      archiveApi: buildArchiveApi({
+        listAgentRuns,
+        getAgentRun,
+        listAgentSuggestions,
+        refreshAgentSuggestions,
+        updateAgentRuntimeSettings
+      })
+    })
+
+    render(<AgentConsolePage />)
+
+    expect(await screen.findByText('Autonomy mode')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('manual_only')).toBeInTheDocument()
+    expect((await screen.findAllByText('Priority: high')).length).toBeGreaterThan(0)
+    expect(screen.getByText('Rationale: Repeated enrichment failures are blocking downstream review.')).toBeInTheDocument()
+    expect(screen.getByText('Auto-run eligible: yes')).toBeInTheDocument()
+    expect(screen.getByText('Follow-up of suggestion: suggestion-parent')).toBeInTheDocument()
+    expect(screen.getAllByText('Execution origin: auto_runner').length).toBeGreaterThan(0)
+
+    fireEvent.change(screen.getByLabelText('Autonomy mode'), {
+      target: { value: 'suggest_safe_auto_run' }
+    })
+
+    await waitFor(() => {
+      expect(updateAgentRuntimeSettings).toHaveBeenCalledWith({
+        autonomyMode: 'suggest_safe_auto_run'
+      })
+    })
+
+    expect(await screen.findByText('Autonomy mode updated to suggest_safe_auto_run.')).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole('button', { name: 'Run suggestion' })[0]!)
+    })
+
+    expect(await screen.findByText('Confirmation token required before applying this review action.')).toBeInTheDocument()
   })
 
   it('picks files and submits a preflighted ingestion import through the agent runtime', async () => {

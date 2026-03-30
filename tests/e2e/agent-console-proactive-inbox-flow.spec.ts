@@ -64,7 +64,14 @@ test('agent console proactive inbox refreshes, runs, and dismisses suggestions',
 
   await page.getByRole('button', { name: 'Run suggestion' }).first().click()
   await expect(page.getByText('1 failed runs need review.').first()).toBeVisible()
+  await expect(
+    page
+      .getByLabel('Proactive inbox')
+      .getByText('Propose policy update: Review repeated runtime failures and tighten policy safeguards.')
+  ).toBeVisible()
 
+  await page.getByRole('button', { name: 'Dismiss suggestion' }).first().click()
+  await expect(page.getByRole('button', { name: 'Dismiss suggestion' })).toHaveCount(1)
   await page.getByRole('button', { name: 'Dismiss suggestion' }).click()
   await expect(page.getByText('No proactive suggestions right now.')).toBeVisible()
 
