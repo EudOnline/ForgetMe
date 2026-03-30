@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron } from '@playwright/test'
+import { importFixturesThroughPreflight } from './helpers/importFlow'
 
 test('exports an encrypted archive package, restores it, and runs a repeatable recovery drill', async () => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase6-e2e-user-'))
@@ -20,8 +21,7 @@ test('exports an encrypted archive package, restores it, and runs a repeatable r
   })
 
   const page = await electronApp.firstWindow()
-  await page.getByText('Choose Files').click()
-  await expect(page.getByRole('button', { name: 'sample-chat.txt' })).toBeVisible()
+  await importFixturesThroughPreflight(page, 'sample-chat.txt')
 
   await page.getByRole('button', { name: 'Preservation' }).click()
   await page.getByLabel('Export password').fill('secret-preservation')

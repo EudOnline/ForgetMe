@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron } from '@playwright/test'
+import { importFixturesThroughPreflight } from './helpers/importFlow'
 
 test('memory workspace sandbox compare flow keeps workflow labels and judge review visible', async () => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase10c-sandbox-compare-user-'))
@@ -26,8 +27,7 @@ test('memory workspace sandbox compare flow keeps workflow labels and judge revi
   })
 
   const page = await electronApp.firstWindow()
-  await page.getByText('Choose Files').click()
-  await expect(page.getByRole('button', { name: 'chat-phase10c-sandbox-compare.json' })).toBeVisible()
+  await importFixturesThroughPreflight(page, 'chat-phase10c-sandbox-compare.json')
 
   await page.getByRole('button', { name: 'People' }).click()
   await expect(page.getByRole('button', { name: /^Alice Chen$/ })).toBeVisible({ timeout: 15_000 })

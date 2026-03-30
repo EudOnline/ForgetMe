@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron } from '@playwright/test'
+import { importFixturesThroughPreflight } from './helpers/importFlow'
 
 test('exports person and group context packs as local json artifacts', async () => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase8c-e2e-user-'))
@@ -27,8 +28,7 @@ test('exports person and group context packs as local json artifacts', async () 
   })
 
   const page = await electronApp.firstWindow()
-  await page.getByText('Choose Files').click()
-  await expect(page.getByRole('button', { name: 'chat-phase8c.json' })).toBeVisible()
+  await importFixturesThroughPreflight(page, 'chat-phase8c.json')
 
   await page.getByRole('button', { name: 'People' }).click()
   await expect(page.getByRole('button', { name: /^Alice Chen$/ })).toBeVisible({ timeout: 15_000 })

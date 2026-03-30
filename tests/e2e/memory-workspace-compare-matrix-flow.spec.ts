@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron } from '@playwright/test'
+import { importFixturesThroughPreflight } from './helpers/importFlow'
 
 test('memory workspace compare matrix runs multiple rows and reopens child compare sessions', async () => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase8d-matrix-e2e-'))
@@ -26,8 +27,7 @@ test('memory workspace compare matrix runs multiple rows and reopens child compa
   })
 
   const page = await electronApp.firstWindow()
-  await page.getByText('Choose Files').click()
-  await expect(page.getByRole('button', { name: 'chat-phase8d-matrix.json' })).toBeVisible()
+  await importFixturesThroughPreflight(page, 'chat-phase8d-matrix.json')
 
   await page.getByRole('button', { name: 'Memory Workspace' }).click()
   await expect(page.getByRole('heading', { name: 'Memory Workspace', exact: true })).toBeVisible()

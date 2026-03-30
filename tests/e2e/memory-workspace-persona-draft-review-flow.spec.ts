@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron } from '@playwright/test'
+import { importFixturesThroughPreflight } from './helpers/importFlow'
 
 test('memory workspace persona draft review flow supports start edit review and approval', async () => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase10d-draft-review-user-'))
@@ -25,8 +26,7 @@ test('memory workspace persona draft review flow supports start edit review and 
   })
 
   const page = await electronApp.firstWindow()
-  await page.getByText('Choose Files').click()
-  await expect(page.getByRole('button', { name: 'chat-phase10d-draft-review.json' })).toBeVisible()
+  await importFixturesThroughPreflight(page, 'chat-phase10d-draft-review.json')
 
   await page.getByRole('button', { name: 'People' }).click()
   await expect(page.getByRole('button', { name: /^Alice Chen$/ })).toBeVisible({ timeout: 15_000 })

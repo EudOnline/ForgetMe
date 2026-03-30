@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron } from '@playwright/test'
+import { importFixturesThroughPreflight } from './helpers/importFlow'
 
 test('shows memory workspace guardrails for conflict-first and persona fallback asks', async () => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase8d-e2e-user-'))
@@ -25,8 +26,7 @@ test('shows memory workspace guardrails for conflict-first and persona fallback 
   })
 
   const page = await electronApp.firstWindow()
-  await page.getByText('Choose Files').click()
-  await expect(page.getByRole('button', { name: 'chat-phase8d.json' })).toBeVisible()
+  await importFixturesThroughPreflight(page, 'chat-phase8d.json')
 
   await page.getByRole('button', { name: 'People' }).click()
   await expect(page.getByRole('button', { name: /^Bob Li$/ })).toBeVisible({ timeout: 15_000 })

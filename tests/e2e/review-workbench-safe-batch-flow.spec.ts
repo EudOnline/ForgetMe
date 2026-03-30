@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron } from '@playwright/test'
+import { importFixturesThroughPreflight } from './helpers/importFlow'
 
 test('approves a safe profile batch and undoes it from review history', async () => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase6b3-e2e-'))
@@ -25,10 +26,9 @@ test('approves a safe profile batch and undoes it from review history', async ()
   })
 
   const page = await electronApp.firstWindow()
-  await page.getByText('Choose Files').click()
-  await expect(page.getByText('chat-phase6b3.json')).toBeVisible({ timeout: 15_000 })
+  await importFixturesThroughPreflight(page, 'chat-phase6b3.json')
 
-  await page.getByText('Review Workbench').click()
+  await page.getByRole('button', { name: 'Review Workbench' }).click()
   const groupButton = page.locator('button').filter({ hasText: 'school_name' }).first()
   await expect(groupButton).toBeVisible({ timeout: 15_000 })
   await groupButton.click()
@@ -41,7 +41,7 @@ test('approves a safe profile batch and undoes it from review history', async ()
   await page.getByRole('button', { name: 'Confirm Batch Approve' }).click()
   await expect(page.getByText('Selected item is no longer pending.')).toBeVisible({ timeout: 15_000 })
 
-  await page.getByText('Review Queue').click()
+  await page.getByRole('button', { name: 'Review Queue' }).click()
   const batchRow = page.getByRole('row').filter({ hasText: 'Safe batch approve' })
   await expect(batchRow).toBeVisible({ timeout: 15_000 })
   await expect(batchRow).toContainText('Alice Chen · school_name · 2 items')

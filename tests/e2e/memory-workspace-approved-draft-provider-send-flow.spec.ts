@@ -2,10 +2,10 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron } from '@playwright/test'
+import { importFixturesThroughPreflight } from './helpers/importFlow'
 
 async function importFixtureAndOpenAliceWorkspace(page: Awaited<ReturnType<typeof electron.launch>>['firstWindow'] extends () => Promise<infer T> ? T : never, fixtureFileName: string) {
-  await page.getByText('Choose Files').click()
-  await expect(page.getByRole('button', { name: fixtureFileName })).toBeVisible()
+  await importFixturesThroughPreflight(page, fixtureFileName)
 
   await page.getByRole('button', { name: 'People' }).click()
   await expect(page.getByRole('button', { name: /^Alice Chen$/ })).toBeVisible({ timeout: 15_000 })

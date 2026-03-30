@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron } from '@playwright/test'
+import { importFixturesThroughPreflight } from './helpers/importFlow'
 
 test('runner executes a queued job and dossier baseline appears on the person page', async () => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase4-e2e-'))
@@ -26,11 +27,10 @@ test('runner executes a queued job and dossier baseline appears on the person pa
   })
 
   const page = await electronApp.firstWindow()
-  await page.getByText('Choose Files').click()
-  await expect(page.getByRole('button', { name: 'chat-phase4.json' })).toBeVisible()
-  await page.getByText('Enrichment Jobs').click()
+  await importFixturesThroughPreflight(page, 'chat-phase4.json')
+  await page.getByRole('button', { name: 'Enrichment Jobs' }).click()
   await expect(page.getByRole('cell', { name: 'completed' }).first()).toBeVisible({ timeout: 15_000 })
-  await page.getByText('Review Queue').click()
+  await page.getByRole('button', { name: 'Review Queue' }).click()
   await expect(page.getByText('structured_field_candidate')).toBeVisible({ timeout: 15_000 })
   await page.getByText('Approve').click()
   await page.getByRole('button', { name: 'People' }).click()
@@ -73,12 +73,11 @@ test('dossier conflict shortcut opens the matching workbench conflict group', as
   })
 
   const page = await electronApp.firstWindow()
-  await page.getByText('Choose Files').click()
-  await expect(page.getByRole('button', { name: 'chat-phase7b.json' })).toBeVisible()
-  await page.getByText('Enrichment Jobs').click()
+  await importFixturesThroughPreflight(page, 'chat-phase7b.json')
+  await page.getByRole('button', { name: 'Enrichment Jobs' }).click()
   await expect(page.getByRole('cell', { name: 'completed' })).toHaveCount(2, { timeout: 15_000 })
 
-  await page.getByText('Review Workbench').click()
+  await page.getByRole('button', { name: 'Review Workbench' }).click()
   await expect(page.getByRole('button', { name: '北京大学' })).toBeVisible({ timeout: 15_000 })
   await page.getByRole('button', { name: '北京大学' }).click()
   await page.getByRole('button', { name: 'Approve' }).click()

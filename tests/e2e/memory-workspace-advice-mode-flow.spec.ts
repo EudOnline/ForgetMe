@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron } from '@playwright/test'
+import { importFixturesThroughPreflight } from './helpers/importFlow'
 
 test('memory workspace advice mode keeps grounded guardrails visible', async () => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase9a-advice-e2e-user-'))
@@ -25,8 +26,7 @@ test('memory workspace advice mode keeps grounded guardrails visible', async () 
   })
 
   const page = await electronApp.firstWindow()
-  await page.getByText('Choose Files').click()
-  await expect(page.getByRole('button', { name: 'chat-phase9a-advice.json' })).toBeVisible()
+  await importFixturesThroughPreflight(page, 'chat-phase9a-advice.json')
 
   await page.getByRole('button', { name: 'Memory Workspace' }).click()
   await expect(page.getByRole('heading', { name: 'Memory Workspace', exact: true })).toBeVisible()

@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron } from '@playwright/test'
+import { importFixturesThroughPreflight } from './helpers/importFlow'
 
 test('opens a group portrait from the person dossier', async () => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase7c-e2e-'))
@@ -25,8 +26,7 @@ test('opens a group portrait from the person dossier', async () => {
   })
 
   const page = await electronApp.firstWindow()
-  await page.getByText('Choose Files').click()
-  await expect(page.getByRole('button', { name: 'chat-phase7c.json' })).toBeVisible()
+  await importFixturesThroughPreflight(page, 'chat-phase7c.json')
 
   await page.getByRole('button', { name: 'Group Portrait', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Group Portraits' })).toBeVisible()

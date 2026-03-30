@@ -21,7 +21,7 @@ test('shows preflight before import and only imports supported files into the ba
   })
 
   const page = await electronApp.firstWindow()
-  await page.getByText('Choose Files').click()
+  await page.getByRole('button', { name: 'Choose Files' }).click()
   await expect(page.getByText('1 supported, 1 unsupported')).toBeVisible()
   await expect(page.getByText('Unsupported files: fixture-unsupported.exe')).toBeVisible()
 

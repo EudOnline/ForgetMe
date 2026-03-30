@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron } from '@playwright/test'
+import { importFixturesThroughPreflight } from './helpers/importFlow'
 
 test('shows provider boundary audit for a seeded multimodal job', async () => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase6a2-e2e-'))
@@ -25,10 +26,9 @@ test('shows provider boundary audit for a seeded multimodal job', async () => {
   })
 
   const page = await electronApp.firstWindow()
-  await page.getByText('Choose Files').click()
-  await expect(page.getByRole('button', { name: 'chat-phase6a2.json' })).toBeVisible()
+  await importFixturesThroughPreflight(page, 'chat-phase6a2.json')
 
-  await page.getByText('Enrichment Jobs').click()
+  await page.getByRole('button', { name: 'Enrichment Jobs' }).click()
   await expect(page.getByText('completed')).toBeVisible()
   await page.getByRole('button', { name: 'Boundary' }).click()
 

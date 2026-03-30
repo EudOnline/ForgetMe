@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron } from '@playwright/test'
+import { importFixturesThroughPreflight } from './helpers/importFlow'
 
 test('opens a structured-field review item in the workbench and refreshes approve/undo state', async () => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase5-e2e-'))
@@ -26,12 +27,11 @@ test('opens a structured-field review item in the workbench and refreshes approv
   })
 
   const page = await electronApp.firstWindow()
-  await page.getByText('Choose Files').click()
-  await expect(page.getByRole('button', { name: 'chat-phase5.json' })).toBeVisible()
-  await page.getByText('Enrichment Jobs').click()
+  await importFixturesThroughPreflight(page, 'chat-phase5.json')
+  await page.getByRole('button', { name: 'Enrichment Jobs' }).click()
   await expect(page.getByText('completed')).toBeVisible({ timeout: 15_000 })
 
-  await page.getByText('Review Workbench').click()
+  await page.getByRole('button', { name: 'Review Workbench' }).click()
   await expect(page.getByText('Impact Preview')).toBeVisible({ timeout: 15_000 })
   await expect(page.getByRole('button', { name: '北京大学' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Approve' })).toBeVisible()

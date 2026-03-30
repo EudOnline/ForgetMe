@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron } from '@playwright/test'
+import { importFixturesThroughPreflight } from './helpers/importFlow'
 
 test('reviews a high-risk OCR field and shows it on the person profile', async () => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-phase3-e2e-'))
@@ -25,11 +26,11 @@ test('reviews a high-risk OCR field and shows it on the person profile', async (
   })
 
   const page = await electronApp.firstWindow()
-  await page.getByText('Choose Files').click()
-  await page.getByText('Review Queue').click()
+  await importFixturesThroughPreflight(page, 'chat-phase3.json')
+  await page.getByRole('button', { name: 'Review Queue' }).click()
   await expect(page.getByText('structured_field_candidate')).toBeVisible()
   await page.getByRole('button', { name: 'Approve' }).first().click()
-  await page.getByText('People').click()
+  await page.getByRole('button', { name: 'People' }).click()
   await page.getByRole('button', { name: /^Alice Chen$/ }).click()
   await expect(page.getByRole('heading', { name: 'Person Dossier' })).toBeVisible()
   await expect(page.locator('li').filter({ hasText: '北京大学' }).first()).toBeVisible()

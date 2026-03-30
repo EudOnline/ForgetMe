@@ -23,7 +23,7 @@ test('shows dirty-data preflight and imports only supported files while preservi
   })
 
   const page = await electronApp.firstWindow()
-  await page.getByText('Choose Files').click()
+  await page.getByRole('button', { name: 'Choose Files' }).click()
   await expect(page.getByText('3 supported, 1 unsupported')).toBeVisible()
   await expect(page.getByText('Unsupported files: fixture-unsupported.exe')).toBeVisible()
 
