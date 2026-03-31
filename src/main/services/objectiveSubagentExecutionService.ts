@@ -1,7 +1,8 @@
 import { evaluateProposalGate } from './agentProposalGateService'
-import { createCheckpoint } from './objectivePersistenceService'
 import type { createExternalVerificationBrokerService } from './externalVerificationBrokerService'
 import { getDocumentEvidence } from './enrichmentReadService'
+import { createObjectiveSubagentLifecycleService } from './objectiveSubagentLifecycleService'
+import { createObjectiveSubagentToolExecutionService } from './objectiveSubagentToolExecutionService'
 import { runMemoryWorkspaceCompare } from './memoryWorkspaceCompareService'
 import { askMemoryWorkspacePersisted } from './memoryWorkspaceSessionService'
 import { listAgentPolicyVersions } from './agentPersistenceService'
@@ -19,11 +20,9 @@ import {
   runPolicyAuditorTask
 } from './subagentRunners/policyAuditorRunner'
 import { createSpawnSubagentRunnerRegistry } from './spawnSubagentRunnerRegistryService'
-import { authorizeToolRequest, resolveToolPolicy } from './toolBrokerService'
 import type {
   AgentArtifactRef,
   AgentMessageKind,
-  AgentParticipantKind,
   AgentProposalRecord,
   AgentProposalStatus,
   AgentRole,
@@ -31,15 +30,8 @@ import type {
   AgentThreadDetail
 } from '../../shared/archiveContracts'
 import {
-  addThreadParticipants,
-  createSubagent,
-  createSubthread,
-  createToolExecution,
   getThreadDetail,
   recordProposalVote,
-  updateSubagent,
-  updateThreadStatus,
-  updateToolExecution,
   type CreateProposalInput
 } from './objectivePersistenceService'
 import type { ArchiveDatabase } from './db'
@@ -110,132 +102,9 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
     return String(error)
   }
 
-  function consumeExecutionRound(remainingBudget: {
-    maxRounds: number
-    maxToolCalls: number
-    timeoutMs: number
-  }) {
-    if (remainingBudget.maxRounds <= 0) {
-      throw new Error('Remaining budget is exhausted.')
-    }
-
-    remainingBudget.maxRounds = Math.max(0, remainingBudget.maxRounds - 1)
-  }
-
-  async function runWithinBudgetTimeout<T>(timeoutMs: number, toolName: string, run: () => Promise<T>) {
-    if (timeoutMs <= 0) {
-      throw new Error('Remaining budget is exhausted.')
-    }
-
-    let timer: ReturnType<typeof setTimeout> | null = null
-
-    try {
-      return await Promise.race([
-        run(),
-        new Promise<T>((_, reject) => {
-          timer = setTimeout(() => {
-            reject(new Error(`Tool ${toolName} exceeded timeout budget.`))
-          }, timeoutMs)
-        })
-      ])
-    } finally {
-      if (timer) {
-        clearTimeout(timer)
-      }
-    }
-  }
-
-  async function runAuthorizedTool<T>(input: {
-    objectiveId: string
-    threadId: string
-    proposalId: string
-    requestedByParticipantId: string
-    role: AgentRole
-    toolName: string
-    toolPolicyId: string
-    skillPackIds: readonly AgentSkillPackId[]
-    remainingBudget: {
-      maxRounds: number
-      maxToolCalls: number
-      timeoutMs: number
-    }
-    inputPayload: Record<string, unknown>
-    run: () => Promise<{
-      result: T
-      outputPayload: Record<string, unknown>
-      artifactRefs?: AgentArtifactRef[]
-    }>
-  }) {
-    const toolPolicy = resolveToolPolicy(input.toolPolicyId) ?? undefined
-    const authorization = authorizeToolRequest({
-      role: input.role,
-      toolName: input.toolName,
-      skillPackIds: [...input.skillPackIds],
-      toolPolicy,
-      remainingBudget: input.remainingBudget
-    })
-
-    if (authorization.status === 'blocked') {
-      createToolExecution(db, {
-        objectiveId: input.objectiveId,
-        threadId: input.threadId,
-        proposalId: input.proposalId,
-        requestedByParticipantId: input.requestedByParticipantId,
-        toolName: input.toolName,
-        toolPolicyId: input.toolPolicyId,
-        status: 'blocked',
-        inputPayload: input.inputPayload,
-        outputPayload: {
-          reason: authorization.reason
-        },
-        completedAt: new Date().toISOString()
-      })
-      throw new Error(authorization.reason)
-    }
-
-    const execution = createToolExecution(db, {
-      objectiveId: input.objectiveId,
-      threadId: input.threadId,
-      proposalId: input.proposalId,
-      requestedByParticipantId: input.requestedByParticipantId,
-      toolName: input.toolName,
-      toolPolicyId: input.toolPolicyId,
-      status: 'authorized',
-      inputPayload: input.inputPayload
-    })
-
-    try {
-      const startedAt = Date.now()
-      const outcome = await runWithinBudgetTimeout(
-        input.remainingBudget.timeoutMs,
-        input.toolName,
-        input.run
-      )
-      const updated = updateToolExecution(db, {
-        toolExecutionId: execution.toolExecutionId,
-        status: 'completed',
-        outputPayload: outcome.outputPayload,
-        artifactRefs: outcome.artifactRefs ?? []
-      })
-      if (!updated) {
-        throw new Error(`failed to complete tool execution: ${execution.toolExecutionId}`)
-      }
-
-      const elapsedMs = Date.now() - startedAt
-      input.remainingBudget.timeoutMs = Math.max(0, input.remainingBudget.timeoutMs - elapsedMs)
-      input.remainingBudget.maxToolCalls = Math.max(0, input.remainingBudget.maxToolCalls - 1)
-      return outcome.result
-    } catch (error) {
-      updateToolExecution(db, {
-        toolExecutionId: execution.toolExecutionId,
-        status: 'failed',
-        outputPayload: {
-          message: asErrorMessage(error)
-        }
-      })
-      throw error
-    }
-  }
+  const toolExecutionService = createObjectiveSubagentToolExecutionService({
+    db
+  })
 
   function parseWebVerifierPayload(payload: Record<string, unknown>) {
     const claim = typeof payload.claim === 'string' ? payload.claim.trim() : ''
@@ -292,239 +161,11 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
     return toolPolicyId
   }
 
-  function buildChildSubthreadParticipants(input: {
-    parentThreadId: string
-    requestedByParticipantId: string
-    ownerRole: AgentRole
-    childSubagentId: string
-    childDisplayLabel: string
-  }) {
-    const parentThread = getThreadDetail(db, { threadId: input.parentThreadId })
-    const requester = parentThread?.participants.find((participant) => (
-      participant.participantId === input.requestedByParticipantId
-    ))
-
-    if (!requester && input.requestedByParticipantId !== input.ownerRole) {
-      throw new Error(`requesting participant not found in parent thread: ${input.requestedByParticipantId}`)
-    }
-
-    const participants = [] as Array<{
-      participantKind: AgentParticipantKind
-      participantId: string
-      role: AgentRole | null
-      displayLabel: string
-    }>
-
-    const pushParticipant = (participant: {
-      participantKind: AgentParticipantKind
-      participantId: string
-      role: AgentRole | null
-      displayLabel: string
-    }) => {
-      if (participants.some((candidate) => candidate.participantId === participant.participantId)) {
-        return
-      }
-
-      participants.push(participant)
-    }
-
-    if (requester) {
-      pushParticipant({
-        participantKind: requester.participantKind,
-        participantId: requester.participantId,
-        role: requester.role,
-        displayLabel: requester.displayLabel
-      })
-    } else {
-      pushParticipant({
-        participantKind: 'role',
-        participantId: input.ownerRole,
-        role: input.ownerRole,
-        displayLabel: input.ownerRole
-      })
-    }
-
-    pushParticipant({
-      participantKind: 'role',
-      participantId: input.ownerRole,
-      role: input.ownerRole,
-      displayLabel: input.ownerRole
-    })
-    pushParticipant({
-      participantKind: 'subagent',
-      participantId: input.childSubagentId,
-      role: null,
-      displayLabel: input.childDisplayLabel
-    })
-
-    return participants
-  }
-
-  function startRegisteredSubagentExecution(input: {
-    proposal: AgentProposalRecord
-    requestedByParticipantId: string
-    specialization: AgentSkillPackId
-    title: string
-    goalBody: string
-    toolPolicyId: string
-    executionBudget: {
-      maxRounds: number
-      maxToolCalls: number
-      timeoutMs: number
-    }
-    spawnSummary: string
-  }) {
-    const subthread = createSubthread(db, {
-      objectiveId: input.proposal.objectiveId,
-      parentThreadId: input.proposal.threadId,
-      ownerRole: input.proposal.ownerRole,
-      title: input.title,
-      status: 'open'
-    })
-
-    const registeredSubagent = dependencies.subagentRegistry.createSubagent({
-      objectiveId: input.proposal.objectiveId,
-      threadId: subthread.threadId,
-      parentThreadId: input.proposal.threadId,
-      parentAgentRole: input.proposal.ownerRole,
-      specialization: input.specialization,
-      budget: { ...input.executionBudget }
-    })
-
-    addThreadParticipants(db, {
-      objectiveId: input.proposal.objectiveId,
-      threadId: input.proposal.threadId,
-      invitedByParticipantId: input.requestedByParticipantId,
-      participants: [
-        {
-          participantKind: 'subagent',
-          participantId: registeredSubagent.subagentId,
-          role: null,
-          displayLabel: registeredSubagent.specialization
-        }
-      ]
-    })
-
-    addThreadParticipants(db, {
-      objectiveId: input.proposal.objectiveId,
-      threadId: subthread.threadId,
-      invitedByParticipantId: input.requestedByParticipantId,
-      participants: buildChildSubthreadParticipants({
-        parentThreadId: input.proposal.threadId,
-        requestedByParticipantId: input.requestedByParticipantId,
-        ownerRole: input.proposal.ownerRole,
-        childSubagentId: registeredSubagent.subagentId,
-        childDisplayLabel: registeredSubagent.specialization
-      })
-    })
-
-    const createdSubagent = createSubagent(db, {
-      subagentId: registeredSubagent.subagentId,
-      objectiveId: registeredSubagent.objectiveId,
-      threadId: subthread.threadId,
-      parentThreadId: registeredSubagent.parentThreadId,
-      parentAgentRole: registeredSubagent.parentAgentRole,
-      specialization: registeredSubagent.specialization,
-      skillPackIds: registeredSubagent.skillPackIds,
-      toolPolicyId: input.toolPolicyId,
-      budget: registeredSubagent.budget,
-      expectedOutputSchema: registeredSubagent.outputSchema,
-      status: 'running'
-    })
-
-    createCheckpoint(db, {
-      objectiveId: input.proposal.objectiveId,
-      threadId: input.proposal.threadId,
-      checkpointKind: 'subagent_spawned',
-      title: 'Subagent spawned',
-      summary: input.spawnSummary,
-      relatedProposalId: input.proposal.proposalId
-    })
-
-    dependencies.helpers.appendRuntimeMessage({
-      objectiveId: input.proposal.objectiveId,
-      threadId: subthread.threadId,
-      fromParticipantId: input.requestedByParticipantId,
-      toParticipantId: createdSubagent.subagentId,
-      kind: 'goal',
-      body: input.goalBody
-    })
-
-    return {
-      subthread,
-      createdSubagent
-    }
-  }
-
-  function completeRegisteredSubagentExecution(input: {
-    proposal: AgentProposalRecord
-    subthread: ReturnType<typeof createSubthread>
-    createdSubagent: ReturnType<typeof createSubagent>
-    summary: string
-    refs: AgentArtifactRef[]
-    checkpointKind: 'tool_action_executed' | 'external_verification_completed' | 'user_facing_result_prepared'
-    checkpointTitle: string
-    checkpointSummary: string
-  }) {
-    dependencies.helpers.appendRuntimeMessage({
-      objectiveId: input.proposal.objectiveId,
-      threadId: input.subthread.threadId,
-      fromParticipantId: input.createdSubagent.subagentId,
-      kind: 'final_response',
-      body: input.summary,
-      refs: input.refs
-    })
-
-    dependencies.helpers.appendRuntimeMessage({
-      objectiveId: input.proposal.objectiveId,
-      threadId: input.proposal.threadId,
-      fromParticipantId: input.createdSubagent.subagentId,
-      kind: 'evidence_response',
-      body: input.summary,
-      refs: input.refs
-    })
-
-    const completedSubagent = updateSubagent(db, {
-      subagentId: input.createdSubagent.subagentId,
-      status: 'completed',
-      summary: input.summary
-    })
-    const completedSubthread = updateThreadStatus(db, {
-      threadId: input.subthread.threadId,
-      status: 'completed'
-    })
-
-    createCheckpoint(db, {
-      objectiveId: input.proposal.objectiveId,
-      threadId: input.proposal.threadId,
-      checkpointKind: input.checkpointKind,
-      title: input.checkpointTitle,
-      summary: input.checkpointSummary,
-      relatedProposalId: input.proposal.proposalId,
-      artifactRefs: input.refs
-    })
-
-    return {
-      subagent: completedSubagent ?? input.createdSubagent,
-      subthread: completedSubthread ?? input.subthread
-    }
-  }
-
-  function failRegisteredSubagentExecution(input: {
-    subthreadId: string
-    subagentId: string
-    summary: string
-  }) {
-    updateSubagent(db, {
-      subagentId: input.subagentId,
-      status: 'failed',
-      summary: input.summary
-    })
-    updateThreadStatus(db, {
-      threadId: input.subthreadId,
-      status: 'blocked'
-    })
-  }
+  const lifecycleService = createObjectiveSubagentLifecycleService({
+    db,
+    subagentRegistry: dependencies.subagentRegistry,
+    appendRuntimeMessage: dependencies.helpers.appendRuntimeMessage
+  })
 
   async function approveNestedSpawnSubagentProposal(input: {
     objectiveId: string
@@ -679,9 +320,9 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
     const remainingBudget = {
       ...executionBudget
     }
-    consumeExecutionRound(remainingBudget)
+    toolExecutionService.consumeExecutionRound(remainingBudget)
     const title = `Web verification · ${input.claim.slice(0, 60)}`
-    const { subthread, createdSubagent } = startRegisteredSubagentExecution({
+    const { subthread, createdSubagent } = lifecycleService.startRegisteredSubagentExecution({
       proposal: input.proposal,
       requestedByParticipantId: input.requestedByParticipantId,
       specialization: 'web-verifier',
@@ -693,7 +334,7 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
     })
 
     try {
-      const searchResults = await runAuthorizedTool({
+      const searchResults = await toolExecutionService.runAuthorizedTool({
         objectiveId: input.proposal.objectiveId,
         threadId: subthread.threadId,
         proposalId: input.proposal.proposalId,
@@ -746,7 +387,7 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
       const sources = [] as Awaited<ReturnType<ExternalVerificationBrokerService['openClaimSource']>>[]
 
       for (const candidate of searchResults) {
-        const source = await runAuthorizedTool({
+        const source = await toolExecutionService.runAuthorizedTool({
           objectiveId: input.proposal.objectiveId,
           threadId: subthread.threadId,
           proposalId: input.proposal.proposalId,
@@ -801,7 +442,7 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
         }))
       })
 
-      const citationBundle = await runAuthorizedTool({
+      const citationBundle = await toolExecutionService.runAuthorizedTool({
         objectiveId: input.proposal.objectiveId,
         threadId: subthread.threadId,
         proposalId: input.proposal.proposalId,
@@ -870,7 +511,7 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
         : `Web verifier finished with verdict ${citationBundle.verdict} from ${citationBundle.sources.length} source${citationBundle.sources.length === 1 ? '' : 's'}.`
 
       return {
-        ...completeRegisteredSubagentExecution({
+        ...lifecycleService.completeRegisteredSubagentExecution({
           proposal: input.proposal,
           subthread,
           createdSubagent,
@@ -887,7 +528,7 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
         citationBundle
       }
     } catch (error) {
-      failRegisteredSubagentExecution({
+      lifecycleService.failRegisteredSubagentExecution({
         subthreadId: subthread.threadId,
         subagentId: createdSubagent.subagentId,
         summary: `Web verifier failed: ${asErrorMessage(error)}`
@@ -909,9 +550,9 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
     const remainingBudget = {
       ...executionBudget
     }
-    consumeExecutionRound(remainingBudget)
+    toolExecutionService.consumeExecutionRound(remainingBudget)
     const title = `Evidence check · ${input.fileId}`
-    const { subthread, createdSubagent } = startRegisteredSubagentExecution({
+    const { subthread, createdSubagent } = lifecycleService.startRegisteredSubagentExecution({
       proposal: input.proposal,
       requestedByParticipantId: input.requestedByParticipantId,
       specialization: 'evidence-checker',
@@ -923,7 +564,7 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
     })
 
     try {
-      const evidence = await runAuthorizedTool({
+      const evidence = await toolExecutionService.runAuthorizedTool({
         objectiveId: input.proposal.objectiveId,
         threadId: subthread.threadId,
         proposalId: input.proposal.proposalId,
@@ -1005,7 +646,7 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
         : `Evidence checker reviewed ${evidence.fileName} with ${evidence.approvedFields.length} approved fields and ${evidence.fieldCandidates.length} field candidates. OCR excerpt: ${rawExcerpt}`
 
       return {
-        ...completeRegisteredSubagentExecution({
+        ...lifecycleService.completeRegisteredSubagentExecution({
           proposal: input.proposal,
           subthread,
           createdSubagent,
@@ -1018,7 +659,7 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
         evidence
       }
     } catch (error) {
-      failRegisteredSubagentExecution({
+      lifecycleService.failRegisteredSubagentExecution({
         subthreadId: subthread.threadId,
         subagentId: createdSubagent.subagentId,
         summary: `Evidence checker failed: ${asErrorMessage(error)}`
@@ -1041,8 +682,8 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
     const remainingBudget = {
       ...executionBudget
     }
-    consumeExecutionRound(remainingBudget)
-    const { subthread, createdSubagent } = startRegisteredSubagentExecution({
+    toolExecutionService.consumeExecutionRound(remainingBudget)
+    const { subthread, createdSubagent } = lifecycleService.startRegisteredSubagentExecution({
       proposal: input.proposal,
       requestedByParticipantId: input.requestedByParticipantId,
       specialization: 'compare-analyst',
@@ -1076,7 +717,7 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
             ]
           }) as any
         ),
-        runTool: async ({ toolName, inputPayload, run }) => runAuthorizedTool({
+        runTool: async ({ toolName, inputPayload, run }) => toolExecutionService.runAuthorizedTool({
           objectiveId: input.proposal.objectiveId,
           threadId: subthread.threadId,
           proposalId: input.proposal.proposalId,
@@ -1109,7 +750,7 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
       })
 
       return {
-        ...completeRegisteredSubagentExecution({
+        ...lifecycleService.completeRegisteredSubagentExecution({
           proposal: input.proposal,
           subthread,
           createdSubagent,
@@ -1122,7 +763,7 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
         compare: outcome
       }
     } catch (error) {
-      failRegisteredSubagentExecution({
+      lifecycleService.failRegisteredSubagentExecution({
         subthreadId: subthread.threadId,
         subagentId: createdSubagent.subagentId,
         summary: `Compare analyst failed: ${asErrorMessage(error)}`
@@ -1145,8 +786,8 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
     const remainingBudget = {
       ...executionBudget
     }
-    consumeExecutionRound(remainingBudget)
-    const { subthread, createdSubagent } = startRegisteredSubagentExecution({
+    toolExecutionService.consumeExecutionRound(remainingBudget)
+    const { subthread, createdSubagent } = lifecycleService.startRegisteredSubagentExecution({
       proposal: input.proposal,
       requestedByParticipantId: input.requestedByParticipantId,
       specialization: 'draft-composer',
@@ -1174,7 +815,7 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
             sessionId: payload.sessionId ?? undefined
           }) as any
         ),
-        runTool: async ({ toolName, inputPayload, run }) => runAuthorizedTool({
+        runTool: async ({ toolName, inputPayload, run }) => toolExecutionService.runAuthorizedTool({
           objectiveId: input.proposal.objectiveId,
           threadId: subthread.threadId,
           proposalId: input.proposal.proposalId,
@@ -1206,7 +847,7 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
       })
 
       return {
-        ...completeRegisteredSubagentExecution({
+        ...lifecycleService.completeRegisteredSubagentExecution({
           proposal: input.proposal,
           subthread,
           createdSubagent,
@@ -1219,7 +860,7 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
         draft: outcome
       }
     } catch (error) {
-      failRegisteredSubagentExecution({
+      lifecycleService.failRegisteredSubagentExecution({
         subthreadId: subthread.threadId,
         subagentId: createdSubagent.subagentId,
         summary: `Draft composer failed: ${asErrorMessage(error)}`
@@ -1240,8 +881,8 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
     const remainingBudget = {
       ...executionBudget
     }
-    consumeExecutionRound(remainingBudget)
-    const { subthread, createdSubagent } = startRegisteredSubagentExecution({
+    toolExecutionService.consumeExecutionRound(remainingBudget)
+    const { subthread, createdSubagent } = lifecycleService.startRegisteredSubagentExecution({
       proposal: input.proposal,
       requestedByParticipantId: input.requestedByParticipantId,
       specialization: 'policy-auditor',
@@ -1264,7 +905,7 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
             policyKey: payload.policyKey
           }) as any
         ),
-        runTool: async ({ toolName, inputPayload, run }) => runAuthorizedTool({
+        runTool: async ({ toolName, inputPayload, run }) => toolExecutionService.runAuthorizedTool({
           objectiveId: input.proposal.objectiveId,
           threadId: subthread.threadId,
           proposalId: input.proposal.proposalId,
@@ -1297,7 +938,7 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
       })
 
       return {
-        ...completeRegisteredSubagentExecution({
+        ...lifecycleService.completeRegisteredSubagentExecution({
           proposal: input.proposal,
           subthread,
           createdSubagent,
@@ -1310,7 +951,7 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
         policyAudit: outcome
       }
     } catch (error) {
-      failRegisteredSubagentExecution({
+      lifecycleService.failRegisteredSubagentExecution({
         subthreadId: subthread.threadId,
         subagentId: createdSubagent.subagentId,
         summary: `Policy auditor failed: ${asErrorMessage(error)}`
