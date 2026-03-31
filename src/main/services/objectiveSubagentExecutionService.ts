@@ -1,4 +1,7 @@
-import type { createExternalVerificationBrokerService } from './externalVerificationBrokerService'
+import type {
+  CitationBundle,
+  createExternalVerificationBrokerService
+} from './externalVerificationBrokerService'
 import {
   runCompareAnalystWorkflow,
   runDraftComposerWorkflow,
@@ -6,6 +9,10 @@ import {
 } from './objectiveSubagentAnalysisWorkflowService'
 import { createObjectiveSubagentDelegationService } from './objectiveSubagentDelegationService'
 import { createObjectiveSubagentLifecycleService } from './objectiveSubagentLifecycleService'
+import {
+  createObjectiveSubagentRoutingService,
+  type ObjectiveSubagentExecutionResult
+} from './objectiveSubagentRoutingService'
 import { createObjectiveSubagentToolExecutionService } from './objectiveSubagentToolExecutionService'
 import {
   runEvidenceCheckerWorkflow,
@@ -15,10 +22,6 @@ import { runMemoryWorkspaceCompare } from './memoryWorkspaceCompareService'
 import { askMemoryWorkspacePersisted } from './memoryWorkspaceSessionService'
 import { listAgentPolicyVersions } from './agentPersistenceService'
 import type { createSubagentRegistryService } from './subagentRegistryService'
-import { parseCompareAnalystPayload } from './subagentRunners/compareAnalystRunner'
-import { parseDraftComposerPayload } from './subagentRunners/draftComposerRunner'
-import { parsePolicyAuditorPayload } from './subagentRunners/policyAuditorRunner'
-import { createSpawnSubagentRunnerRegistry } from './spawnSubagentRunnerRegistryService'
 import type {
   AgentArtifactRef,
   AgentMessageKind,
@@ -75,6 +78,7 @@ export type ObjectiveSubagentExecutionDependencies = {
 
 export function createObjectiveSubagentExecutionService(dependencies: ObjectiveSubagentExecutionDependencies) {
   const { db } = dependencies
+  let executeCommittedSpawnSubagentProposalImpl: ((proposal: AgentProposalRecord) => Promise<unknown>) | null = null
 
   function asErrorMessage(error: unknown) {
     if (error instanceof Error) {
@@ -87,48 +91,6 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
   const toolExecutionService = createObjectiveSubagentToolExecutionService({
     db
   })
-
-  function parseWebVerifierPayload(payload: Record<string, unknown>) {
-    const claim = typeof payload.claim === 'string' ? payload.claim.trim() : ''
-    const query = typeof payload.query === 'string' ? payload.query.trim() : ''
-    const localEvidenceFileId = typeof payload.localEvidenceFileId === 'string'
-      ? payload.localEvidenceFileId.trim()
-      : ''
-
-    if (!claim || !query) {
-      throw new Error('web-verifier payload requires non-empty claim and query')
-    }
-
-    return {
-      claim,
-      query,
-      localEvidenceFileId: localEvidenceFileId || null
-    }
-  }
-
-  function parseEvidenceCheckerPayload(payload: Record<string, unknown>) {
-    const fileId = typeof payload.fileId === 'string' ? payload.fileId.trim() : ''
-    const crossCheckClaim = typeof payload.crossCheckClaim === 'string'
-      ? payload.crossCheckClaim.trim()
-      : ''
-    const crossCheckQuery = typeof payload.crossCheckQuery === 'string'
-      ? payload.crossCheckQuery.trim()
-      : ''
-
-    if (!fileId) {
-      throw new Error('evidence-checker payload requires non-empty fileId')
-    }
-
-    if ((crossCheckClaim && !crossCheckQuery) || (!crossCheckClaim && crossCheckQuery)) {
-      throw new Error('evidence-checker payload requires both crossCheckClaim and crossCheckQuery when either is provided')
-    }
-
-    return {
-      fileId,
-      crossCheckClaim: crossCheckClaim || null,
-      crossCheckQuery: crossCheckQuery || null
-    }
-  }
 
   function getSubagentProfile(specialization: AgentSkillPackId) {
     return dependencies.subagentRegistry.getProfile(specialization)
@@ -280,13 +242,21 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
     executeCommittedSpawnSubagentProposal
   })
 
+  async function executeCommittedSpawnSubagentProposal(proposal: AgentProposalRecord) {
+    if (!executeCommittedSpawnSubagentProposalImpl) {
+      throw new Error('Subagent routing service is not initialized')
+    }
+
+    return executeCommittedSpawnSubagentProposalImpl(proposal)
+  }
+
   async function runWebVerifierSubagent(input: {
     proposal: AgentProposalRecord
     requestedByParticipantId: string
     claim: string
     query: string
     localEvidenceFileId?: string | null
-  }) {
+  }): Promise<ObjectiveSubagentExecutionResult<{ citationBundle: CitationBundle }>> {
     const title = `Web verification · ${input.claim.slice(0, 60)}`
     return executeRegisteredSubagent({
       proposal: input.proposal,
@@ -474,123 +444,29 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
     })
   }
 
-  const spawnSubagentRunnerRegistry = createSpawnSubagentRunnerRegistry({
-    'web-verifier': {
-      parsePayload: parseWebVerifierPayload,
-      run: async ({ proposal, requestedByParticipantId, payload }) => runWebVerifierSubagent({
-        proposal,
-        requestedByParticipantId,
-        claim: payload.claim,
-        query: payload.query,
-        localEvidenceFileId: payload.localEvidenceFileId
-      })
+  const routingService = createObjectiveSubagentRoutingService<
+    Awaited<ReturnType<typeof runWebVerifierSubagent>>,
+    Awaited<ReturnType<typeof runEvidenceCheckerSubagent>>,
+    Awaited<ReturnType<typeof runCompareAnalystSubagent>>,
+    Awaited<ReturnType<typeof runDraftComposerSubagent>>,
+    Awaited<ReturnType<typeof runPolicyAuditorSubagent>>
+  >({
+    subagentRegistry: dependencies.subagentRegistry,
+    helpers: {
+      createProposalWithCheckpoint: dependencies.helpers.createProposalWithCheckpoint,
+      updateProposalFromGate: dependencies.helpers.updateProposalFromGate
     },
-    'evidence-checker': {
-      parsePayload: parseEvidenceCheckerPayload,
-      run: async ({ proposal, requestedByParticipantId, payload }) => runEvidenceCheckerSubagent({
-        proposal,
-        requestedByParticipantId,
-        fileId: payload.fileId,
-        crossCheckClaim: payload.crossCheckClaim,
-        crossCheckQuery: payload.crossCheckQuery
-      })
-    },
-    'compare-analyst': {
-      parsePayload: parseCompareAnalystPayload,
-      run: async ({ proposal, requestedByParticipantId, payload }) => runCompareAnalystSubagent({
-        proposal,
-        requestedByParticipantId,
-        question: payload.question,
-        scope: payload.scope,
-        expressionMode: payload.expressionMode,
-        workflowKind: payload.workflowKind
-      })
-    },
-    'draft-composer': {
-      parsePayload: parseDraftComposerPayload,
-      run: async ({ proposal, requestedByParticipantId, payload }) => runDraftComposerSubagent({
-        proposal,
-        requestedByParticipantId,
-        question: payload.question,
-        scope: payload.scope,
-        expressionMode: payload.expressionMode,
-        sessionId: payload.sessionId
-      })
-    },
-    'policy-auditor': {
-      parsePayload: parsePolicyAuditorPayload,
-      run: async ({ proposal, requestedByParticipantId, payload }) => runPolicyAuditorSubagent({
-        proposal,
-        requestedByParticipantId,
-        policyKey: payload.policyKey,
-        role: payload.role
-      })
-    }
+    runWebVerifierSubagent,
+    runEvidenceCheckerSubagent,
+    runCompareAnalystSubagent,
+    runDraftComposerSubagent,
+    runPolicyAuditorSubagent
   })
-
-  async function executeCommittedSpawnSubagentProposal(proposal: AgentProposalRecord) {
-    return spawnSubagentRunnerRegistry.executeCommittedProposal(proposal)
-  }
-
-  async function autoCommitEligibleSpawnSubagentProposal(proposal: AgentProposalRecord) {
-    if (
-      proposal.proposalKind !== 'spawn_subagent'
-      || proposal.status !== 'committable'
-      || proposal.requiresOperatorConfirmation
-    ) {
-      return proposal
-    }
-
-    const committed = dependencies.helpers.updateProposalFromGate({
-      proposalId: proposal.proposalId,
-      nextStatus: 'committed'
-    })
-
-    await executeCommittedSpawnSubagentProposal(committed)
-
-    return committed
-  }
-
-  async function requestExternalVerification(input: {
-    objectiveId: string
-    threadId: string
-    proposedByParticipantId: string
-    claim: string
-    query: string
-  }) {
-    const verifierProfile = getSubagentProfile('web-verifier')
-    const proposal = dependencies.helpers.createProposalWithCheckpoint({
-      objectiveId: input.objectiveId,
-      threadId: input.threadId,
-      proposedByParticipantId: input.proposedByParticipantId,
-      proposalKind: 'verify_external_claim',
-      payload: {
-        claim: input.claim,
-        query: input.query
-      },
-      ownerRole: 'workspace',
-      status: 'under_review',
-      requiredApprovals: ['workspace'],
-      allowVetoBy: ['governance'],
-      toolPolicyId: getRequiredToolPolicyId('web-verifier'),
-      budget: { ...verifierProfile.defaultBudget }
-    })
-    const execution = await runWebVerifierSubagent({
-      proposal,
-      requestedByParticipantId: input.proposedByParticipantId,
-      claim: input.claim,
-      query: input.query
-    })
-
-    return {
-      proposal,
-      ...execution
-    }
-  }
+  executeCommittedSpawnSubagentProposalImpl = routingService.executeCommittedSpawnSubagentProposal
 
   return {
     executeCommittedSpawnSubagentProposal,
-    autoCommitEligibleSpawnSubagentProposal,
-    requestExternalVerification
+    autoCommitEligibleSpawnSubagentProposal: routingService.autoCommitEligibleSpawnSubagentProposal,
+    requestExternalVerification: routingService.requestExternalVerification
   }
 }
