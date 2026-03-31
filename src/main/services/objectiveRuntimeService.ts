@@ -1,16 +1,16 @@
 import { evaluateProposalGate } from './agentProposalGateService'
-import { buildProposalCheckpoint } from './agentCheckpointService'
 import { listAgentPolicyVersions } from './agentPersistenceService'
 import type { createExternalVerificationBrokerService } from './externalVerificationBrokerService'
 import { runMemoryWorkspaceCompare } from './memoryWorkspaceCompareService'
 import { askMemoryWorkspacePersisted } from './memoryWorkspaceSessionService'
+import { createObjectiveRuntimeDeliberationService } from './objectiveRuntimeDeliberationService'
+import { createObjectiveRuntimeProposalStateService } from './objectiveRuntimeProposalStateService'
 import { createObjectiveSubagentExecutionService } from './objectiveSubagentExecutionService'
 import type { createSubagentRegistryService } from './subagentRegistryService'
 import type {
   AgentArtifactRef,
   AgentMessageKind,
-  AgentProposalStatus,
-  AgentRole,
+  AgentObjectiveDetail,
   AgentThreadDetail,
   ConfirmAgentProposalInput,
   ListAgentObjectivesInput,
@@ -18,15 +18,11 @@ import type {
 } from '../../shared/archiveContracts'
 import {
   appendAgentMessageV2,
-  createCheckpoint,
   listObjectives,
-  createProposal,
   getObjectiveDetail,
   getProposal,
   getThreadDetail,
   recordProposalVote,
-  updateProposalStatus,
-  type AgentObjectiveDetail,
   type CreateProposalInput
 } from './objectivePersistenceService'
 import type { ArchiveDatabase } from './db'
@@ -54,90 +50,6 @@ export type ObjectiveRuntimeDependencies = {
 
 export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDependencies) {
   const { db } = dependencies
-
-  function createProposalWithCheckpoint(input: CreateProposalInput) {
-    const proposal = createProposal(db, input)
-    const checkpoint = buildProposalCheckpoint({
-      proposal,
-      nextStatus: proposal.status,
-      createdAt: proposal.createdAt
-    })
-
-    createCheckpoint(db, {
-      objectiveId: proposal.objectiveId,
-      threadId: proposal.threadId,
-      checkpointKind: checkpoint.checkpointKind,
-      title: checkpoint.title,
-      summary: checkpoint.summary,
-      relatedMessageId: checkpoint.relatedMessageId,
-      relatedProposalId: checkpoint.relatedProposalId,
-      artifactRefs: checkpoint.artifactRefs,
-      createdAt: checkpoint.createdAt
-    })
-
-    return proposal
-  }
-
-  function loadProposalRuntimeState(proposalId: string) {
-    const proposal = getProposal(db, { proposalId })
-    if (!proposal) {
-      throw new Error(`proposal not found: ${proposalId}`)
-    }
-
-    const threadDetail = getThreadDetail(db, { threadId: proposal.threadId })
-    if (!threadDetail) {
-      throw new Error(`thread not found: ${proposal.threadId}`)
-    }
-
-    return {
-      proposal,
-      votes: threadDetail.votes.filter((vote) => vote.proposalId === proposalId),
-      messages: threadDetail.messages
-    }
-  }
-
-  function writeStatusCheckpoint(proposalId: string, nextStatus: ReturnType<typeof evaluateProposalGate>['status'], messageId?: string) {
-    const proposal = getProposal(db, { proposalId })
-    if (!proposal) {
-      throw new Error(`proposal not found: ${proposalId}`)
-    }
-
-    const checkpoint = buildProposalCheckpoint({
-      proposal,
-      nextStatus,
-      messageId
-    })
-
-    createCheckpoint(db, {
-      objectiveId: proposal.objectiveId,
-      threadId: proposal.threadId,
-      checkpointKind: checkpoint.checkpointKind,
-      title: checkpoint.title,
-      summary: checkpoint.summary,
-      relatedMessageId: checkpoint.relatedMessageId,
-      relatedProposalId: checkpoint.relatedProposalId,
-      artifactRefs: checkpoint.artifactRefs,
-      createdAt: checkpoint.createdAt
-    })
-  }
-
-  function updateProposalFromGate(input: {
-    proposalId: string
-    nextStatus: AgentProposalStatus
-    messageId?: string
-  }) {
-    const updated = updateProposalStatus(db, {
-      proposalId: input.proposalId,
-      status: input.nextStatus
-    })
-    if (!updated) {
-      throw new Error(`failed to update proposal: ${input.proposalId}`)
-    }
-
-    writeStatusCheckpoint(input.proposalId, input.nextStatus, input.messageId)
-
-    return updated
-  }
 
   function nextRound(threadId: string) {
     const detail = getThreadDetail(db, { threadId })
@@ -170,218 +82,18 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
     })
   }
 
-  function stableJson(value: unknown) {
-    return JSON.stringify(value)
-  }
+  const proposalStateService = createObjectiveRuntimeProposalStateService({
+    db
+  })
 
-  function objectiveRecordFromDetail(detail: AgentObjectiveDetail) {
-    return {
-      objectiveId: detail.objectiveId,
-      title: detail.title,
-      objectiveKind: detail.objectiveKind,
-      status: detail.status,
-      prompt: detail.prompt,
-      initiatedBy: detail.initiatedBy,
-      ownerRole: detail.ownerRole,
-      mainThreadId: detail.mainThreadId,
-      riskLevel: detail.riskLevel,
-      budget: detail.budget,
-      requiresOperatorInput: detail.requiresOperatorInput,
-      createdAt: detail.createdAt,
-      updatedAt: detail.updatedAt
-    }
-  }
-
-  function hasEquivalentMessage(input: {
-    thread: AgentThreadDetail
-    fromParticipantId: string
-    kind: AgentThreadDetail['messages'][number]['kind']
-    body: string
-    toParticipantId?: string | null
-    blocking?: boolean
-  }) {
-    return input.thread.messages.some((message) => (
-      message.fromParticipantId === input.fromParticipantId
-      && message.toParticipantId === (input.toParticipantId ?? null)
-      && message.kind === input.kind
-      && message.body === input.body
-      && message.blocking === Boolean(input.blocking)
-    ))
-  }
-
-  function hasEquivalentProposal(input: {
-    thread: AgentThreadDetail
-    proposedByParticipantId: string
-    proposalKind: CreateProposalInput['proposalKind']
-    ownerRole: AgentRole
-    payload: Record<string, unknown>
-  }) {
-    const payloadJson = stableJson(input.payload)
-
-    return input.thread.proposals.some((proposal) => (
-      proposal.proposedByParticipantId === input.proposedByParticipantId
-      && proposal.proposalKind === input.proposalKind
-      && proposal.ownerRole === input.ownerRole
-      && stableJson(proposal.payload) === payloadJson
-      && proposal.status !== 'blocked'
-      && proposal.status !== 'superseded'
-    ))
-  }
-
-  async function deliberateThread(input: {
-    threadId: string
-  }) {
-    if (!dependencies.roleAgentRegistry) {
-      const thread = getThreadDetail(db, { threadId: input.threadId })
-      if (!thread) {
-        throw new Error(`thread not found: ${input.threadId}`)
-      }
-
-      const objective = getObjectiveDetail(db, { objectiveId: thread.objectiveId })
-      if (!objective) {
-        throw new Error(`objective not found: ${thread.objectiveId}`)
-      }
-
-      return {
-        objective,
-        thread
-      }
-    }
-
-    let thread = getThreadDetail(db, { threadId: input.threadId })
-    if (!thread) {
-      throw new Error(`thread not found: ${input.threadId}`)
-    }
-
-    let objective = getObjectiveDetail(db, { objectiveId: thread.objectiveId })
-    if (!objective) {
-      throw new Error(`objective not found: ${thread.objectiveId}`)
-    }
-
-    for (const participant of thread.participants) {
-      if (participant.participantKind !== 'role' || participant.leftAt !== null || !participant.role) {
-        continue
-      }
-
-      const adapter = dependencies.roleAgentRegistry.get(participant.role)
-      if (!adapter?.receive) {
-        continue
-      }
-
-      const receiveResult = await adapter.receive({
-        db,
-        objective: objectiveRecordFromDetail(objective),
-        thread,
-        participantId: participant.participantId,
-        messages: thread.messages,
-        proposals: thread.proposals,
-        round: nextRound(thread.threadId)
-      })
-
-      for (const messageDraft of receiveResult.messages) {
-        if (hasEquivalentMessage({
-          thread,
-          fromParticipantId: participant.participantId,
-          kind: messageDraft.kind,
-          body: messageDraft.body,
-          toParticipantId: messageDraft.toParticipantId,
-          blocking: messageDraft.blocking
-        })) {
-          continue
-        }
-
-        appendRuntimeMessage({
-          objectiveId: objective.objectiveId,
-          threadId: thread.threadId,
-          fromParticipantId: participant.participantId,
-          toParticipantId: messageDraft.toParticipantId,
-          kind: messageDraft.kind,
-          body: messageDraft.body,
-          refs: messageDraft.refs,
-          blocking: messageDraft.blocking,
-          confidence: messageDraft.confidence
-        })
-      }
-
-      thread = getThreadDetail(db, { threadId: input.threadId }) ?? thread
-      objective = getObjectiveDetail(db, { objectiveId: thread.objectiveId }) ?? objective
-
-      for (const proposalDraft of receiveResult.proposals ?? []) {
-        if (hasEquivalentProposal({
-          thread,
-          proposedByParticipantId: participant.participantId,
-          proposalKind: proposalDraft.proposalKind,
-          ownerRole: proposalDraft.ownerRole,
-          payload: proposalDraft.payload
-        })) {
-          continue
-        }
-
-        createProposalWithCheckpoint({
-          objectiveId: objective.objectiveId,
-          threadId: thread.threadId,
-          proposedByParticipantId: participant.participantId,
-          proposalKind: proposalDraft.proposalKind,
-          payload: proposalDraft.payload,
-          ownerRole: proposalDraft.ownerRole,
-          requiredApprovals: proposalDraft.requiredApprovals,
-          allowVetoBy: proposalDraft.allowVetoBy,
-          requiresOperatorConfirmation: proposalDraft.requiresOperatorConfirmation,
-          toolPolicyId: proposalDraft.toolPolicyId,
-          budget: proposalDraft.budget,
-          artifactRefs: proposalDraft.artifactRefs,
-          status: 'under_review'
-        })
-      }
-
-      thread = getThreadDetail(db, { threadId: input.threadId }) ?? thread
-      objective = getObjectiveDetail(db, { objectiveId: thread.objectiveId }) ?? objective
-
-      for (const spawnRequest of receiveResult.spawnRequests ?? []) {
-        const spawnSpec = dependencies.subagentRegistry.buildSpawnSubagentSpec({
-          specialization: spawnRequest.specialization,
-          payload: spawnRequest.payload
-        })
-
-        if (hasEquivalentProposal({
-          thread,
-          proposedByParticipantId: participant.participantId,
-          proposalKind: 'spawn_subagent',
-          ownerRole: spawnRequest.ownerRole,
-          payload: spawnSpec.payload
-        })) {
-          continue
-        }
-
-        createProposalWithCheckpoint({
-          objectiveId: objective.objectiveId,
-          threadId: thread.threadId,
-          proposedByParticipantId: participant.participantId,
-          proposalKind: 'spawn_subagent',
-          payload: spawnSpec.payload,
-          ownerRole: spawnRequest.ownerRole,
-          requiredApprovals: spawnRequest.requiredApprovals,
-          allowVetoBy: spawnRequest.allowVetoBy,
-          requiresOperatorConfirmation: spawnRequest.requiresOperatorConfirmation,
-          toolPolicyId: spawnRequest.toolPolicyId ?? spawnSpec.toolPolicyId,
-          budget: spawnRequest.budget ?? spawnSpec.budget,
-          artifactRefs: spawnRequest.artifactRefs,
-          status: 'under_review'
-        })
-
-        thread = getThreadDetail(db, { threadId: input.threadId }) ?? thread
-        objective = getObjectiveDetail(db, { objectiveId: thread.objectiveId }) ?? objective
-      }
-
-      thread = getThreadDetail(db, { threadId: input.threadId }) ?? thread
-      objective = getObjectiveDetail(db, { objectiveId: thread.objectiveId }) ?? objective
-    }
-
-    return {
-      objective,
-      thread
-    }
-  }
+  const deliberationService = createObjectiveRuntimeDeliberationService({
+    db,
+    roleAgentRegistry: dependencies.roleAgentRegistry,
+    subagentRegistry: dependencies.subagentRegistry,
+    nextRound,
+    appendRuntimeMessage,
+    createProposalWithCheckpoint: proposalStateService.createProposalWithCheckpoint
+  })
 
   const subagentExecutionService = createObjectiveSubagentExecutionService({
     db,
@@ -392,9 +104,9 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
     listAgentPolicyVersions: dependencies.listAgentPolicyVersions,
     helpers: {
       appendRuntimeMessage,
-      createProposalWithCheckpoint,
-      loadProposalRuntimeState,
-      updateProposalFromGate
+      createProposalWithCheckpoint: proposalStateService.createProposalWithCheckpoint,
+      loadProposalRuntimeState: proposalStateService.loadProposalRuntimeState,
+      updateProposalFromGate: proposalStateService.updateProposalFromGate
     }
   })
 
@@ -413,7 +125,7 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
         initiatedBy: input.initiatedBy
       })
 
-      await deliberateThread({
+      await deliberationService.deliberateThread({
         threadId: started.mainThread.threadId
       })
 
@@ -423,7 +135,7 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
     createProposal(input: Omit<CreateProposalInput, 'status'> & {
       status?: CreateProposalInput['status']
     }) {
-      return createProposalWithCheckpoint({
+      return proposalStateService.createProposalWithCheckpoint({
         ...input,
         requiredApprovals: input.requiredApprovals ?? [input.ownerRole],
         allowVetoBy: input.allowVetoBy ?? ['governance'],
@@ -447,23 +159,17 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
         round: 1,
         blocking: true
       })
-      const runtimeState = loadProposalRuntimeState(input.proposalId)
+      const runtimeState = proposalStateService.loadProposalRuntimeState(input.proposalId)
       const gate = evaluateProposalGate({
         proposal: runtimeState.proposal,
         votes: runtimeState.votes,
         messages: [...runtimeState.messages, challengeMessage]
       })
-      const updated = updateProposalStatus(db, {
+      return proposalStateService.updateProposalFromGate({
         proposalId: input.proposalId,
-        status: gate.status
+        nextStatus: gate.status,
+        messageId: challengeMessage.messageId
       })
-      if (!updated) {
-        throw new Error(`failed to update proposal: ${input.proposalId}`)
-      }
-
-      writeStatusCheckpoint(input.proposalId, gate.status, challengeMessage.messageId)
-
-      return updated
     },
 
     vetoProposal(input: {
@@ -480,7 +186,7 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
         vote: 'veto',
         comment: input.rationale
       })
-      const runtimeState = loadProposalRuntimeState(input.proposalId)
+      const runtimeState = proposalStateService.loadProposalRuntimeState(input.proposalId)
       const gate = evaluateProposalGate({
         proposal: runtimeState.proposal,
         votes: runtimeState.votes,
@@ -489,17 +195,11 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
       const nextStatus = runtimeState.proposal.allowVetoBy.includes('governance')
         ? 'vetoed'
         : gate.status
-      const updated = updateProposalStatus(db, {
+
+      return proposalStateService.updateProposalFromGate({
         proposalId: input.proposalId,
-        status: nextStatus
+        nextStatus
       })
-      if (!updated) {
-        throw new Error(`failed to update proposal: ${input.proposalId}`)
-      }
-
-      writeStatusCheckpoint(input.proposalId, nextStatus)
-
-      return updated
     },
 
     async requestExternalVerification(input: {
@@ -531,23 +231,16 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
         comment: 'Owner approved the proposal.'
       })
 
-      const runtimeState = loadProposalRuntimeState(input.proposalId)
+      const runtimeState = proposalStateService.loadProposalRuntimeState(input.proposalId)
       const gate = evaluateProposalGate({
         proposal: runtimeState.proposal,
         votes: runtimeState.votes,
         messages: runtimeState.messages
       })
-      const updated = updateProposalStatus(db, {
+      return proposalStateService.updateProposalFromGate({
         proposalId: input.proposalId,
-        status: gate.status
+        nextStatus: gate.status
       })
-      if (!updated) {
-        throw new Error(`failed to update proposal: ${input.proposalId}`)
-      }
-
-      writeStatusCheckpoint(input.proposalId, gate.status)
-
-      return updated
     },
 
     listObjectives(input?: ListAgentObjectivesInput) {
@@ -560,7 +253,7 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
       return getThreadDetail(db, input)
     },
 
-    deliberateThread,
+    deliberateThread: deliberationService.deliberateThread,
 
     async respondToAgentProposal(input: RespondToAgentProposalInput) {
       const proposal = getProposal(db, { proposalId: input.proposalId })
@@ -588,7 +281,7 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
         artifactRefs: input.artifactRefs
       })
 
-      const runtimeState = loadProposalRuntimeState(proposal.proposalId)
+      const runtimeState = proposalStateService.loadProposalRuntimeState(proposal.proposalId)
       const gate = evaluateProposalGate({
         proposal: runtimeState.proposal,
         votes: runtimeState.votes,
@@ -598,7 +291,7 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
         ? 'blocked'
         : gate.status
 
-      const updated = updateProposalFromGate({
+      const updated = proposalStateService.updateProposalFromGate({
         proposalId: proposal.proposalId,
         nextStatus
       })
@@ -612,7 +305,7 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
         return null
       }
 
-      const runtimeState = loadProposalRuntimeState(proposal.proposalId)
+      const runtimeState = proposalStateService.loadProposalRuntimeState(proposal.proposalId)
       const decisionMessage = input.operatorNote
         ? appendAgentMessageV2(db, {
           objectiveId: proposal.objectiveId,
@@ -633,7 +326,7 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
           operatorConfirmed: true
         }).status
 
-      const updated = updateProposalFromGate({
+      const updated = proposalStateService.updateProposalFromGate({
         proposalId: proposal.proposalId,
         nextStatus,
         messageId: decisionMessage?.messageId
