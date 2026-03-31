@@ -1,9 +1,9 @@
-import { evaluateProposalGate } from './agentProposalGateService'
 import { listAgentPolicyVersions } from './agentPersistenceService'
 import type { createExternalVerificationBrokerService } from './externalVerificationBrokerService'
 import { runMemoryWorkspaceCompare } from './memoryWorkspaceCompareService'
 import { askMemoryWorkspacePersisted } from './memoryWorkspaceSessionService'
 import { createObjectiveRuntimeDeliberationService } from './objectiveRuntimeDeliberationService'
+import { createObjectiveRuntimeProposalDecisionService } from './objectiveRuntimeProposalDecisionService'
 import { createObjectiveRuntimeProposalStateService } from './objectiveRuntimeProposalStateService'
 import { createObjectiveSubagentExecutionService } from './objectiveSubagentExecutionService'
 import type { createSubagentRegistryService } from './subagentRegistryService'
@@ -20,9 +20,7 @@ import {
   appendAgentMessageV2,
   listObjectives,
   getObjectiveDetail,
-  getProposal,
   getThreadDetail,
-  recordProposalVote,
   type CreateProposalInput
 } from './objectivePersistenceService'
 import type { ArchiveDatabase } from './db'
@@ -95,6 +93,11 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
     createProposalWithCheckpoint: proposalStateService.createProposalWithCheckpoint
   })
 
+  const proposalDecisionService = createObjectiveRuntimeProposalDecisionService({
+    db,
+    proposalStateService
+  })
+
   const subagentExecutionService = createObjectiveSubagentExecutionService({
     db,
     externalVerificationBroker: dependencies.externalVerificationBroker,
@@ -150,26 +153,7 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
       fromParticipantId: string
       body: string
     }) {
-      const challengeMessage = appendAgentMessageV2(db, {
-        objectiveId: input.objectiveId,
-        threadId: input.threadId,
-        fromParticipantId: input.fromParticipantId,
-        kind: 'challenge',
-        body: input.body,
-        round: 1,
-        blocking: true
-      })
-      const runtimeState = proposalStateService.loadProposalRuntimeState(input.proposalId)
-      const gate = evaluateProposalGate({
-        proposal: runtimeState.proposal,
-        votes: runtimeState.votes,
-        messages: [...runtimeState.messages, challengeMessage]
-      })
-      return proposalStateService.updateProposalFromGate({
-        proposalId: input.proposalId,
-        nextStatus: gate.status,
-        messageId: challengeMessage.messageId
-      })
+      return proposalDecisionService.raiseBlockingChallenge(input)
     },
 
     vetoProposal(input: {
@@ -178,28 +162,7 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
       proposalId: string
       rationale: string
     }) {
-      recordProposalVote(db, {
-        objectiveId: input.objectiveId,
-        threadId: input.threadId,
-        proposalId: input.proposalId,
-        voterRole: 'governance',
-        vote: 'veto',
-        comment: input.rationale
-      })
-      const runtimeState = proposalStateService.loadProposalRuntimeState(input.proposalId)
-      const gate = evaluateProposalGate({
-        proposal: runtimeState.proposal,
-        votes: runtimeState.votes,
-        messages: runtimeState.messages
-      })
-      const nextStatus = runtimeState.proposal.allowVetoBy.includes('governance')
-        ? 'vetoed'
-        : gate.status
-
-      return proposalStateService.updateProposalFromGate({
-        proposalId: input.proposalId,
-        nextStatus
-      })
+      return proposalDecisionService.vetoProposal(input)
     },
 
     async requestExternalVerification(input: {
@@ -217,30 +180,7 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
       threadId: string
       proposalId: string
     }) {
-      const proposal = getProposal(db, { proposalId: input.proposalId })
-      if (!proposal) {
-        throw new Error(`proposal not found: ${input.proposalId}`)
-      }
-
-      recordProposalVote(db, {
-        objectiveId: input.objectiveId,
-        threadId: input.threadId,
-        proposalId: input.proposalId,
-        voterRole: proposal.ownerRole,
-        vote: 'approve',
-        comment: 'Owner approved the proposal.'
-      })
-
-      const runtimeState = proposalStateService.loadProposalRuntimeState(input.proposalId)
-      const gate = evaluateProposalGate({
-        proposal: runtimeState.proposal,
-        votes: runtimeState.votes,
-        messages: runtimeState.messages
-      })
-      return proposalStateService.updateProposalFromGate({
-        proposalId: input.proposalId,
-        nextStatus: gate.status
-      })
+      return proposalDecisionService.approveProposalAsOwner(input)
     },
 
     listObjectives(input?: ListAgentObjectivesInput) {
@@ -256,81 +196,19 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
     deliberateThread: deliberationService.deliberateThread,
 
     async respondToAgentProposal(input: RespondToAgentProposalInput) {
-      const proposal = getProposal(db, { proposalId: input.proposalId })
-      if (!proposal) {
+      const updated = await proposalDecisionService.respondToAgentProposal(input)
+      if (!updated) {
         return null
       }
-
-      if (input.response === 'challenge') {
-        return this.raiseBlockingChallenge({
-          objectiveId: proposal.objectiveId,
-          threadId: proposal.threadId,
-          proposalId: proposal.proposalId,
-          fromParticipantId: input.responderRole,
-          body: input.comment ?? `${input.responderRole} raised a blocking challenge.`
-        })
-      }
-
-      recordProposalVote(db, {
-        objectiveId: proposal.objectiveId,
-        threadId: proposal.threadId,
-        proposalId: proposal.proposalId,
-        voterRole: input.responderRole,
-        vote: input.response,
-        comment: input.comment,
-        artifactRefs: input.artifactRefs
-      })
-
-      const runtimeState = proposalStateService.loadProposalRuntimeState(proposal.proposalId)
-      const gate = evaluateProposalGate({
-        proposal: runtimeState.proposal,
-        votes: runtimeState.votes,
-        messages: runtimeState.messages
-      })
-      const nextStatus = input.response === 'reject'
-        ? 'blocked'
-        : gate.status
-
-      const updated = proposalStateService.updateProposalFromGate({
-        proposalId: proposal.proposalId,
-        nextStatus
-      })
 
       return subagentExecutionService.autoCommitEligibleSpawnSubagentProposal(updated)
     },
 
     async confirmAgentProposal(input: ConfirmAgentProposalInput) {
-      const proposal = getProposal(db, { proposalId: input.proposalId })
-      if (!proposal) {
+      const updated = await proposalDecisionService.confirmAgentProposal(input)
+      if (!updated) {
         return null
       }
-
-      const runtimeState = proposalStateService.loadProposalRuntimeState(proposal.proposalId)
-      const decisionMessage = input.operatorNote
-        ? appendAgentMessageV2(db, {
-          objectiveId: proposal.objectiveId,
-          threadId: proposal.threadId,
-          fromParticipantId: 'operator',
-          kind: 'decision',
-          body: input.operatorNote,
-          round: (runtimeState.messages.at(-1)?.round ?? 0) + 1,
-          blocking: input.decision === 'block'
-        })
-        : null
-      const nextStatus = input.decision === 'block'
-        ? 'blocked'
-        : evaluateProposalGate({
-          proposal: runtimeState.proposal,
-          votes: runtimeState.votes,
-          messages: runtimeState.messages,
-          operatorConfirmed: true
-        }).status
-
-      const updated = proposalStateService.updateProposalFromGate({
-        proposalId: proposal.proposalId,
-        nextStatus,
-        messageId: decisionMessage?.messageId
-      })
 
       if (updated.status === 'committed') {
         await subagentExecutionService.executeCommittedSpawnSubagentProposal(updated)
