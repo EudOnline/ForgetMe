@@ -1,17 +1,15 @@
-import type { AgentArtifactRef, AgentRole } from '../../../shared/archiveContracts'
+import type {
+  AgentArtifactRef,
+  AgentPolicyVersionRecord,
+  AgentRole
+} from '../../../shared/archiveContracts'
 
 export type PolicyAuditorPayload = {
   policyKey: string
   role: AgentRole
 }
 
-export type PolicyVersionSnapshot = {
-  policyVersionId: string
-  role: AgentRole
-  policyKey: string
-  policyBody: string
-  createdAt: string
-}
+export type PolicyVersionSnapshot = AgentPolicyVersionRecord
 
 type AuthorizedToolRunner = <T>(input: {
   toolName: string

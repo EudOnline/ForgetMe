@@ -1,5 +1,6 @@
 import type {
   AgentArtifactRef,
+  MemoryWorkspaceCompareSessionDetail,
   MemoryWorkspaceExpressionMode,
   MemoryWorkspaceScope,
   MemoryWorkspaceWorkflowKind
@@ -12,16 +13,7 @@ export type CompareAnalystPayload = {
   workflowKind: MemoryWorkspaceWorkflowKind
 }
 
-type CompareRecommendation = {
-  reason?: string | null
-  recommendedCompareRunId?: string | null
-}
-
-export type CompareSessionResult = {
-  compareSessionId: string
-  runCount: number
-  recommendation?: CompareRecommendation | null
-}
+export type CompareSessionResult = MemoryWorkspaceCompareSessionDetail
 
 type AuthorizedToolRunner = <T>(input: {
   toolName: string
@@ -114,7 +106,7 @@ export async function runCompareAnalystTask(input: CompareAnalystTaskInput) {
       compareSessionId: session.compareSessionId
     },
     run: async () => {
-      const reason = session.recommendation?.reason?.trim()
+      const reason = session.recommendation?.rationale?.trim()
       const summaryText = reason
         ? `Compare session ${session.compareSessionId} finished ${session.runCount} run(s). Recommendation: ${reason}`
         : `Compare session ${session.compareSessionId} finished ${session.runCount} run(s). No explicit recommendation was recorded.`

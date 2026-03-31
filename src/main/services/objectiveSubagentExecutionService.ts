@@ -386,7 +386,7 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
                   executionMode: 'local_baseline'
                 }
               ]
-            }) as any
+            })
           ),
           runTool,
           appendRuntimeMessage: dependencies.helpers.appendRuntimeMessage
@@ -429,7 +429,7 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
               expressionMode: payload.expressionMode,
               workflowKind: 'persona_draft_sandbox',
               sessionId: payload.sessionId ?? undefined
-            }) as any
+            })
           ),
           runTool,
           appendRuntimeMessage: dependencies.helpers.appendRuntimeMessage
@@ -465,7 +465,7 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
             (dependencies.listAgentPolicyVersions ?? listAgentPolicyVersions)(db, {
               role: payload.role,
               policyKey: payload.policyKey
-            }) as any
+            })
           ),
           runTool,
           appendRuntimeMessage: dependencies.helpers.appendRuntimeMessage

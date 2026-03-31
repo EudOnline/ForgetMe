@@ -1,7 +1,8 @@
 import type {
   AgentArtifactRef,
   MemoryWorkspaceExpressionMode,
-  MemoryWorkspaceScope
+  MemoryWorkspaceScope,
+  MemoryWorkspaceTurnRecord
 } from '../../../shared/archiveContracts'
 
 export type DraftComposerPayload = {
@@ -11,20 +12,7 @@ export type DraftComposerPayload = {
   sessionId: string | null
 }
 
-export type DraftWorkspaceTurn = {
-  turnId: string
-  sessionId: string
-  response: {
-    workflowKind?: string
-    answer?: {
-      summary?: string
-    } | null
-    personaDraft?: {
-      draft?: string
-      reviewStatus?: string | null
-    } | null
-  }
-}
+export type DraftWorkspaceTurn = MemoryWorkspaceTurnRecord
 
 type AuthorizedToolRunner = <T>(input: {
   toolName: string
@@ -134,7 +122,7 @@ export async function runDraftComposerTask(input: DraftComposerTaskInput) {
           turnId: turn.turnId,
           sessionId: turn.sessionId,
           workflowKind: turn.response.workflowKind ?? 'default',
-          reviewStatus: turn.response.personaDraft?.reviewStatus ?? null
+          reviewState: turn.response.personaDraft?.reviewState ?? null
         },
         artifactRefs: [
           {
