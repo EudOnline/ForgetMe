@@ -24,77 +24,27 @@ import type {
   RunAgentTaskInput
 } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
-
-type AgentRunRow = {
-  id: string
-  role: AgentRole
-  taskKind: AgentTaskKind | null
-  targetRole: AgentRole | null
-  assignedRolesJson: string
-  latestAssistantResponse: string | null
-  status: AgentRunStatus
-  executionOrigin: AgentRunExecutionOrigin | null
-  prompt: string
-  confirmationToken: string | null
-  policyVersion: string | null
-  errorMessage: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-type AgentMessageRow = {
-  id: string
-  runId: string
-  ordinal: number
-  sender: AgentMessageRecord['sender']
-  content: string
-  createdAt: string
-}
-
-type AgentMemoryRow = {
-  id: string
-  role: AgentRole
-  memoryKey: string
-  memoryValue: string
-  createdAt: string
-  updatedAt: string
-}
-
-type AgentPolicyVersionRow = {
-  id: string
-  role: AgentRole
-  policyKey: string
-  policyBody: string
-  createdAt: string
-}
-
-type AgentSuggestionRow = {
-  id: string
-  triggerKind: AgentTriggerKind
-  status: AgentSuggestionStatus
-  role: AgentRole
-  taskKind: AgentTaskKind
-  taskInputJson: string
-  dedupeKey: string
-  sourceRunId: string | null
-  executedRunId: string | null
-  priority: AgentSuggestionPriority | null
-  rationale: string | null
-  autoRunnable: number | null
-  followUpOfSuggestionId: string | null
-  attemptCount: number | null
-  cooldownUntil: string | null
-  lastAttemptedAt: string | null
-  createdAt: string
-  updatedAt: string
-  lastObservedAt: string
-}
-
-type AgentRuntimeSettingsRow = {
-  settingsId: string
-  autonomyMode: AgentAutonomyMode
-  updatedAt: string
-}
+import {
+  listAgentMemoryRows,
+  listAgentPolicyVersionRows,
+  listAgentRunRows,
+  listAgentSuggestionRows,
+  listRunnableAgentSuggestionRows,
+  loadAgentMemoryRow,
+  loadAgentMessageRows,
+  loadAgentPolicyVersionRow,
+  loadAgentRunRow,
+  loadAgentRuntimeSettingsRow,
+  loadAgentSuggestionRow,
+  loadAgentSuggestionRowByDedupeKey,
+  mapAgentMemoryRow,
+  mapAgentMessageRow,
+  mapAgentPolicyVersionRow,
+  mapAgentRunRow,
+  mapAgentRuntimeSettingsRow,
+  mapAgentSuggestionRow,
+  serializeAssignedRoles
+} from './agentPersistenceQueryService'
 
 export type CreateAgentRunInput = {
   runId?: string
@@ -146,245 +96,6 @@ function inTransaction<T>(db: ArchiveDatabase, callback: () => T) {
   }
 }
 
-const AGENT_ROLES: ReadonlySet<AgentRole> = new Set([
-  'orchestrator',
-  'ingestion',
-  'review',
-  'workspace',
-  'governance'
-])
-
-function parseAssignedRolesJson(value: string | null | undefined): AgentRole[] {
-  if (!value) {
-    return []
-  }
-
-  try {
-    const parsed = JSON.parse(value) as unknown
-    if (!Array.isArray(parsed)) {
-      return []
-    }
-
-    return parsed.filter((item): item is AgentRole => typeof item === 'string' && AGENT_ROLES.has(item as AgentRole))
-  } catch {
-    return []
-  }
-}
-
-function serializeAssignedRoles(assignedRoles?: AgentRole[]) {
-  return JSON.stringify(assignedRoles ?? [])
-}
-
-function mapAgentRunRow(row: AgentRunRow): AgentRunRecord {
-  return {
-    runId: row.id,
-    role: row.role,
-    taskKind: row.taskKind,
-    targetRole: row.targetRole,
-    assignedRoles: parseAssignedRolesJson(row.assignedRolesJson),
-    latestAssistantResponse: row.latestAssistantResponse,
-    status: row.status,
-    executionOrigin: row.executionOrigin ?? 'operator_manual',
-    prompt: row.prompt,
-    confirmationToken: row.confirmationToken,
-    policyVersion: row.policyVersion,
-    errorMessage: row.errorMessage,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt
-  }
-}
-
-function mapAgentMessageRow(row: AgentMessageRow): AgentMessageRecord {
-  return {
-    messageId: row.id,
-    runId: row.runId,
-    ordinal: row.ordinal,
-    sender: row.sender,
-    content: row.content,
-    createdAt: row.createdAt
-  }
-}
-
-function mapAgentMemoryRow(row: AgentMemoryRow): AgentMemoryRecord {
-  return {
-    memoryId: row.id,
-    role: row.role,
-    memoryKey: row.memoryKey,
-    memoryValue: row.memoryValue,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt
-  }
-}
-
-function mapAgentPolicyVersionRow(row: AgentPolicyVersionRow): AgentPolicyVersionRecord {
-  return {
-    policyVersionId: row.id,
-    role: row.role,
-    policyKey: row.policyKey,
-    policyBody: row.policyBody,
-    createdAt: row.createdAt
-  }
-}
-
-function parseTaskInputJson(rawValue: string): RunAgentTaskInput {
-  const parsed = JSON.parse(rawValue) as unknown
-  if (!parsed || typeof parsed !== 'object') {
-    throw new Error('invalid agent suggestion task input')
-  }
-
-  return parsed as RunAgentTaskInput
-}
-
-function mapAgentSuggestionRow(row: AgentSuggestionRow): AgentSuggestionRecord {
-  return {
-    suggestionId: row.id,
-    triggerKind: row.triggerKind,
-    status: row.status,
-    role: row.role,
-    taskKind: row.taskKind,
-    taskInput: parseTaskInputJson(row.taskInputJson),
-    dedupeKey: row.dedupeKey,
-    sourceRunId: row.sourceRunId,
-    executedRunId: row.executedRunId,
-    priority: row.priority ?? 'medium',
-    rationale: row.rationale ?? '',
-    autoRunnable: row.autoRunnable === 1,
-    followUpOfSuggestionId: row.followUpOfSuggestionId,
-    attemptCount: row.attemptCount ?? 0,
-    cooldownUntil: row.cooldownUntil,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-    lastObservedAt: row.lastObservedAt
-  }
-}
-
-function mapAgentRuntimeSettingsRow(row: AgentRuntimeSettingsRow): AgentRuntimeSettingsRecord {
-  return {
-    settingsId: row.settingsId,
-    autonomyMode: row.autonomyMode,
-    updatedAt: row.updatedAt
-  }
-}
-
-function loadAgentRunRow(db: ArchiveDatabase, runId: string) {
-  return db.prepare(
-    `select
-      id,
-      role,
-      task_kind as taskKind,
-      target_role as targetRole,
-      assigned_roles_json as assignedRolesJson,
-      latest_assistant_response as latestAssistantResponse,
-      status,
-      execution_origin as executionOrigin,
-      prompt,
-      confirmation_token as confirmationToken,
-      policy_version as policyVersion,
-      error_message as errorMessage,
-      created_at as createdAt,
-      updated_at as updatedAt
-     from agent_runs
-     where id = ?`
-  ).get(runId) as AgentRunRow | undefined
-}
-
-function loadAgentMessageRows(db: ArchiveDatabase, runId: string) {
-  return db.prepare(
-    `select
-      id,
-      run_id as runId,
-      ordinal,
-      sender,
-      content,
-      created_at as createdAt
-     from agent_messages
-     where run_id = ?
-     order by ordinal asc, created_at asc, id asc`
-  ).all(runId) as AgentMessageRow[]
-}
-
-function loadAgentMemoryRow(db: ArchiveDatabase, input: {
-  role: AgentRole
-  memoryKey: string
-}) {
-  return db.prepare(
-    `select
-      id,
-      role,
-      memory_key as memoryKey,
-      memory_value as memoryValue,
-      created_at as createdAt,
-      updated_at as updatedAt
-     from agent_memories
-     where role = ?
-       and memory_key = ?`
-  ).get(input.role, input.memoryKey) as AgentMemoryRow | undefined
-}
-
-function loadAgentSuggestionRow(db: ArchiveDatabase, suggestionId: string) {
-  return db.prepare(
-    `select
-      id,
-      trigger_kind as triggerKind,
-      status,
-      role,
-      task_kind as taskKind,
-      task_input_json as taskInputJson,
-      dedupe_key as dedupeKey,
-      source_run_id as sourceRunId,
-      executed_run_id as executedRunId,
-      priority,
-      rationale,
-      auto_runnable as autoRunnable,
-      follow_up_of_suggestion_id as followUpOfSuggestionId,
-      attempt_count as attemptCount,
-      cooldown_until as cooldownUntil,
-      last_attempted_at as lastAttemptedAt,
-      created_at as createdAt,
-      updated_at as updatedAt,
-      last_observed_at as lastObservedAt
-     from agent_suggestions
-     where id = ?`
-  ).get(suggestionId) as AgentSuggestionRow | undefined
-}
-
-function loadAgentSuggestionRowByDedupeKey(db: ArchiveDatabase, dedupeKey: string) {
-  return db.prepare(
-    `select
-      id,
-      trigger_kind as triggerKind,
-      status,
-      role,
-      task_kind as taskKind,
-      task_input_json as taskInputJson,
-      dedupe_key as dedupeKey,
-      source_run_id as sourceRunId,
-      executed_run_id as executedRunId,
-      priority,
-      rationale,
-      auto_runnable as autoRunnable,
-      follow_up_of_suggestion_id as followUpOfSuggestionId,
-      attempt_count as attemptCount,
-      cooldown_until as cooldownUntil,
-      last_attempted_at as lastAttemptedAt,
-      created_at as createdAt,
-      updated_at as updatedAt,
-      last_observed_at as lastObservedAt
-     from agent_suggestions
-     where dedupe_key = ?`
-  ).get(dedupeKey) as AgentSuggestionRow | undefined
-}
-
-function loadAgentRuntimeSettingsRow(db: ArchiveDatabase) {
-  return db.prepare(
-    `select
-      settings_id as settingsId,
-      autonomy_mode as autonomyMode,
-      updated_at as updatedAt
-     from agent_runtime_settings
-     where settings_id = ?`
-  ).get(DEFAULT_AGENT_RUNTIME_SETTINGS_ID) as AgentRuntimeSettingsRow | undefined
-}
 
 export function createAgentRun(
   db: ArchiveDatabase,
@@ -525,27 +236,7 @@ export function listAgentRuns(
   db: ArchiveDatabase,
   input: ListAgentRunsInput = {}
 ): AgentRunRecord[] {
-  const rows = db.prepare(
-    `select
-      id,
-      role,
-      task_kind as taskKind,
-      target_role as targetRole,
-      assigned_roles_json as assignedRolesJson,
-      latest_assistant_response as latestAssistantResponse,
-      status,
-      execution_origin as executionOrigin,
-      prompt,
-      confirmation_token as confirmationToken,
-      policy_version as policyVersion,
-      error_message as errorMessage,
-      created_at as createdAt,
-      updated_at as updatedAt
-     from agent_runs
-     order by created_at desc, updated_at desc, id asc`
-  ).all() as AgentRunRow[]
-
-  const filtered = rows.filter((row) => {
+  const filtered = listAgentRunRows(db).filter((row) => {
     if (input.role && row.role !== input.role) {
       return false
     }
@@ -616,19 +307,7 @@ export function listAgentMemories(
   db: ArchiveDatabase,
   input: ListAgentMemoriesInput = {}
 ): AgentMemoryRecord[] {
-  const rows = db.prepare(
-    `select
-      id,
-      role,
-      memory_key as memoryKey,
-      memory_value as memoryValue,
-      created_at as createdAt,
-      updated_at as updatedAt
-     from agent_memories
-     order by updated_at desc, created_at desc, id asc`
-  ).all() as AgentMemoryRow[]
-
-  return rows
+  return listAgentMemoryRows(db)
     .filter((row) => {
       if (input.role && row.role !== input.role) {
         return false
@@ -665,17 +344,7 @@ export function createAgentPolicyVersion(db: ArchiveDatabase, input: {
     createdAt
   )
 
-  const row = db.prepare(
-    `select
-      id,
-      role,
-      policy_key as policyKey,
-      policy_body as policyBody,
-      created_at as createdAt
-     from agent_policy_versions
-     where id = ?`
-  ).get(policyVersionId) as AgentPolicyVersionRow | undefined
-
+  const row = loadAgentPolicyVersionRow(db, policyVersionId)
   return mapAgentPolicyVersionRow(row!)
 }
 
@@ -683,18 +352,7 @@ export function listAgentPolicyVersions(
   db: ArchiveDatabase,
   input: ListAgentPolicyVersionsInput = {}
 ): AgentPolicyVersionRecord[] {
-  const rows = db.prepare(
-    `select
-      id,
-      role,
-      policy_key as policyKey,
-      policy_body as policyBody,
-      created_at as createdAt
-     from agent_policy_versions
-     order by created_at desc, id asc`
-  ).all() as AgentPolicyVersionRow[]
-
-  return rows
+  return listAgentPolicyVersionRows(db)
     .filter((row) => {
       if (input.role && row.role !== input.role) {
         return false
@@ -787,32 +445,7 @@ export function listAgentSuggestions(
   db: ArchiveDatabase,
   input: ListAgentSuggestionsInput = {}
 ): AgentSuggestionRecord[] {
-  const rows = db.prepare(
-    `select
-      id,
-      trigger_kind as triggerKind,
-      status,
-      role,
-      task_kind as taskKind,
-      task_input_json as taskInputJson,
-      dedupe_key as dedupeKey,
-      source_run_id as sourceRunId,
-      executed_run_id as executedRunId,
-      priority,
-      rationale,
-      auto_runnable as autoRunnable,
-      follow_up_of_suggestion_id as followUpOfSuggestionId,
-      attempt_count as attemptCount,
-      cooldown_until as cooldownUntil,
-      last_attempted_at as lastAttemptedAt,
-      created_at as createdAt,
-      updated_at as updatedAt,
-      last_observed_at as lastObservedAt
-     from agent_suggestions
-     order by last_observed_at desc, updated_at desc, created_at desc, id asc`
-  ).all() as AgentSuggestionRow[]
-
-  const filtered = rows.filter((row) => {
+  const filtered = listAgentSuggestionRows(db).filter((row) => {
     if (input.status && row.status !== input.status) {
       return false
     }
@@ -869,7 +502,7 @@ export function markAgentSuggestionExecuted(
 }
 
 export function getAgentRuntimeSettings(db: ArchiveDatabase): AgentRuntimeSettingsRecord {
-  const existing = loadAgentRuntimeSettingsRow(db)
+  const existing = loadAgentRuntimeSettingsRow(db, DEFAULT_AGENT_RUNTIME_SETTINGS_ID)
   if (existing) {
     return mapAgentRuntimeSettingsRow(existing)
   }
@@ -900,7 +533,7 @@ export function upsertAgentRuntimeSettings(db: ArchiveDatabase, input: {
     updatedAt
   )
 
-  return mapAgentRuntimeSettingsRow(loadAgentRuntimeSettingsRow(db)!)
+  return mapAgentRuntimeSettingsRow(loadAgentRuntimeSettingsRow(db, DEFAULT_AGENT_RUNTIME_SETTINGS_ID)!)
 }
 
 export function incrementAgentSuggestionAttempt(db: ArchiveDatabase, input: {
@@ -932,45 +565,9 @@ export function listRunnableAgentSuggestions(db: ArchiveDatabase, input: {
   limit?: number
 } = {}): AgentSuggestionRecord[] {
   const now = input.now ?? new Date().toISOString()
-  const rows = db.prepare(
-    `select
-      id,
-      trigger_kind as triggerKind,
-      status,
-      role,
-      task_kind as taskKind,
-      task_input_json as taskInputJson,
-      dedupe_key as dedupeKey,
-      source_run_id as sourceRunId,
-      executed_run_id as executedRunId,
-      priority,
-      rationale,
-      auto_runnable as autoRunnable,
-      follow_up_of_suggestion_id as followUpOfSuggestionId,
-      attempt_count as attemptCount,
-      cooldown_until as cooldownUntil,
-      last_attempted_at as lastAttemptedAt,
-      created_at as createdAt,
-      updated_at as updatedAt,
-      last_observed_at as lastObservedAt
-     from agent_suggestions
-     where status = 'suggested'
-       and auto_runnable = 1
-       and (cooldown_until is null or cooldown_until <= ?)
-     order by
-       case priority
-         when 'critical' then 0
-         when 'high' then 1
-         when 'medium' then 2
-         else 3
-       end asc,
-       last_observed_at desc,
-       updated_at desc,
-       created_at desc,
-       id asc`
-  ).all(now) as AgentSuggestionRow[]
+  const runnableRows = listRunnableAgentSuggestionRows(db, now)
 
-  return rows
-    .slice(0, input.limit ?? rows.length)
+  return runnableRows
+    .slice(0, input.limit ?? runnableRows.length)
     .map(mapAgentSuggestionRow)
 }
