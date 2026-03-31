@@ -1,56 +1,15 @@
 import crypto from 'node:crypto'
 import type { ArchiveDatabase } from './db'
+import {
+  insertEnrichmentArtifact,
+  insertFixtureEnrichmentJob,
+  insertStructuredFieldCandidate,
+  loadFixtureFile,
+  loadLinkedCanonicalPersonId,
+  persistFixtureProviderBoundary
+} from './e2eMultimodalFixturePersistenceService'
 import { queueStructuredFieldCandidate } from './enrichmentReviewService'
 import { queueProfileAttributeCandidate } from './profileProjectionService'
-import {
-  buildProviderBoundaryRequest,
-  persistProviderEgressRequest,
-  persistProviderEgressResponse
-} from './providerBoundaryService'
-
-function loadFixtureFile(db: ArchiveDatabase, fileId: string) {
-  return db.prepare(
-    `select
-      id,
-      batch_id as batchId,
-      file_name as fileName,
-      frozen_path as frozenPath,
-      sha256 as fileSha256,
-      extension,
-      mime_type as mimeType
-     from vault_files
-     where id = ?
-     limit 1`
-  ).get(fileId) as {
-    id: string
-    batchId: string | null
-    fileName: string
-    frozenPath: string
-    fileSha256: string
-    extension: string | null
-    mimeType: string | null
-  } | undefined
-}
-
-function loadLinkedCanonicalPersonId(db: ArchiveDatabase, fileId: string) {
-  const row = db.prepare(
-    `select pm.canonical_person_id as canonicalPersonId
-     from relations r
-     join person_memberships pm
-       on pm.anchor_person_id = r.source_id
-      and pm.status = 'active'
-     join canonical_people cp
-       on cp.id = pm.canonical_person_id
-      and cp.status = 'approved'
-     where r.source_type = 'person'
-       and r.target_type = 'file'
-       and r.target_id = ?
-     order by pm.canonical_person_id asc
-     limit 1`
-  ).get(fileId) as { canonicalPersonId: string } | undefined
-
-  return row?.canonicalPersonId ?? null
-}
 
 export function seedE2EMultimodalReviewFixture(db: ArchiveDatabase, input: { fileId: string }) {
   const existing = db.prepare(
@@ -73,96 +32,58 @@ export function seedE2EMultimodalReviewFixture(db: ArchiveDatabase, input: { fil
   const jobId = crypto.randomUUID()
   const candidateId = crypto.randomUUID()
 
-  db.prepare(
-    `insert into enrichment_jobs (
-      id, file_id, enhancer_type, provider, model, status, attempt_count,
-      input_hash, started_at, finished_at, error_message, usage_json, created_at, updated_at
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(
+  insertFixtureEnrichmentJob({
+    db,
     jobId,
-    input.fileId,
-    'document_ocr',
-    'siliconflow',
-    'fixture-model',
-    'completed',
-    1,
-    'e2e-fixture',
-    createdAt,
-    createdAt,
-    null,
-    JSON.stringify({ fixture: true }),
-    createdAt,
-    createdAt
-  )
-
-  const boundaryRequest = buildProviderBoundaryRequest({
-    job: {
-      id: jobId,
-      fileId: file.id,
-      fileName: file.fileName,
-      frozenPath: file.frozenPath,
-      fileSha256: file.fileSha256,
-      extension: file.extension,
-      mimeType: file.mimeType,
-      enhancerType: 'document_ocr',
-      provider: 'siliconflow',
-      model: 'fixture-model'
-    }
-  })
-
-  const boundaryArtifactId = persistProviderEgressRequest(db, {
-    job: boundaryRequest.job,
-    policyKey: boundaryRequest.policyKey,
-    requestEnvelope: boundaryRequest.requestEnvelope,
-    redactionSummary: boundaryRequest.redactionSummary,
+    fileId: input.fileId,
+    enhancerType: 'document_ocr',
+    provider: 'siliconflow',
+    model: 'fixture-model',
+    status: 'completed',
+    attemptCount: 1,
+    inputHash: 'e2e-fixture',
     createdAt
   })
-
-  persistProviderEgressResponse(db, {
-    artifactId: boundaryArtifactId,
-    payload: {
-      fixture: true,
-      status: 'ok'
-    },
+  persistFixtureProviderBoundary({
+    db,
+    file,
+    jobId,
+    enhancerType: 'document_ocr',
+    provider: 'siliconflow',
+    model: 'fixture-model',
     createdAt
   })
-
-  db.prepare('insert into enrichment_artifacts (id, job_id, artifact_type, payload_json, created_at) values (?, ?, ?, ?, ?)').run(
-    crypto.randomUUID(),
+  insertEnrichmentArtifact({
+    db,
+    artifactId: crypto.randomUUID(),
     jobId,
-    'ocr_raw_text',
-    JSON.stringify({ rawText: '姓名 Alice Chen\n学校 北京大学' }),
+    artifactType: 'ocr_raw_text',
+    payload: { rawText: '姓名 Alice Chen\n学校 北京大学' },
     createdAt
-  )
-
-  db.prepare('insert into enrichment_artifacts (id, job_id, artifact_type, payload_json, created_at) values (?, ?, ?, ?, ?)').run(
-    crypto.randomUUID(),
+  })
+  insertEnrichmentArtifact({
+    db,
+    artifactId: crypto.randomUUID(),
     jobId,
-    'ocr_layout_blocks',
-    JSON.stringify({ layoutBlocks: [{ page: 1, text: '学校 北京大学' }] }),
+    artifactType: 'ocr_layout_blocks',
+    payload: { layoutBlocks: [{ page: 1, text: '学校 北京大学' }] },
     createdAt
-  )
-
-  db.prepare(
-    `insert into structured_field_candidates (
-      id, file_id, job_id, field_type, field_key, field_value_json, document_type,
-      confidence, risk_level, source_page, source_span_json, status, created_at
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(
+  })
+  insertStructuredFieldCandidate({
+    db,
     candidateId,
-    input.fileId,
+    fileId: input.fileId,
     jobId,
-    'education',
-    'school_name',
-    JSON.stringify({ value: '北京大学' }),
-    'transcript',
-    0.99,
-    'high',
-    1,
-    null,
-    'pending',
+    fieldType: 'education',
+    fieldKey: 'school_name',
+    fieldValue: { value: '北京大学' },
+    documentType: 'transcript',
+    confidence: 0.99,
+    riskLevel: 'high',
+    sourcePage: 1,
+    status: 'pending',
     createdAt
-  )
+  })
 
   queueStructuredFieldCandidate(db, {
     candidateId,
@@ -188,27 +109,21 @@ export function seedE2ERunnerProfileFixture(db: ArchiveDatabase, input: { fileId
   const createdAt = new Date().toISOString()
   const jobId = crypto.randomUUID()
 
-  db.prepare(
-    `insert into enrichment_jobs (
-      id, file_id, enhancer_type, provider, model, status, attempt_count,
-      input_hash, started_at, finished_at, error_message, usage_json, created_at, updated_at
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(
+  insertFixtureEnrichmentJob({
+    db,
     jobId,
-    input.fileId,
-    'document_ocr',
-    'siliconflow',
-    'fixture-model',
-    'pending',
-    0,
-    'e2e-runner-profile',
-    null,
-    null,
-    null,
-    '{}',
+    fileId: input.fileId,
+    enhancerType: 'document_ocr',
+    provider: 'siliconflow',
+    model: 'fixture-model',
+    status: 'pending',
+    attemptCount: 0,
+    inputHash: 'e2e-runner-profile',
     createdAt,
-    createdAt
-  )
+    startedAt: null,
+    finishedAt: null,
+    usage: {}
+  })
 
   return { id: jobId }
 }
@@ -239,96 +154,58 @@ export function seedE2EDossierConflictFixture(db: ArchiveDatabase, input: { file
   const jobId = crypto.randomUUID()
   const candidateId = crypto.randomUUID()
 
-  db.prepare(
-    `insert into enrichment_jobs (
-      id, file_id, enhancer_type, provider, model, status, attempt_count,
-      input_hash, started_at, finished_at, error_message, usage_json, created_at, updated_at
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(
+  insertFixtureEnrichmentJob({
+    db,
     jobId,
-    input.fileId,
-    'document_ocr',
-    'fixture',
-    'fixture-dossier-conflict',
-    'completed',
-    1,
-    'e2e-dossier-conflict',
-    createdAt,
-    createdAt,
-    null,
-    JSON.stringify({ fixture: true }),
-    createdAt,
-    createdAt
-  )
-
-  const boundaryRequest = buildProviderBoundaryRequest({
-    job: {
-      id: jobId,
-      fileId: file.id,
-      fileName: file.fileName,
-      frozenPath: file.frozenPath,
-      fileSha256: file.fileSha256,
-      extension: file.extension,
-      mimeType: file.mimeType,
-      enhancerType: 'document_ocr',
-      provider: 'fixture',
-      model: 'fixture-dossier-conflict'
-    }
-  })
-
-  const boundaryArtifactId = persistProviderEgressRequest(db, {
-    job: boundaryRequest.job,
-    policyKey: boundaryRequest.policyKey,
-    requestEnvelope: boundaryRequest.requestEnvelope,
-    redactionSummary: boundaryRequest.redactionSummary,
+    fileId: input.fileId,
+    enhancerType: 'document_ocr',
+    provider: 'fixture',
+    model: 'fixture-dossier-conflict',
+    status: 'completed',
+    attemptCount: 1,
+    inputHash: 'e2e-dossier-conflict',
     createdAt
   })
-
-  persistProviderEgressResponse(db, {
-    artifactId: boundaryArtifactId,
-    payload: {
-      fixture: true,
-      status: 'ok'
-    },
+  persistFixtureProviderBoundary({
+    db,
+    file,
+    jobId,
+    enhancerType: 'document_ocr',
+    provider: 'fixture',
+    model: 'fixture-dossier-conflict',
     createdAt
   })
-
-  db.prepare('insert into enrichment_artifacts (id, job_id, artifact_type, payload_json, created_at) values (?, ?, ?, ?, ?)').run(
-    crypto.randomUUID(),
+  insertEnrichmentArtifact({
+    db,
+    artifactId: crypto.randomUUID(),
     jobId,
-    'ocr_raw_text',
-    JSON.stringify({ rawText: '姓名 Alice Chen\n学校 清华大学' }),
+    artifactType: 'ocr_raw_text',
+    payload: { rawText: '姓名 Alice Chen\n学校 清华大学' },
     createdAt
-  )
-
-  db.prepare('insert into enrichment_artifacts (id, job_id, artifact_type, payload_json, created_at) values (?, ?, ?, ?, ?)').run(
-    crypto.randomUUID(),
+  })
+  insertEnrichmentArtifact({
+    db,
+    artifactId: crypto.randomUUID(),
     jobId,
-    'ocr_layout_blocks',
-    JSON.stringify({ layoutBlocks: [{ page: 1, text: '学校 清华大学' }] }),
+    artifactType: 'ocr_layout_blocks',
+    payload: { layoutBlocks: [{ page: 1, text: '学校 清华大学' }] },
     createdAt
-  )
-
-  db.prepare(
-    `insert into structured_field_candidates (
-      id, file_id, job_id, field_type, field_key, field_value_json, document_type,
-      confidence, risk_level, source_page, source_span_json, status, created_at
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(
+  })
+  insertStructuredFieldCandidate({
+    db,
     candidateId,
-    input.fileId,
+    fileId: input.fileId,
     jobId,
-    'education',
-    'school_name',
-    JSON.stringify({ value: '清华大学' }),
-    'transcript',
-    0.97,
-    'high',
-    1,
-    null,
-    'pending',
+    fieldType: 'education',
+    fieldKey: 'school_name',
+    fieldValue: { value: '清华大学' },
+    documentType: 'transcript',
+    confidence: 0.97,
+    riskLevel: 'high',
+    sourcePage: 1,
+    status: 'pending',
     createdAt
-  )
+  })
 
   queueStructuredFieldCandidate(db, {
     candidateId,
@@ -505,42 +382,34 @@ export function seedE2EGroupPortraitFixture(db: ArchiveDatabase, input: { fileId
     [jobOneId, bobFileOneId, 'e2e-group-portrait-job-1', '北京大学', candidateOneId, queueItemOneId, 0.99],
     [jobTwoId, bobFileTwoId, 'e2e-group-portrait-job-2', '清华大学', candidateTwoId, queueItemTwoId, 0.98]
   ] as const) {
-    db.prepare(
-      'insert into enrichment_jobs (id, file_id, enhancer_type, provider, model, status, attempt_count, input_hash, started_at, finished_at, error_message, usage_json, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(
+    insertFixtureEnrichmentJob({
+      db,
       jobId,
       fileId,
-      'document_ocr',
-      'fixture',
-      'fixture-group-portrait',
-      'completed',
-      1,
+      enhancerType: 'document_ocr',
+      provider: 'fixture',
+      model: 'fixture-group-portrait',
+      status: 'completed',
+      attemptCount: 1,
       inputHash,
-      createdAt,
-      createdAt,
-      null,
-      JSON.stringify({ fixture: true }),
-      createdAt,
       createdAt
-    )
+    })
 
-    db.prepare(
-      'insert into structured_field_candidates (id, file_id, job_id, field_type, field_key, field_value_json, document_type, confidence, risk_level, source_page, source_span_json, status, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(
+    insertStructuredFieldCandidate({
+      db,
       candidateId,
       fileId,
       jobId,
-      'education',
-      'school_name',
-      JSON.stringify({ value }),
-      'transcript',
+      fieldType: 'education',
+      fieldKey: 'school_name',
+      fieldValue: { value },
+      documentType: 'transcript',
       confidence,
-      'high',
-      1,
-      null,
-      'pending',
+      riskLevel: 'high',
+      sourcePage: 1,
+      status: 'pending',
       createdAt
-    )
+    })
 
     db.prepare(
       'insert into review_queue (id, item_type, candidate_id, status, priority, confidence, summary_json, created_at) values (?, ?, ?, ?, ?, ?, ?, ?)'
@@ -582,27 +451,18 @@ export function seedE2EGroupPortraitFixture(db: ArchiveDatabase, input: { fileId
     null
   )
 
-  db.prepare(
-    `insert into enrichment_jobs (
-      id, file_id, enhancer_type, provider, model, status, attempt_count,
-      input_hash, started_at, finished_at, error_message, usage_json, created_at, updated_at
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(
-    crypto.randomUUID(),
-    input.fileId,
-    'group_portrait_fixture',
-    'fixture',
-    'fixture-group-portrait-anchor',
-    'completed',
-    1,
-    'e2e-group-portrait',
-    createdAt,
-    createdAt,
-    null,
-    JSON.stringify({ fixture: true }),
-    createdAt,
+  insertFixtureEnrichmentJob({
+    db,
+    jobId: crypto.randomUUID(),
+    fileId: input.fileId,
+    enhancerType: 'group_portrait_fixture',
+    provider: 'fixture',
+    model: 'fixture-group-portrait-anchor',
+    status: 'completed',
+    attemptCount: 1,
+    inputHash: 'e2e-group-portrait',
     createdAt
-  )
+  })
 
   return { id: bobCanonicalPersonId }
 }
@@ -628,27 +488,18 @@ export function seedE2ESafeBatchFixture(db: ArchiveDatabase, input: { fileId: st
   const createdAt = new Date().toISOString()
   const jobId = crypto.randomUUID()
 
-  db.prepare(
-    `insert into enrichment_jobs (
-      id, file_id, enhancer_type, provider, model, status, attempt_count,
-      input_hash, started_at, finished_at, error_message, usage_json, created_at, updated_at
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(
+  insertFixtureEnrichmentJob({
+    db,
     jobId,
-    input.fileId,
-    'profile_projection',
-    'fixture',
-    'fixture-safe-batch',
-    'completed',
-    1,
-    'e2e-safe-batch',
-    createdAt,
-    createdAt,
-    null,
-    JSON.stringify({ fixture: true }),
-    createdAt,
+    fileId: input.fileId,
+    enhancerType: 'profile_projection',
+    provider: 'fixture',
+    model: 'fixture-safe-batch',
+    status: 'completed',
+    attemptCount: 1,
+    inputHash: 'e2e-safe-batch',
     createdAt
-  )
+  })
 
   for (const suffix of ['1', '2']) {
     const evidenceId = crypto.randomUUID()
