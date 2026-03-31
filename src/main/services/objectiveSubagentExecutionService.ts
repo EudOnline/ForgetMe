@@ -1,8 +1,11 @@
-import { evaluateProposalGate } from './agentProposalGateService'
 import type { createExternalVerificationBrokerService } from './externalVerificationBrokerService'
-import { getDocumentEvidence } from './enrichmentReadService'
+import { createObjectiveSubagentDelegationService } from './objectiveSubagentDelegationService'
 import { createObjectiveSubagentLifecycleService } from './objectiveSubagentLifecycleService'
 import { createObjectiveSubagentToolExecutionService } from './objectiveSubagentToolExecutionService'
+import {
+  runEvidenceCheckerWorkflow,
+  runWebVerifierWorkflow
+} from './objectiveSubagentVerificationWorkflowService'
 import { runMemoryWorkspaceCompare } from './memoryWorkspaceCompareService'
 import { askMemoryWorkspacePersisted } from './memoryWorkspaceSessionService'
 import { listAgentPolicyVersions } from './agentPersistenceService'
@@ -30,8 +33,6 @@ import type {
   AgentThreadDetail
 } from '../../shared/archiveContracts'
 import {
-  getThreadDetail,
-  recordProposalVote,
   type CreateProposalInput
 } from './objectivePersistenceService'
 import type { ArchiveDatabase } from './db'
@@ -41,21 +42,6 @@ type SubagentRegistryService = ReturnType<typeof createSubagentRegistryService>
 type RunMemoryWorkspaceCompareService = typeof runMemoryWorkspaceCompare
 type AskMemoryWorkspacePersistedService = typeof askMemoryWorkspacePersisted
 type ListAgentPolicyVersionsService = typeof listAgentPolicyVersions
-type NestedSubagentExecutionResult = {
-  subagent: {
-    summary: string | null
-  }
-  subthread: {
-    threadId: string
-  }
-}
-type RunnerSubagentDelegationResult = {
-  proposal: AgentProposalRecord
-  execution: NestedSubagentExecutionResult
-  summary: string | null
-  refs: AgentArtifactRef[]
-  specialization: AgentSkillPackId
-}
 type ProposalRuntimeState = {
   proposal: AgentProposalRecord
   votes: AgentThreadDetail['votes']
@@ -286,145 +272,17 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
     }
   }
 
-  async function approveNestedSpawnSubagentProposal(input: {
-    objectiveId: string
-    threadId: string
-    proposedByParticipantId: string
-    ownerRole: AgentRole
-    payload: Record<string, unknown>
-    toolPolicyId: string
-    budget: {
-      maxRounds: number
-      maxToolCalls: number
-      timeoutMs: number
-    }
-    approvalComment: string
-  }) {
-    const proposal = dependencies.helpers.createProposalWithCheckpoint({
-      objectiveId: input.objectiveId,
-      threadId: input.threadId,
-      proposedByParticipantId: input.proposedByParticipantId,
-      proposalKind: 'spawn_subagent',
-      payload: input.payload,
-      ownerRole: input.ownerRole,
-      status: 'under_review',
-      requiredApprovals: [input.ownerRole],
-      allowVetoBy: ['governance'],
-      requiresOperatorConfirmation: false,
-      toolPolicyId: input.toolPolicyId,
-      budget: input.budget
-    })
-
-    recordProposalVote(db, {
-      objectiveId: input.objectiveId,
-      threadId: input.threadId,
-      proposalId: proposal.proposalId,
-      voterRole: input.ownerRole,
-      vote: 'approve',
-      comment: input.approvalComment
-    })
-
-    const runtimeState = dependencies.helpers.loadProposalRuntimeState(proposal.proposalId)
-    const gate = evaluateProposalGate({
-      proposal: runtimeState.proposal,
-      votes: runtimeState.votes,
-      messages: runtimeState.messages
-    })
-
-    const updated = dependencies.helpers.updateProposalFromGate({
-      proposalId: proposal.proposalId,
-      nextStatus: gate.status
-    })
-
-    if (updated.status !== 'committable' && updated.status !== 'committed') {
-      throw new Error(`Nested spawn_subagent proposal did not become executable: ${updated.status}`)
-    }
-
-    const committed = updated.status === 'committed'
-      ? updated
-      : dependencies.helpers.updateProposalFromGate({
-        proposalId: updated.proposalId,
-        nextStatus: 'committed'
-      })
-
-    const execution = await executeCommittedSpawnSubagentProposal(committed)
-
-    return {
-      proposal: committed,
-      execution
-    }
-  }
-
-  async function delegateSubagentFromRunner(input: {
-    proposal: AgentProposalRecord
-    parentSubthreadId: string
-    requestedByParticipantId: string
-    specialization: AgentSkillPackId
-    payload: Record<string, unknown>
-    approvalComment: string
-  }): Promise<RunnerSubagentDelegationResult> {
-    const spawnSpec = dependencies.subagentRegistry.buildSpawnSubagentSpec({
-      specialization: input.specialization,
-      payload: input.payload
-    })
-
-    if (!spawnSpec.toolPolicyId) {
-      throw new Error(`Nested delegation requires a tool policy for ${input.specialization}`)
-    }
-
-    dependencies.helpers.appendRuntimeMessage({
-      objectiveId: input.proposal.objectiveId,
-      threadId: input.parentSubthreadId,
-      fromParticipantId: input.requestedByParticipantId,
-      kind: 'decision',
-      body: `Nested delegation requested: ${input.specialization}.`
-    })
-
-    const nestedDelegation = await approveNestedSpawnSubagentProposal({
-      objectiveId: input.proposal.objectiveId,
-      threadId: input.parentSubthreadId,
-      proposedByParticipantId: input.requestedByParticipantId,
-      ownerRole: input.proposal.ownerRole,
-      payload: spawnSpec.payload,
-      toolPolicyId: spawnSpec.toolPolicyId,
-      budget: spawnSpec.budget,
-      approvalComment: input.approvalComment
-    })
-
-    const execution = nestedDelegation.execution as NestedSubagentExecutionResult | null
-    if (!execution) {
-      throw new Error(`Nested delegation execution missing for ${input.specialization}`)
-    }
-
-    const childThread = getThreadDetail(db, {
-      threadId: execution.subthread.threadId
-    })
-    const finalResponse = childThread?.messages
-      .slice()
-      .reverse()
-      .find((message) => message.kind === 'final_response')
-    const refs = [...(finalResponse?.refs ?? [])]
-    const summary = execution.subagent.summary ?? null
-
-    dependencies.helpers.appendRuntimeMessage({
-      objectiveId: input.proposal.objectiveId,
-      threadId: input.parentSubthreadId,
-      fromParticipantId: input.requestedByParticipantId,
-      kind: 'tool_result',
-      body: summary
-        ? `Nested delegation completed: ${input.specialization}. Summary: ${summary}`
-        : `Nested delegation completed: ${input.specialization}. No summary returned.`,
-      refs
-    })
-
-    return {
-      proposal: nestedDelegation.proposal,
-      execution,
-      summary,
-      refs,
-      specialization: input.specialization
-    }
-  }
+  const delegationService = createObjectiveSubagentDelegationService({
+    db,
+    subagentRegistry: dependencies.subagentRegistry,
+    helpers: {
+      appendRuntimeMessage: dependencies.helpers.appendRuntimeMessage,
+      createProposalWithCheckpoint: dependencies.helpers.createProposalWithCheckpoint,
+      loadProposalRuntimeState: dependencies.helpers.loadProposalRuntimeState,
+      updateProposalFromGate: dependencies.helpers.updateProposalFromGate
+    },
+    executeCommittedSpawnSubagentProposal
+  })
 
   async function runWebVerifierSubagent(input: {
     proposal: AgentProposalRecord
@@ -443,166 +301,18 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
       spawnSummary: `Spawned web-verifier in subthread ${title} for bounded external verification.`,
       failureLabel: 'Web verifier',
       run: async ({ subthread, createdSubagent, runTool }) => {
-        const searchResults = await runTool({
-          toolName: 'search_web',
-          inputPayload: {
-            claim: input.claim,
-            query: input.query,
-            maxResults: 1
-          },
-          run: async () => {
-            const results = await dependencies.externalVerificationBroker.searchClaimSources({
-              claim: input.claim,
-              query: input.query,
-              maxResults: 1
-            })
-
-            return {
-              result: results,
-              outputPayload: {
-                resultCount: results.length,
-                urls: results.map((candidate) => candidate.url)
-              },
-              artifactRefs: results.map((candidate) => ({
-                kind: 'external_citation_bundle' as const,
-                id: candidate.url,
-                label: candidate.title
-              }))
-            }
-          }
+        return runWebVerifierWorkflow({
+          proposal: input.proposal,
+          subthreadThreadId: subthread.threadId,
+          subagentId: createdSubagent.subagentId,
+          claim: input.claim,
+          query: input.query,
+          localEvidenceFileId: input.localEvidenceFileId,
+          runTool,
+          appendRuntimeMessage: dependencies.helpers.appendRuntimeMessage,
+          externalVerificationBroker: dependencies.externalVerificationBroker,
+          delegateSubagentFromRunner: delegationService.delegateSubagentFromRunner
         })
-
-        dependencies.helpers.appendRuntimeMessage({
-          objectiveId: input.proposal.objectiveId,
-          threadId: subthread.threadId,
-          fromParticipantId: createdSubagent.subagentId,
-          kind: 'tool_result',
-          body: `Searched the web and found ${searchResults.length} candidate source${searchResults.length === 1 ? '' : 's'}.`,
-          refs: searchResults.map((candidate) => ({
-            kind: 'external_citation_bundle',
-            id: candidate.url,
-            label: candidate.title
-          }))
-        })
-
-        const sources = [] as Awaited<ReturnType<ExternalVerificationBrokerService['openClaimSource']>>[]
-
-        for (const candidate of searchResults) {
-          const source = await runTool({
-            toolName: 'open_source_page',
-            inputPayload: {
-              url: candidate.url
-            },
-            run: async () => {
-              const openedSource = await dependencies.externalVerificationBroker.openClaimSource({
-                claim: input.claim,
-                candidate
-              })
-
-              return {
-                result: openedSource,
-                outputPayload: {
-                  url: openedSource.url,
-                  title: openedSource.title,
-                  publishedAt: openedSource.publishedAt,
-                  extractedFact: openedSource.extractedFact
-                },
-                artifactRefs: [
-                  {
-                    kind: 'external_citation_bundle' as const,
-                    id: openedSource.url,
-                    label: openedSource.title
-                  }
-                ]
-              }
-            }
-          })
-          sources.push(source)
-        }
-
-        dependencies.helpers.appendRuntimeMessage({
-          objectiveId: input.proposal.objectiveId,
-          threadId: subthread.threadId,
-          fromParticipantId: createdSubagent.subagentId,
-          kind: 'tool_result',
-          body: sources[0]
-            ? `Opened source "${sources[0].title}" and extracted: ${sources[0].extractedFact}`
-            : 'No source pages could be opened successfully.',
-          refs: sources.map((source) => ({
-            kind: 'external_citation_bundle',
-            id: source.url,
-            label: source.title
-          }))
-        })
-
-        const citationBundle = await runTool({
-          toolName: 'capture_citation_bundle',
-          inputPayload: {
-            claim: input.claim,
-            sourceCount: sources.length
-          },
-          run: async () => {
-            const bundle = await dependencies.externalVerificationBroker.buildCitationBundle({
-              claim: input.claim,
-              sources
-            })
-
-            return {
-              result: bundle,
-              outputPayload: {
-                verdict: bundle.verdict,
-                sourceCount: bundle.sources.length
-              },
-              artifactRefs: bundle.sources.map((source) => ({
-                kind: 'external_citation_bundle' as const,
-                id: source.url,
-                label: source.title
-              }))
-            }
-          }
-        })
-
-        const citationRefs = citationBundle.sources.map((source) => ({
-          kind: 'external_citation_bundle' as const,
-          id: source.url,
-          label: source.title
-        }))
-
-        dependencies.helpers.appendRuntimeMessage({
-          objectiveId: input.proposal.objectiveId,
-          threadId: subthread.threadId,
-          fromParticipantId: createdSubagent.subagentId,
-          kind: 'tool_result',
-          body: `Captured a citation bundle with verdict ${citationBundle.verdict}.`,
-          refs: citationRefs
-        })
-
-        let localEvidenceSummary: string | null = null
-
-        if (input.localEvidenceFileId) {
-          const nestedDelegation = await delegateSubagentFromRunner({
-            proposal: input.proposal,
-            parentSubthreadId: subthread.threadId,
-            requestedByParticipantId: createdSubagent.subagentId,
-            specialization: 'evidence-checker',
-            payload: {
-              fileId: input.localEvidenceFileId
-            },
-            approvalComment: 'Owner auto-approved nested local evidence delegation within the committed verifier scope.'
-          })
-          localEvidenceSummary = nestedDelegation.summary
-        }
-
-        return {
-          summary: localEvidenceSummary
-            ? `Web verifier finished with verdict ${citationBundle.verdict} from ${citationBundle.sources.length} source${citationBundle.sources.length === 1 ? '' : 's'}. Local evidence: ${localEvidenceSummary}`
-            : `Web verifier finished with verdict ${citationBundle.verdict} from ${citationBundle.sources.length} source${citationBundle.sources.length === 1 ? '' : 's'}.`,
-          refs: citationRefs,
-          checkpointKind: 'external_verification_completed',
-          checkpointTitle: 'External verification completed',
-          checkpointSummary: `Verification verdict: ${citationBundle.verdict}.`,
-          citationBundle
-        }
       }
     })
   }
@@ -624,85 +334,18 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
       spawnSummary: `Spawned evidence-checker in subthread ${title} for bounded local evidence checking.`,
       failureLabel: 'Evidence checker',
       run: async ({ subthread, createdSubagent, runTool }) => {
-        const evidence = await runTool({
-          toolName: 'get_document_evidence',
-          inputPayload: {
-            fileId: input.fileId
-          },
-          run: async () => {
-            const documentEvidence = getDocumentEvidence(db, { fileId: input.fileId })
-            if (!documentEvidence) {
-              throw new Error(`Document evidence not found for ${input.fileId}`)
-            }
-
-            const rawExcerpt = documentEvidence.rawText.trim().replace(/\s+/g, ' ').slice(0, 140)
-
-            return {
-              result: documentEvidence,
-              outputPayload: {
-                fileId: documentEvidence.fileId,
-                fileName: documentEvidence.fileName,
-                approvedFieldCount: documentEvidence.approvedFields.length,
-                fieldCandidateCount: documentEvidence.fieldCandidates.length,
-                layoutBlockCount: documentEvidence.layoutBlocks.length,
-                rawExcerpt
-              },
-              artifactRefs: [
-                {
-                  kind: 'file' as const,
-                  id: documentEvidence.fileId,
-                  label: documentEvidence.fileName
-                }
-              ]
-            }
-          }
+        return runEvidenceCheckerWorkflow({
+          db,
+          proposal: input.proposal,
+          subthreadThreadId: subthread.threadId,
+          subagentId: createdSubagent.subagentId,
+          fileId: input.fileId,
+          crossCheckClaim: input.crossCheckClaim,
+          crossCheckQuery: input.crossCheckQuery,
+          runTool,
+          appendRuntimeMessage: dependencies.helpers.appendRuntimeMessage,
+          delegateSubagentFromRunner: delegationService.delegateSubagentFromRunner
         })
-
-        const rawExcerpt = evidence.rawText.trim().replace(/\s+/g, ' ').slice(0, 140) || 'No OCR text available.'
-        const artifactRefs = [
-          {
-            kind: 'file' as const,
-            id: evidence.fileId,
-            label: evidence.fileName
-          }
-        ]
-
-        dependencies.helpers.appendRuntimeMessage({
-          objectiveId: input.proposal.objectiveId,
-          threadId: subthread.threadId,
-          fromParticipantId: createdSubagent.subagentId,
-          kind: 'tool_result',
-          body: `Loaded document evidence for ${evidence.fileName}: ${evidence.approvedFields.length} approved fields, ${evidence.fieldCandidates.length} field candidates, ${evidence.layoutBlocks.length} layout blocks.`,
-          refs: artifactRefs
-        })
-
-        let externalVerificationSummary: string | null = null
-
-        if (input.crossCheckClaim && input.crossCheckQuery) {
-          const nestedDelegation = await delegateSubagentFromRunner({
-            proposal: input.proposal,
-            parentSubthreadId: subthread.threadId,
-            requestedByParticipantId: createdSubagent.subagentId,
-            specialization: 'web-verifier',
-            payload: {
-              claim: input.crossCheckClaim,
-              query: input.crossCheckQuery
-            },
-            approvalComment: 'Owner auto-approved nested external verification within the committed evidence scope.'
-          })
-          externalVerificationSummary = nestedDelegation.summary
-        }
-
-        return {
-          summary: externalVerificationSummary
-            ? `Evidence checker reviewed ${evidence.fileName} with ${evidence.approvedFields.length} approved fields and ${evidence.fieldCandidates.length} field candidates. OCR excerpt: ${rawExcerpt}. External verification: ${externalVerificationSummary}`
-            : `Evidence checker reviewed ${evidence.fileName} with ${evidence.approvedFields.length} approved fields and ${evidence.fieldCandidates.length} field candidates. OCR excerpt: ${rawExcerpt}`,
-          refs: artifactRefs,
-          checkpointKind: 'tool_action_executed',
-          checkpointTitle: 'Local evidence check completed',
-          checkpointSummary: `Evidence checker summarized local OCR evidence for ${evidence.fileName}.`,
-          evidence
-        }
       }
     })
   }
