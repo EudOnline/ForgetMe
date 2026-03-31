@@ -1,4 +1,9 @@
 import type { createExternalVerificationBrokerService } from './externalVerificationBrokerService'
+import {
+  runCompareAnalystWorkflow,
+  runDraftComposerWorkflow,
+  runPolicyAuditorWorkflow
+} from './objectiveSubagentAnalysisWorkflowService'
 import { createObjectiveSubagentDelegationService } from './objectiveSubagentDelegationService'
 import { createObjectiveSubagentLifecycleService } from './objectiveSubagentLifecycleService'
 import { createObjectiveSubagentToolExecutionService } from './objectiveSubagentToolExecutionService'
@@ -10,18 +15,9 @@ import { runMemoryWorkspaceCompare } from './memoryWorkspaceCompareService'
 import { askMemoryWorkspacePersisted } from './memoryWorkspaceSessionService'
 import { listAgentPolicyVersions } from './agentPersistenceService'
 import type { createSubagentRegistryService } from './subagentRegistryService'
-import {
-  parseCompareAnalystPayload,
-  runCompareAnalystTask
-} from './subagentRunners/compareAnalystRunner'
-import {
-  parseDraftComposerPayload,
-  runDraftComposerTask
-} from './subagentRunners/draftComposerRunner'
-import {
-  parsePolicyAuditorPayload,
-  runPolicyAuditorTask
-} from './subagentRunners/policyAuditorRunner'
+import { parseCompareAnalystPayload } from './subagentRunners/compareAnalystRunner'
+import { parseDraftComposerPayload } from './subagentRunners/draftComposerRunner'
+import { parsePolicyAuditorPayload } from './subagentRunners/policyAuditorRunner'
 import { createSpawnSubagentRunnerRegistry } from './spawnSubagentRunnerRegistryService'
 import type {
   AgentArtifactRef,
@@ -367,7 +363,10 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
       spawnSummary: `Spawned compare-analyst in subthread Compare analysis · ${input.question.slice(0, 60)} for bounded compare analysis.`,
       failureLabel: 'Compare analyst',
       run: async ({ subthread, createdSubagent, runTool }) => {
-        const outcome = await runCompareAnalystTask({
+        return runCompareAnalystWorkflow({
+          proposal: input.proposal,
+          subthreadThreadId: subthread.threadId,
+          subagentId: createdSubagent.subagentId,
           payload: {
             question: input.question,
             scope: input.scope,
@@ -389,38 +388,9 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
               ]
             }) as any
           ),
-          runTool: async ({ toolName, inputPayload, run }) => runTool({
-            toolName,
-            inputPayload,
-            run
-          })
+          runTool,
+          appendRuntimeMessage: dependencies.helpers.appendRuntimeMessage
         })
-
-        dependencies.helpers.appendRuntimeMessage({
-          objectiveId: input.proposal.objectiveId,
-          threadId: subthread.threadId,
-          fromParticipantId: createdSubagent.subagentId,
-          kind: 'tool_result',
-          body: `Started compare analysis for "${input.question}" and prepared compare session artifacts.`,
-          refs: outcome.artifactRefs
-        })
-        dependencies.helpers.appendRuntimeMessage({
-          objectiveId: input.proposal.objectiveId,
-          threadId: subthread.threadId,
-          fromParticipantId: createdSubagent.subagentId,
-          kind: 'tool_result',
-          body: outcome.summary,
-          refs: outcome.artifactRefs
-        })
-
-        return {
-          summary: outcome.summary,
-          refs: outcome.artifactRefs,
-          checkpointKind: 'tool_action_executed',
-          checkpointTitle: 'Compare analysis completed',
-          checkpointSummary: `Compare analyst summarized compare results for "${input.question}".`,
-          compare: outcome
-        }
       }
     })
   }
@@ -442,7 +412,10 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
       spawnSummary: `Spawned draft-composer in subthread Draft composition · ${input.question.slice(0, 60)} for bounded draft composition.`,
       failureLabel: 'Draft composer',
       run: async ({ subthread, createdSubagent, runTool }) => {
-        const outcome = await runDraftComposerTask({
+        return runDraftComposerWorkflow({
+          proposal: input.proposal,
+          subthreadThreadId: subthread.threadId,
+          subagentId: createdSubagent.subagentId,
           payload: {
             question: input.question,
             scope: input.scope,
@@ -458,37 +431,9 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
               sessionId: payload.sessionId ?? undefined
             }) as any
           ),
-          runTool: async ({ toolName, inputPayload, run }) => runTool({
-            toolName,
-            inputPayload,
-            run
-          })
+          runTool,
+          appendRuntimeMessage: dependencies.helpers.appendRuntimeMessage
         })
-
-        dependencies.helpers.appendRuntimeMessage({
-          objectiveId: input.proposal.objectiveId,
-          threadId: subthread.threadId,
-          fromParticipantId: createdSubagent.subagentId,
-          kind: 'tool_result',
-          body: `Draft composer loaded a workspace turn for "${input.question}".`,
-          refs: outcome.artifactRefs
-        })
-        dependencies.helpers.appendRuntimeMessage({
-          objectiveId: input.proposal.objectiveId,
-          threadId: subthread.threadId,
-          fromParticipantId: createdSubagent.subagentId,
-          kind: 'tool_result',
-          body: 'Draft composer prepared a review-ready simulation draft.'
-        })
-
-        return {
-          summary: outcome.summary,
-          refs: outcome.artifactRefs,
-          checkpointKind: 'user_facing_result_prepared',
-          checkpointTitle: 'Draft composition completed',
-          checkpointSummary: `Draft composer prepared a review-ready draft for "${input.question}".`,
-          draft: outcome
-        }
       }
     })
   }
@@ -508,7 +453,10 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
       spawnSummary: `Spawned policy-auditor in subthread Policy audit · ${input.policyKey} for bounded policy auditing.`,
       failureLabel: 'Policy auditor',
       run: async ({ subthread, createdSubagent, runTool }) => {
-        const outcome = await runPolicyAuditorTask({
+        return runPolicyAuditorWorkflow({
+          proposal: input.proposal,
+          subthreadThreadId: subthread.threadId,
+          subagentId: createdSubagent.subagentId,
           payload: {
             policyKey: input.policyKey,
             role: input.role
@@ -519,38 +467,9 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
               policyKey: payload.policyKey
             }) as any
           ),
-          runTool: async ({ toolName, inputPayload, run }) => runTool({
-            toolName,
-            inputPayload,
-            run
-          })
+          runTool,
+          appendRuntimeMessage: dependencies.helpers.appendRuntimeMessage
         })
-
-        dependencies.helpers.appendRuntimeMessage({
-          objectiveId: input.proposal.objectiveId,
-          threadId: subthread.threadId,
-          fromParticipantId: createdSubagent.subagentId,
-          kind: 'tool_result',
-          body: `Policy auditor loaded bounded policy versions for ${input.policyKey}.`,
-          refs: outcome.artifactRefs
-        })
-        dependencies.helpers.appendRuntimeMessage({
-          objectiveId: input.proposal.objectiveId,
-          threadId: subthread.threadId,
-          fromParticipantId: createdSubagent.subagentId,
-          kind: 'tool_result',
-          body: outcome.summary,
-          refs: outcome.artifactRefs
-        })
-
-        return {
-          summary: outcome.summary,
-          refs: outcome.artifactRefs,
-          checkpointKind: 'tool_action_executed',
-          checkpointTitle: 'Policy audit completed',
-          checkpointSummary: `Policy auditor summarized policy changes for ${input.policyKey}.`,
-          policyAudit: outcome
-        }
       }
     })
   }
