@@ -1,7 +1,7 @@
 import type {
   AgentObjectiveStatus,
-  AgentRole,
-} from '../../shared/archiveContracts'
+} from '../../shared/objectiveRuntimeContracts'
+import type { AgentRole } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
 import type {
   AgentCheckpointRow,

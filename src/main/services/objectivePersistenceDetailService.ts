@@ -10,7 +10,7 @@ import type {
   AgentVoteRecord,
   GetAgentObjectiveInput,
   GetAgentThreadInput
-} from '../../shared/archiveContracts'
+} from '../../shared/objectiveRuntimeContracts'
 import type { ArchiveDatabase } from './db'
 import {
   getObjectiveRow,

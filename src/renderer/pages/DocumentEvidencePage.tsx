@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { DocumentEvidence } from '../../shared/archiveContracts'
-import { getArchiveApi } from '../archiveApi'
+import { getOpsClient } from '../clients/opsClient'
 import { useI18n } from '../i18n'
 import { LayoutBlockList } from '../components/LayoutBlockList'
 import { OCRTextPanel } from '../components/OCRTextPanel'
@@ -8,23 +8,24 @@ import { StructuredFieldCandidateTable } from '../components/StructuredFieldCand
 
 export function DocumentEvidencePage(props: { fileId: string | null }) {
   const { t } = useI18n()
-  const archiveApi = useMemo(() => getArchiveApi(), [])
+  const opsClient = useMemo(() => getOpsClient(), [])
   const [evidence, setEvidence] = useState<DocumentEvidence | null>(null)
+  const { fileId } = props
 
-  const refresh = async () => {
-    if (!props.fileId) {
+  const refresh = useCallback(async () => {
+    if (!fileId) {
       setEvidence(null)
       return
     }
 
-    setEvidence(await archiveApi.getDocumentEvidence(props.fileId))
-  }
+    setEvidence(await opsClient.getDocumentEvidence(fileId))
+  }, [opsClient, fileId])
 
   useEffect(() => {
     void refresh()
-  }, [archiveApi, props.fileId])
+  }, [refresh])
 
-  if (!props.fileId) {
+  if (!fileId) {
     return <p>{t('documentEvidence.selectFile')}</p>
   }
 
@@ -55,11 +56,11 @@ export function DocumentEvidencePage(props: { fileId: string | null }) {
         <StructuredFieldCandidateTable
           candidates={evidence.fieldCandidates}
           onApprove={async (queueItemId) => {
-            await archiveApi.approveStructuredFieldCandidate(queueItemId)
+            await opsClient.approveStructuredFieldCandidate(queueItemId)
             await refresh()
           }}
           onReject={async (queueItemId) => {
-            await archiveApi.rejectStructuredFieldCandidate({ queueItemId })
+            await opsClient.rejectStructuredFieldCandidate({ queueItemId })
             await refresh()
           }}
         />

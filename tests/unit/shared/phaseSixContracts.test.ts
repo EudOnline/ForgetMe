@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { approveSafeReviewGroupInputSchema, backupExportInputSchema, decisionJournalFilterSchema, restoreBackupInputSchema } from '../../../src/shared/ipcSchemas'
+import { approveSafeReviewGroupInputSchema, decisionJournalFilterSchema } from '../../../src/shared/schemas/review'
+import { backupExportInputSchema, restoreBackupInputSchema } from '../../../src/shared/schemas/ops'
 
 describe('phase-six preservation schemas', () => {
   it('accepts backup export input', () => {

@@ -61,4 +61,97 @@ describe('facilitator agent service', () => {
 
     db.close()
   })
+
+  it('classifies awaiting-operator handoff when a proposal requires operator confirmation', () => {
+    const facilitator = createFacilitatorAgentService() as any
+
+    const result = facilitator.classifyStopState({
+      objective: {
+        status: 'in_progress',
+        requiresOperatorInput: false
+      },
+      thread: {
+        status: 'open',
+        proposals: [
+          {
+            status: 'awaiting_operator'
+          }
+        ],
+        checkpoints: [],
+        messages: []
+      },
+      roundsWithoutProgress: 0,
+      hasNewArtifacts: false
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      reason: 'awaiting_operator',
+      nextObjectiveStatus: 'awaiting_operator',
+      nextThreadStatus: 'waiting',
+      requiresOperatorInput: true
+    }))
+  })
+
+  it('classifies stalled objectives after two idle rounds without new artifacts', () => {
+    const facilitator = createFacilitatorAgentService() as any
+
+    const result = facilitator.classifyStopState({
+      objective: {
+        status: 'in_progress',
+        requiresOperatorInput: false
+      },
+      thread: {
+        status: 'open',
+        proposals: [],
+        checkpoints: [],
+        messages: []
+      },
+      roundsWithoutProgress: 2,
+      hasNewArtifacts: false
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      reason: 'stalled',
+      nextObjectiveStatus: 'stalled',
+      nextThreadStatus: 'waiting',
+      requiresOperatorInput: false,
+      checkpoint: expect.objectContaining({
+        checkpointKind: 'stalled'
+      })
+    }))
+  })
+
+  it('classifies completed objectives after convergence and a user-facing result', () => {
+    const facilitator = createFacilitatorAgentService() as any
+
+    const result = facilitator.classifyStopState({
+      objective: {
+        status: 'in_progress',
+        requiresOperatorInput: false
+      },
+      thread: {
+        status: 'open',
+        proposals: [
+          {
+            status: 'committed'
+          }
+        ],
+        checkpoints: [
+          {
+            checkpointKind: 'user_facing_result_prepared'
+          }
+        ],
+        messages: []
+      },
+      roundsWithoutProgress: 1,
+      hasNewArtifacts: false
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      reason: 'completed',
+      nextObjectiveStatus: 'completed',
+      nextThreadStatus: 'completed',
+      requiresOperatorInput: false
+    }))
+  })
 })

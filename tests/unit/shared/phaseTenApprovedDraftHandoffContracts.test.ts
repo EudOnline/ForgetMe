@@ -15,7 +15,7 @@ import {
   approvedPersonaDraftReviewIdSchema,
   exportApprovedPersonaDraftInputSchema,
   listApprovedPersonaDraftHandoffsInputSchema
-} from '../../../src/shared/ipcSchemas'
+} from '../../../src/shared/schemas/workspace'
 
 describe('phase-ten approved draft handoff contracts', () => {
   it('exports approved persona draft handoff shapes', () => {

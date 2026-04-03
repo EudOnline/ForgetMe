@@ -16,7 +16,7 @@ import {
   listApprovedPersonaDraftProviderSendsInputSchema,
   retryApprovedPersonaDraftProviderSendInputSchema,
   sendApprovedPersonaDraftToProviderInputSchema
-} from '../../../src/shared/ipcSchemas'
+} from '../../../src/shared/schemas/workspace'
 
 describe('phase-ten approved draft provider send contracts', () => {
   it('exports approved draft provider send shapes', () => {

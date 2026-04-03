@@ -9,14 +9,14 @@ import type {
   AgentProposalKind,
   AgentProposalRecord,
   AgentProposalStatus,
-  AgentRole,
   AgentSubagentRecord,
   AgentSubagentStatus,
   AgentToolExecutionRecord,
   AgentToolExecutionStatus,
   AgentVoteRecord,
   AgentVoteValue
-} from '../../shared/archiveContracts'
+} from '../../shared/objectiveRuntimeContracts'
+import type { AgentRole } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
 import {
   getCheckpointRow,

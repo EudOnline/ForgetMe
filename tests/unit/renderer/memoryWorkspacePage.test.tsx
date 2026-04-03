@@ -1479,7 +1479,10 @@ describe('MemoryWorkspacePage', () => {
       })
     })
 
-    expect(await screen.findByText('response recorded')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(listApprovedPersonaDraftProviderSends).toHaveBeenCalledTimes(2)
+    })
+    expect(await screen.findByText('response recorded', {}, { timeout: 3_000 })).toBeInTheDocument()
     expect(screen.getByText('Attempt: initial send')).toBeInTheDocument()
     expect(screen.getByText('Destination: OpenRouter / qwen-2.5-72b-instruct')).toBeInTheDocument()
     expect(screen.getByText('openrouter · qwen/qwen-2.5-72b-instruct')).toBeInTheDocument()
@@ -1699,7 +1702,10 @@ describe('MemoryWorkspacePage', () => {
       })
     })
 
-    expect(await screen.findByText('response recorded')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(listApprovedPersonaDraftProviderSends).toHaveBeenCalledTimes(2)
+    })
+    expect(await screen.findByText('response recorded', {}, { timeout: 3_000 })).toBeInTheDocument()
     expect(screen.getByText('Attempt: manual retry')).toBeInTheDocument()
     expect(screen.getByText('Destination: OpenRouter / qwen-2.5-72b-instruct')).toBeInTheDocument()
   })
@@ -1896,7 +1902,7 @@ describe('MemoryWorkspacePage', () => {
       expect(listApprovedPersonaDraftProviderSends).toHaveBeenCalledTimes(2)
     })
 
-    expect(await screen.findByText('response recorded')).toBeInTheDocument()
+    expect(await screen.findByText('response recorded', {}, { timeout: 3_000 })).toBeInTheDocument()
     expect(screen.getByText('Attempt: automatic retry')).toBeInTheDocument()
   })
 
@@ -3836,7 +3842,10 @@ describe('MemoryWorkspacePage', () => {
       })
     })
 
-    expect(await screen.findByText('https://share.example.test/s/remote-share-1')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(listApprovedPersonaDraftHostedShareLinks).toHaveBeenCalledTimes(2)
+    })
+    expect(await screen.findByText('https://share.example.test/s/remote-share-1', {}, { timeout: 3_000 })).toBeInTheDocument()
     expect(screen.getByText('Status: active')).toBeInTheDocument()
     expect(screen.getByText('Created: 2026-03-16T10:00:00.000Z')).toBeInTheDocument()
     expect(screen.getByText('Host: https://share.example.test')).toBeInTheDocument()
@@ -4052,7 +4061,10 @@ describe('MemoryWorkspacePage', () => {
       })
     })
 
-    expect(await screen.findByText('Status: revoked')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(listApprovedPersonaDraftHostedShareLinks).toHaveBeenCalledTimes(2)
+    })
+    expect(await screen.findByText('Status: revoked', {}, { timeout: 3_000 })).toBeInTheDocument()
     expect(screen.getByText('revoked · 2026-03-16T10:05:00.000Z')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Revoke hosted share link' })).not.toBeInTheDocument()
   })

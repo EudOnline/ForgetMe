@@ -18,7 +18,7 @@ import {
   memoryWorkspaceCompareSessionIdSchema,
   memoryWorkspaceSessionFilterSchema,
   memoryWorkspaceSessionIdSchema
-} from '../../../src/shared/ipcSchemas'
+} from '../../../src/shared/schemas/workspace'
 
 describe('phase-eight conversation persistence contracts', () => {
   it('exports replayable session and turn shapes', () => {

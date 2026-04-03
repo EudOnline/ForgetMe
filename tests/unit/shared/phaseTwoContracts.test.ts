@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import {
-  importPreflightInputSchema,
-  relationshipLabelInputSchema,
-  reviewActionSchema
-} from '../../../src/shared/ipcSchemas'
+import { importPreflightInputSchema } from '../../../src/shared/schemas/import'
+import { relationshipLabelInputSchema } from '../../../src/shared/schemas/people'
+import { reviewActionSchema } from '../../../src/shared/schemas/review'
 
 describe('phase-two IPC schemas', () => {
   it('accepts a non-empty file path list', () => {

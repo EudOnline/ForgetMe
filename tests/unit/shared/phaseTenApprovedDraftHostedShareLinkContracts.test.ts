@@ -15,7 +15,7 @@ import {
   listApprovedPersonaDraftHostedShareLinksInputSchema,
   openApprovedDraftHostedShareLinkInputSchema,
   revokeApprovedPersonaDraftHostedShareLinkInputSchema
-} from '../../../src/shared/ipcSchemas'
+} from '../../../src/shared/schemas/workspace'
 
 describe('phase-ten approved draft hosted share link contracts', () => {
   it('exports host status and hosted link shapes', () => {

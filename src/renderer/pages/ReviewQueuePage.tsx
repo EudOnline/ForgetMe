@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { DecisionJournalEntry, ReviewQueueItem } from '../../shared/archiveContracts'
-import { getArchiveApi } from '../archiveApi'
+import { getReviewClient } from '../clients/reviewClient'
 import { useI18n } from '../i18n'
 import { ReviewQueueTable } from '../components/ReviewQueueTable'
 import { UndoHistoryTable } from '../components/UndoHistoryTable'
@@ -11,7 +11,7 @@ export function ReviewQueuePage(props: {
   initialSelectedJournalId?: string | null
 }) {
   const { t } = useI18n()
-  const archiveApi = useMemo(() => getArchiveApi(), [])
+  const reviewClient = useMemo(() => getReviewClient(), [])
   const [items, setItems] = useState<ReviewQueueItem[]>([])
   const [journal, setJournal] = useState<DecisionJournalEntry[]>([])
   const [journalQuery, setJournalQuery] = useState(props.initialJournalQuery ?? '')
@@ -24,31 +24,31 @@ export function ReviewQueuePage(props: {
   }, [props.initialJournalQuery])
 
   const refresh = useCallback(async () => {
-    setItems(await archiveApi.listReviewQueue({ status: 'pending' }))
-    const nextJournal = await archiveApi.listDecisionJournal(appliedJournalQuery ? { query: appliedJournalQuery } : undefined) ?? []
+    setItems(await reviewClient.listReviewQueue({ status: 'pending' }))
+    const nextJournal = await reviewClient.listDecisionJournal(appliedJournalQuery ? { query: appliedJournalQuery } : undefined) ?? []
     setJournal(nextJournal)
     setSelectedJournal((current) => {
       const preferredJournalId = props.initialSelectedJournalId ?? current?.id ?? null
       return nextJournal.find((entry) => entry.id === preferredJournalId) ?? nextJournal[0] ?? null
     })
-  }, [archiveApi, appliedJournalQuery, props.initialSelectedJournalId])
+  }, [reviewClient, appliedJournalQuery, props.initialSelectedJournalId])
 
   useEffect(() => {
     void refresh()
   }, [refresh])
 
   const handleApprove = async (queueItemId: string) => {
-    await archiveApi.approveReviewItem(queueItemId)
+    await reviewClient.approveReviewItem(queueItemId)
     await refresh()
   }
 
   const handleReject = async (queueItemId: string) => {
-    await archiveApi.rejectReviewItem({ queueItemId })
+    await reviewClient.rejectReviewItem({ queueItemId })
     await refresh()
   }
 
   const handleUndo = async (journalId: string) => {
-    await archiveApi.undoDecision(journalId)
+    await reviewClient.undoDecision(journalId)
     await refresh()
   }
 

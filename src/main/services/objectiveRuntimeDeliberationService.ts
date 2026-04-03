@@ -39,6 +39,14 @@ export function createObjectiveRuntimeDeliberationService(dependencies: {
 }) {
   const { db } = dependencies
 
+  type DeliberationRoundResult = {
+    objective: AgentObjectiveDetail
+    thread: AgentThreadDetail
+    newMessageCount: number
+    newProposalCount: number
+    newSpawnCount: number
+  }
+
   function stableJson(value: unknown) {
     return JSON.stringify(value)
   }
@@ -97,9 +105,9 @@ export function createObjectiveRuntimeDeliberationService(dependencies: {
     ))
   }
 
-  async function deliberateThread(input: {
+  async function deliberateThreadPass(input: {
     threadId: string
-  }) {
+  }): Promise<DeliberationRoundResult> {
     if (!dependencies.roleAgentRegistry) {
       const thread = getThreadDetail(db, { threadId: input.threadId })
       if (!thread) {
@@ -113,7 +121,10 @@ export function createObjectiveRuntimeDeliberationService(dependencies: {
 
       return {
         objective,
-        thread
+        thread,
+        newMessageCount: 0,
+        newProposalCount: 0,
+        newSpawnCount: 0
       }
     }
 
@@ -126,6 +137,10 @@ export function createObjectiveRuntimeDeliberationService(dependencies: {
     if (!objective) {
       throw new Error(`objective not found: ${thread.objectiveId}`)
     }
+
+    let newMessageCount = 0
+    let newProposalCount = 0
+    let newSpawnCount = 0
 
     for (const participant of thread.participants) {
       if (participant.participantKind !== 'role' || participant.leftAt !== null || !participant.role) {
@@ -170,6 +185,7 @@ export function createObjectiveRuntimeDeliberationService(dependencies: {
           blocking: messageDraft.blocking,
           confidence: messageDraft.confidence
         })
+        newMessageCount += 1
       }
 
       thread = getThreadDetail(db, { threadId: input.threadId }) ?? thread
@@ -201,6 +217,7 @@ export function createObjectiveRuntimeDeliberationService(dependencies: {
           artifactRefs: proposalDraft.artifactRefs,
           status: 'under_review'
         })
+        newProposalCount += 1
       }
 
       thread = getThreadDetail(db, { threadId: input.threadId }) ?? thread
@@ -237,6 +254,7 @@ export function createObjectiveRuntimeDeliberationService(dependencies: {
           artifactRefs: spawnRequest.artifactRefs,
           status: 'under_review'
         })
+        newSpawnCount += 1
 
         thread = getThreadDetail(db, { threadId: input.threadId }) ?? thread
         objective = getObjectiveDetail(db, { objectiveId: thread.objectiveId }) ?? objective
@@ -248,11 +266,14 @@ export function createObjectiveRuntimeDeliberationService(dependencies: {
 
     return {
       objective,
-      thread
+      thread,
+      newMessageCount,
+      newProposalCount,
+      newSpawnCount
     }
   }
 
   return {
-    deliberateThread
+    deliberateThreadPass
   }
 }

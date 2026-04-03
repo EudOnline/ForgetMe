@@ -2,7 +2,7 @@ import type {
   AgentPolicyVersionRecord,
   AgentRole
 } from '../../shared/archiveContracts'
-import { createAgentPolicyVersion } from './agentPersistenceService'
+import { createAgentPolicyVersion } from './governancePersistenceService'
 import type { ArchiveDatabase } from './db'
 
 type CreateAgentPolicyServiceInput = {

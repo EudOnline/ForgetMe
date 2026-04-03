@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ApprovedDraftHostedShareHostStatus,
   ApprovedDraftSendDestination,
@@ -25,7 +25,7 @@ import type {
   PublishApprovedPersonaDraftResult,
   RunMemoryWorkspaceCompareJudgeInput
 } from '../../shared/archiveContracts'
-import { getArchiveApi } from '../archiveApi'
+import { getWorkspaceClient } from '../clients/workspaceClient'
 import { MemoryWorkspaceView } from '../components/MemoryWorkspaceView'
 import { useI18n } from '../i18n'
 
@@ -497,156 +497,156 @@ export function MemoryWorkspacePage(props: {
   onOpenReviewHistory?: (citation: MemoryWorkspaceCitation) => void
 }) {
   const { t } = useI18n()
-  const archiveApi = useMemo(() => getArchiveApi(), [])
+  const workspaceClient = useMemo(() => getWorkspaceClient(), [])
   const runCompareMatrix = useMemo(
-    () => (typeof archiveApi.runMemoryWorkspaceCompareMatrix === 'function'
-      ? archiveApi.runMemoryWorkspaceCompareMatrix.bind(archiveApi)
+    () => (typeof workspaceClient.runMemoryWorkspaceCompareMatrix === 'function'
+      ? workspaceClient.runMemoryWorkspaceCompareMatrix.bind(workspaceClient)
       : async () => null as MemoryWorkspaceCompareMatrixDetail | null),
-    [archiveApi]
+    [workspaceClient]
   )
   const listCompareMatrices = useMemo(
-    () => (typeof archiveApi.listMemoryWorkspaceCompareMatrices === 'function'
-      ? archiveApi.listMemoryWorkspaceCompareMatrices.bind(archiveApi)
+    () => (typeof workspaceClient.listMemoryWorkspaceCompareMatrices === 'function'
+      ? workspaceClient.listMemoryWorkspaceCompareMatrices.bind(workspaceClient)
       : async () => [] as MemoryWorkspaceCompareMatrixSummary[]),
-    [archiveApi]
+    [workspaceClient]
   )
   const getCompareMatrix = useMemo(
-    () => (typeof archiveApi.getMemoryWorkspaceCompareMatrix === 'function'
-      ? archiveApi.getMemoryWorkspaceCompareMatrix.bind(archiveApi)
+    () => (typeof workspaceClient.getMemoryWorkspaceCompareMatrix === 'function'
+      ? workspaceClient.getMemoryWorkspaceCompareMatrix.bind(workspaceClient)
       : async () => null as MemoryWorkspaceCompareMatrixDetail | null),
-    [archiveApi]
+    [workspaceClient]
   )
   const getPersonaDraftReviewByTurn = useMemo(
-    () => (typeof archiveApi.getPersonaDraftReviewByTurn === 'function'
-      ? archiveApi.getPersonaDraftReviewByTurn.bind(archiveApi)
+    () => (typeof workspaceClient.getPersonaDraftReviewByTurn === 'function'
+      ? workspaceClient.getPersonaDraftReviewByTurn.bind(workspaceClient)
       : async () => null as MemoryWorkspacePersonaDraftReviewRecord | null),
-    [archiveApi]
+    [workspaceClient]
   )
   const createPersonaDraftReviewFromTurn = useMemo(
-    () => (typeof archiveApi.createPersonaDraftReviewFromTurn === 'function'
-      ? archiveApi.createPersonaDraftReviewFromTurn.bind(archiveApi)
+    () => (typeof workspaceClient.createPersonaDraftReviewFromTurn === 'function'
+      ? workspaceClient.createPersonaDraftReviewFromTurn.bind(workspaceClient)
       : async () => null as MemoryWorkspacePersonaDraftReviewRecord | null),
-    [archiveApi]
+    [workspaceClient]
   )
   const updatePersonaDraftReview = useMemo(
-    () => (typeof archiveApi.updatePersonaDraftReview === 'function'
-      ? archiveApi.updatePersonaDraftReview.bind(archiveApi)
+    () => (typeof workspaceClient.updatePersonaDraftReview === 'function'
+      ? workspaceClient.updatePersonaDraftReview.bind(workspaceClient)
       : async () => null as MemoryWorkspacePersonaDraftReviewRecord | null),
-    [archiveApi]
+    [workspaceClient]
   )
   const transitionPersonaDraftReview = useMemo(
-    () => (typeof archiveApi.transitionPersonaDraftReview === 'function'
-      ? archiveApi.transitionPersonaDraftReview.bind(archiveApi)
+    () => (typeof workspaceClient.transitionPersonaDraftReview === 'function'
+      ? workspaceClient.transitionPersonaDraftReview.bind(workspaceClient)
       : async () => null as MemoryWorkspacePersonaDraftReviewRecord | null),
-    [archiveApi]
+    [workspaceClient]
   )
   const selectPersonaDraftHandoffDestination = useMemo(
-    () => (typeof archiveApi.selectPersonaDraftHandoffDestination === 'function'
-      ? archiveApi.selectPersonaDraftHandoffDestination.bind(archiveApi)
+    () => (typeof workspaceClient.selectPersonaDraftHandoffDestination === 'function'
+      ? workspaceClient.selectPersonaDraftHandoffDestination.bind(workspaceClient)
       : async () => null as string | null),
-    [archiveApi]
+    [workspaceClient]
   )
   const listApprovedPersonaDraftHandoffs = useMemo(
-    () => (typeof archiveApi.listApprovedPersonaDraftHandoffs === 'function'
-      ? archiveApi.listApprovedPersonaDraftHandoffs.bind(archiveApi)
+    () => (typeof workspaceClient.listApprovedPersonaDraftHandoffs === 'function'
+      ? workspaceClient.listApprovedPersonaDraftHandoffs.bind(workspaceClient)
       : async () => [] as ApprovedPersonaDraftHandoffRecord[]),
-    [archiveApi]
+    [workspaceClient]
   )
   const exportApprovedPersonaDraft = useMemo(
-    () => (typeof archiveApi.exportApprovedPersonaDraft === 'function'
-      ? archiveApi.exportApprovedPersonaDraft.bind(archiveApi)
+    () => (typeof workspaceClient.exportApprovedPersonaDraft === 'function'
+      ? workspaceClient.exportApprovedPersonaDraft.bind(workspaceClient)
       : async () => null as ExportApprovedPersonaDraftResult | null),
-    [archiveApi]
+    [workspaceClient]
   )
   const selectApprovedDraftPublicationDestination = useMemo(
-    () => (typeof archiveApi.selectApprovedDraftPublicationDestination === 'function'
-      ? archiveApi.selectApprovedDraftPublicationDestination.bind(archiveApi)
+    () => (typeof workspaceClient.selectApprovedDraftPublicationDestination === 'function'
+      ? workspaceClient.selectApprovedDraftPublicationDestination.bind(workspaceClient)
       : async () => null as string | null),
-    [archiveApi]
+    [workspaceClient]
   )
   const listApprovedPersonaDraftPublications = useMemo(
-    () => (typeof archiveApi.listApprovedPersonaDraftPublications === 'function'
-      ? archiveApi.listApprovedPersonaDraftPublications.bind(archiveApi)
+    () => (typeof workspaceClient.listApprovedPersonaDraftPublications === 'function'
+      ? workspaceClient.listApprovedPersonaDraftPublications.bind(workspaceClient)
       : async () => [] as ApprovedPersonaDraftPublicationRecord[]),
-    [archiveApi]
+    [workspaceClient]
   )
   const publishApprovedPersonaDraft = useMemo(
-    () => (typeof archiveApi.publishApprovedPersonaDraft === 'function'
-      ? archiveApi.publishApprovedPersonaDraft.bind(archiveApi)
+    () => (typeof workspaceClient.publishApprovedPersonaDraft === 'function'
+      ? workspaceClient.publishApprovedPersonaDraft.bind(workspaceClient)
       : async () => null as PublishApprovedPersonaDraftResult | null),
-    [archiveApi]
+    [workspaceClient]
   )
   const openApprovedDraftPublicationEntry = useMemo(
-    () => (typeof archiveApi.openApprovedDraftPublicationEntry === 'function'
-      ? archiveApi.openApprovedDraftPublicationEntry.bind(archiveApi)
+    () => (typeof workspaceClient.openApprovedDraftPublicationEntry === 'function'
+      ? workspaceClient.openApprovedDraftPublicationEntry.bind(workspaceClient)
       : async (input: { entryPath: string }) => ({
           status: 'failed' as const,
           entryPath: input.entryPath,
           errorMessage: 'archive api unavailable'
         })),
-    [archiveApi]
+    [workspaceClient]
   )
   const getApprovedDraftHostedShareHostStatus = useMemo(
-    () => (typeof archiveApi.getApprovedDraftHostedShareHostStatus === 'function'
-      ? archiveApi.getApprovedDraftHostedShareHostStatus.bind(archiveApi)
+    () => (typeof workspaceClient.getApprovedDraftHostedShareHostStatus === 'function'
+      ? workspaceClient.getApprovedDraftHostedShareHostStatus.bind(workspaceClient)
       : async () => ({
           availability: 'unconfigured' as const,
           hostKind: null,
           hostLabel: null
         })),
-    [archiveApi]
+    [workspaceClient]
   )
   const listApprovedPersonaDraftHostedShareLinks = useMemo(
-    () => (typeof archiveApi.listApprovedPersonaDraftHostedShareLinks === 'function'
-      ? archiveApi.listApprovedPersonaDraftHostedShareLinks.bind(archiveApi)
+    () => (typeof workspaceClient.listApprovedPersonaDraftHostedShareLinks === 'function'
+      ? workspaceClient.listApprovedPersonaDraftHostedShareLinks.bind(workspaceClient)
       : async () => [] as ApprovedPersonaDraftHostedShareLinkRecord[]),
-    [archiveApi]
+    [workspaceClient]
   )
   const createApprovedPersonaDraftHostedShareLink = useMemo(
-    () => (typeof archiveApi.createApprovedPersonaDraftHostedShareLink === 'function'
-      ? archiveApi.createApprovedPersonaDraftHostedShareLink.bind(archiveApi)
+    () => (typeof workspaceClient.createApprovedPersonaDraftHostedShareLink === 'function'
+      ? workspaceClient.createApprovedPersonaDraftHostedShareLink.bind(workspaceClient)
       : async () => null),
-    [archiveApi]
+    [workspaceClient]
   )
   const revokeApprovedPersonaDraftHostedShareLink = useMemo(
-    () => (typeof archiveApi.revokeApprovedPersonaDraftHostedShareLink === 'function'
-      ? archiveApi.revokeApprovedPersonaDraftHostedShareLink.bind(archiveApi)
+    () => (typeof workspaceClient.revokeApprovedPersonaDraftHostedShareLink === 'function'
+      ? workspaceClient.revokeApprovedPersonaDraftHostedShareLink.bind(workspaceClient)
       : async () => null),
-    [archiveApi]
+    [workspaceClient]
   )
   const openApprovedDraftHostedShareLink = useMemo(
-    () => (typeof archiveApi.openApprovedDraftHostedShareLink === 'function'
-      ? archiveApi.openApprovedDraftHostedShareLink.bind(archiveApi)
+    () => (typeof workspaceClient.openApprovedDraftHostedShareLink === 'function'
+      ? workspaceClient.openApprovedDraftHostedShareLink.bind(workspaceClient)
       : async (input: { shareUrl: string }) => ({
           status: 'failed' as const,
           shareUrl: input.shareUrl,
           errorMessage: 'archive api unavailable'
         })),
-    [archiveApi]
+    [workspaceClient]
   )
   const listApprovedDraftSendDestinations = useMemo(
-    () => (typeof archiveApi.listApprovedDraftSendDestinations === 'function'
-      ? archiveApi.listApprovedDraftSendDestinations.bind(archiveApi)
+    () => (typeof workspaceClient.listApprovedDraftSendDestinations === 'function'
+      ? workspaceClient.listApprovedDraftSendDestinations.bind(workspaceClient)
       : async () => [] as ApprovedDraftSendDestination[]),
-    [archiveApi]
+    [workspaceClient]
   )
   const listApprovedPersonaDraftProviderSends = useMemo(
-    () => (typeof archiveApi.listApprovedPersonaDraftProviderSends === 'function'
-      ? archiveApi.listApprovedPersonaDraftProviderSends.bind(archiveApi)
+    () => (typeof workspaceClient.listApprovedPersonaDraftProviderSends === 'function'
+      ? workspaceClient.listApprovedPersonaDraftProviderSends.bind(workspaceClient)
       : async () => [] as ApprovedPersonaDraftProviderSendArtifact[]),
-    [archiveApi]
+    [workspaceClient]
   )
   const sendApprovedPersonaDraftToProvider = useMemo(
-    () => (typeof archiveApi.sendApprovedPersonaDraftToProvider === 'function'
-      ? archiveApi.sendApprovedPersonaDraftToProvider.bind(archiveApi)
+    () => (typeof workspaceClient.sendApprovedPersonaDraftToProvider === 'function'
+      ? workspaceClient.sendApprovedPersonaDraftToProvider.bind(workspaceClient)
       : async () => null),
-    [archiveApi]
+    [workspaceClient]
   )
   const retryApprovedPersonaDraftProviderSend = useMemo(
-    () => (typeof archiveApi.retryApprovedPersonaDraftProviderSend === 'function'
-      ? archiveApi.retryApprovedPersonaDraftProviderSend.bind(archiveApi)
+    () => (typeof workspaceClient.retryApprovedPersonaDraftProviderSend === 'function'
+      ? workspaceClient.retryApprovedPersonaDraftProviderSend.bind(workspaceClient)
       : async () => null),
-    [archiveApi]
+    [workspaceClient]
   )
   const scopeIdentity = scopeKey(props.scope)
   const scopeRequestRef = useRef(0)
@@ -819,7 +819,7 @@ export function MemoryWorkspacePage(props: {
     return publications
   }
 
-  const refreshApprovedDraftProviderSendsForTurn = async (
+  const refreshApprovedDraftProviderSendsForTurn = useCallback(async (
     turn: MemoryWorkspaceTurnRecord,
     review: MemoryWorkspacePersonaDraftReviewRecord | null,
     scopeRequestId: number
@@ -838,7 +838,7 @@ export function MemoryWorkspacePage(props: {
 
     syncApprovedDraftProviderSendState(turn.turnId, sends)
     return sends
-  }
+  }, [listApprovedPersonaDraftProviderSends])
 
   const refreshApprovedDraftHostedShareLinksForTurn = async (
     turn: MemoryWorkspaceTurnRecord,
@@ -878,8 +878,8 @@ export function MemoryWorkspacePage(props: {
     return review
   }
 
-  const loadSessionDetail = async (sessionId: string, scopeRequestId: number, preserveTurns = false) => {
-    const session = await archiveApi.getMemoryWorkspaceSession(sessionId)
+  const loadSessionDetail = useCallback(async (sessionId: string, scopeRequestId: number, preserveTurns = false) => {
+    const session = await workspaceClient.getMemoryWorkspaceSession(sessionId)
     if (scopeRequestId !== scopeRequestRef.current) {
       return
     }
@@ -892,9 +892,9 @@ export function MemoryWorkspacePage(props: {
     if (!preserveTurns) {
       setTurns([])
     }
-  }
+  }, [workspaceClient])
 
-  const refreshSessions = async (options?: {
+  const refreshSessions = useCallback(async (options?: {
     scopeRequestId?: number
     preferredSessionId?: string | null
     preserveTurns?: boolean
@@ -904,7 +904,7 @@ export function MemoryWorkspacePage(props: {
     const preferredSessionId = options?.preferredSessionId ?? null
     const preserveTurns = options?.preserveTurns ?? false
     const replayMode = options?.replayMode ?? true
-    const sessions = await archiveApi.listMemoryWorkspaceSessions({ scope: props.scope })
+    const sessions = await workspaceClient.listMemoryWorkspaceSessions({ scope: props.scope })
     if (scopeRequestId !== scopeRequestRef.current) {
       return
     }
@@ -925,14 +925,14 @@ export function MemoryWorkspacePage(props: {
     setSelectedSessionId(nextSessionId)
     setIsSessionReplayMode(replayMode)
     await loadSessionDetail(nextSessionId, scopeRequestId, preserveTurns)
-  }
+  }, [loadSessionDetail, props.scope, workspaceClient])
 
-  const loadCompareSessionDetail = async (
+  const loadCompareSessionDetail = useCallback(async (
     compareSessionId: string,
     scopeRequestId: number,
     preserveRuns = false
   ) => {
-    const session = await archiveApi.getMemoryWorkspaceCompareSession(compareSessionId)
+    const session = await workspaceClient.getMemoryWorkspaceCompareSession(compareSessionId)
     if (scopeRequestId !== scopeRequestRef.current) {
       return
     }
@@ -945,9 +945,9 @@ export function MemoryWorkspacePage(props: {
     if (!preserveRuns) {
       setCompareRuns([])
     }
-  }
+  }, [workspaceClient])
 
-  const loadCompareMatrixDetail = async (
+  const loadCompareMatrixDetail = useCallback(async (
     matrixSessionId: string,
     scopeRequestId: number,
     preserveRows = false
@@ -965,9 +965,9 @@ export function MemoryWorkspacePage(props: {
     if (!preserveRows) {
       setMatrixRows([])
     }
-  }
+  }, [getCompareMatrix])
 
-  const refreshCompareSessions = async (options?: {
+  const refreshCompareSessions = useCallback(async (options?: {
     scopeRequestId?: number
     preferredCompareSessionId?: string | null
     preserveRuns?: boolean
@@ -975,7 +975,7 @@ export function MemoryWorkspacePage(props: {
     const scopeRequestId = options?.scopeRequestId ?? scopeRequestRef.current
     const preferredCompareSessionId = options?.preferredCompareSessionId ?? null
     const preserveRuns = options?.preserveRuns ?? false
-    const sessions = await archiveApi.listMemoryWorkspaceCompareSessions({ scope: props.scope })
+    const sessions = await workspaceClient.listMemoryWorkspaceCompareSessions({ scope: props.scope })
     if (scopeRequestId !== scopeRequestRef.current) {
       return
     }
@@ -994,9 +994,9 @@ export function MemoryWorkspacePage(props: {
 
     setSelectedCompareSessionId(nextCompareSessionId)
     await loadCompareSessionDetail(nextCompareSessionId, scopeRequestId, preserveRuns)
-  }
+  }, [loadCompareSessionDetail, props.scope, workspaceClient])
 
-  const refreshCompareMatrices = async (options?: {
+  const refreshCompareMatrices = useCallback(async (options?: {
     scopeRequestId?: number
     preferredMatrixSessionId?: string | null
     preserveRows?: boolean
@@ -1023,7 +1023,7 @@ export function MemoryWorkspacePage(props: {
 
     setSelectedMatrixSessionId(nextMatrixSessionId)
     await loadCompareMatrixDetail(nextMatrixSessionId, scopeRequestId, preserveRows)
-  }
+  }, [listCompareMatrices, loadCompareMatrixDetail])
 
   useEffect(() => {
     const scopeRequestId = scopeRequestRef.current + 1
@@ -1115,7 +1115,15 @@ export function MemoryWorkspacePage(props: {
           setIsLoadingCompareSessions(false)
         }
       })
-  }, [archiveApi, listApprovedDraftSendDestinations, props.scope, scopeIdentity])
+  }, [
+    getApprovedDraftHostedShareHostStatus,
+    listApprovedDraftSendDestinations,
+    props.scope,
+    refreshCompareMatrices,
+    refreshCompareSessions,
+    refreshSessions,
+    scopeIdentity
+  ])
 
   useEffect(() => {
     writeStoredCompareTargetDefaults(compareTargetControls)
@@ -1378,7 +1386,7 @@ export function MemoryWorkspacePage(props: {
     return () => {
       window.clearInterval(interval)
     }
-  }, [draftReviewsByTurnId, listApprovedPersonaDraftProviderSends, turns])
+  }, [draftReviewsByTurnId, refreshApprovedDraftProviderSendsForTurn, turns])
 
   const handleSelectSession = async (sessionId: string) => {
     const scopeRequestId = scopeRequestRef.current
@@ -1466,7 +1474,7 @@ export function MemoryWorkspacePage(props: {
     setEmptyStateMessage(null)
 
     try {
-      const nextTurn = await archiveApi.askMemoryWorkspacePersisted({
+      const nextTurn = await workspaceClient.askMemoryWorkspacePersisted({
         scope: props.scope,
         question: trimmedQuestion,
         expressionMode: input.expressionMode,
@@ -1548,7 +1556,7 @@ export function MemoryWorkspacePage(props: {
     setCompareEmptyStateMessage(null)
 
     try {
-      const compareSession = await archiveApi.runMemoryWorkspaceCompare({
+      const compareSession = await workspaceClient.runMemoryWorkspaceCompare({
         scope: props.scope,
         question: trimmedQuestion,
         expressionMode,

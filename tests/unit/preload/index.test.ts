@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import fs from 'node:fs'
+import path from 'node:path'
 
 const { exposeInMainWorld, invoke } = vi.hoisted(() => ({
   exposeInMainWorld: vi.fn(),
@@ -54,6 +56,20 @@ describe('preload archiveApi bridge', () => {
     expect(invoke).toHaveBeenNthCalledWith(5, 'archive:openApprovedDraftHostedShareLink', {
       shareUrl: 'https://share.example.test/s/abc123'
     })
+  })
+
+  it('is assembled from preload modules instead of one inline archiveApi object', () => {
+    const source = fs.readFileSync(
+      path.resolve('src/preload/index.ts'),
+      'utf8'
+    )
+
+    expect(source).toContain("from './modules/import'")
+    expect(source).toContain("from './modules/review'")
+    expect(source).toContain("from './modules/workspace'")
+    expect(source).toContain("from './modules/objective'")
+    expect(source).toContain('Object.assign')
+    expect(source).not.toContain('const archiveApi')
   })
 
   it('passes persisted memory workspace asks with session ids through contextBridge', async () => {
@@ -140,6 +156,7 @@ describe('preload archiveApi bridge', () => {
         prompt: string
         initiatedBy: 'operator'
       }) => Promise<unknown>
+      refreshObjectiveTriggers: () => Promise<unknown>
       listAgentObjectives: (input: { ownerRole: 'workspace' }) => Promise<unknown>
       getAgentObjective: (input: { objectiveId: string }) => Promise<unknown>
       getAgentThread: (input: { threadId: string }) => Promise<unknown>
@@ -173,6 +190,7 @@ describe('preload archiveApi bridge', () => {
       prompt: 'Check the source before we answer the user.',
       initiatedBy: 'operator'
     })
+    await archiveApi.refreshObjectiveTriggers()
     await archiveApi.listAgentObjectives({ ownerRole: 'workspace' })
     await archiveApi.getAgentObjective({ objectiveId: 'objective-1' })
     await archiveApi.getAgentThread({ threadId: 'thread-main-1' })
@@ -194,22 +212,23 @@ describe('preload archiveApi bridge', () => {
       prompt: 'Check the source before we answer the user.',
       initiatedBy: 'operator'
     })
-    expect(invoke).toHaveBeenNthCalledWith(2, 'archive:listAgentObjectives', {
+    expect(invoke).toHaveBeenNthCalledWith(2, 'archive:refreshObjectiveTriggers')
+    expect(invoke).toHaveBeenNthCalledWith(3, 'archive:listAgentObjectives', {
       ownerRole: 'workspace'
     })
-    expect(invoke).toHaveBeenNthCalledWith(3, 'archive:getAgentObjective', {
+    expect(invoke).toHaveBeenNthCalledWith(4, 'archive:getAgentObjective', {
       objectiveId: 'objective-1'
     })
-    expect(invoke).toHaveBeenNthCalledWith(4, 'archive:getAgentThread', {
+    expect(invoke).toHaveBeenNthCalledWith(5, 'archive:getAgentThread', {
       threadId: 'thread-main-1'
     })
-    expect(invoke).toHaveBeenNthCalledWith(5, 'archive:respondToAgentProposal', {
+    expect(invoke).toHaveBeenNthCalledWith(6, 'archive:respondToAgentProposal', {
       proposalId: 'proposal-1',
       responderRole: 'governance',
       response: 'challenge',
       comment: 'Need a bounded verification policy before this can proceed.'
     })
-    expect(invoke).toHaveBeenNthCalledWith(6, 'archive:confirmAgentProposal', {
+    expect(invoke).toHaveBeenNthCalledWith(7, 'archive:confirmAgentProposal', {
       proposalId: 'proposal-1',
       decision: 'confirm',
       operatorNote: 'Confirmed after reviewing the evidence bundle.'

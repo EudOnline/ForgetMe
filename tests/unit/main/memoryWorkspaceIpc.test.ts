@@ -108,7 +108,7 @@ vi.mock('../../../src/main/services/approvedDraftProviderSendService', () => ({
   sendApprovedPersonaDraftToProvider
 }))
 
-import { registerMemoryWorkspaceIpc } from '../../../src/main/ipc/memoryWorkspaceIpc'
+import { registerWorkspaceIpc } from '../../../src/main/modules/workspace/registerWorkspaceIpc'
 
 function appPathsFixture(): AppPaths {
   return {
@@ -153,7 +153,7 @@ function writeApprovedDraftPublicationPackage(
   }
 }
 
-describe('registerMemoryWorkspaceIpc session handlers', () => {
+describe('registerWorkspaceIpc session handlers', () => {
   beforeEach(() => {
     handlerMap.clear()
     openDatabase.mockReset()
@@ -207,7 +207,7 @@ describe('registerMemoryWorkspaceIpc session handlers', () => {
       }
     })
 
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:askMemoryWorkspacePersisted')
     const result = await handler?.({}, {
@@ -234,7 +234,7 @@ describe('registerMemoryWorkspaceIpc session handlers', () => {
   })
 })
 
-describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
+describe('registerWorkspaceIpc approved handoff handlers', () => {
   beforeEach(() => {
     handlerMap.clear()
     showOpenDialog.mockReset()
@@ -262,7 +262,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
   it('returns the e2e handoff destination override without opening a dialog', async () => {
     process.env.FORGETME_E2E_PERSONA_DRAFT_HANDOFF_DESTINATION_DIR = '/tmp/persona-draft-exports'
 
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:selectPersonaDraftHandoffDestination')
 
@@ -286,7 +286,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
       exportedAt: '2026-03-16T03:00:00.000Z'
     }])
 
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:listApprovedPersonaDraftHandoffs')
     const result = await handler?.({}, {
@@ -319,7 +319,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
       exportedAt: '2026-03-16T03:00:00.000Z'
     })
 
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:exportApprovedPersonaDraft')
     const result = await handler?.({}, {
@@ -341,7 +341,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
   it('returns the e2e publication destination override without opening a dialog', async () => {
     process.env.FORGETME_E2E_APPROVED_DRAFT_PUBLICATION_DESTINATION_DIR = '/tmp/approved-draft-publications'
 
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:selectApprovedDraftPublicationDestination')
 
@@ -370,7 +370,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
       publishedAt: '2026-03-16T09:00:00.000Z'
     }])
 
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:listApprovedPersonaDraftPublications')
 
@@ -415,7 +415,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
       publishedAt: '2026-03-16T09:00:00.000Z'
     })
 
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:publishApprovedPersonaDraft')
 
@@ -442,7 +442,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
   })
 
   it('rejects invalid open publication entry payloads', async () => {
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:openApprovedDraftPublicationEntry')
 
@@ -458,7 +458,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
     const entryPath = path.join(packageRoot, 'index.html')
     writeApprovedDraftPublicationPackage(packageRoot)
 
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:openApprovedDraftPublicationEntry')
     const result = await handler?.({}, {
@@ -474,7 +474,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
   })
 
   it('returns structured failed status when publication entry is missing', async () => {
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const missingEntryPath = path.join(
       os.tmpdir(),
@@ -495,7 +495,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
   })
 
   it('returns structured failed status when publication package files are missing', async () => {
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const packageRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-approved-draft-publication-'))
     const entryPath = path.join(packageRoot, 'index.html')
@@ -517,7 +517,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
   })
 
   it('returns structured failed status when publication manifest is not a valid ForgetMe package', async () => {
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const packageRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-approved-draft-publication-'))
     const entryPath = path.join(packageRoot, 'index.html')
@@ -550,7 +550,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
     const entryPath = path.join(packageRoot, 'index.html')
     writeApprovedDraftPublicationPackage(packageRoot)
 
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:openApprovedDraftPublicationEntry')
     const result = await handler?.({}, {
@@ -572,7 +572,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
       hostLabel: 'https://share.example.test'
     })
 
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:getApprovedDraftHostedShareHostStatus')
     const result = await handler?.({}, undefined)
@@ -603,7 +603,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
       revokedAt: null
     }])
 
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:listApprovedPersonaDraftHostedShareLinks')
 
@@ -648,7 +648,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
       revokedAt: null
     })
 
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:createApprovedPersonaDraftHostedShareLink')
 
@@ -691,7 +691,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
       revokedAt: '2026-03-19T09:05:00.000Z'
     })
 
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:revokeApprovedPersonaDraftHostedShareLink')
 
@@ -719,7 +719,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
   it('opens hosted share links externally with a structured success result', async () => {
     shellOpenExternal.mockResolvedValue(undefined)
 
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:openApprovedDraftHostedShareLink')
     const result = await handler?.({}, {
@@ -735,7 +735,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
   })
 
   it('rejects invalid hosted share urls before shell.openExternal', async () => {
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:openApprovedDraftHostedShareLink')
 
@@ -748,7 +748,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
   it('returns structured failed status when shell.openExternal throws', async () => {
     shellOpenExternal.mockRejectedValue(new Error('host unavailable'))
 
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:openApprovedDraftHostedShareLink')
     const result = await handler?.({}, {
@@ -787,7 +787,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
       events: []
     }])
 
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:listApprovedPersonaDraftProviderSends')
     const result = await handler?.({}, {
@@ -825,7 +825,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
       createdAt: '2026-03-16T08:00:00.000Z'
     })
 
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:sendApprovedPersonaDraftToProvider')
     const result = await handler?.({}, {
@@ -863,7 +863,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
       createdAt: '2026-03-16T08:05:00.000Z'
     })
 
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:retryApprovedPersonaDraftProviderSend')
     const result = await handler?.({}, {
@@ -892,7 +892,7 @@ describe('registerMemoryWorkspaceIpc approved handoff handlers', () => {
       }
     ])
 
-    registerMemoryWorkspaceIpc(appPathsFixture())
+    registerWorkspaceIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:listApprovedDraftSendDestinations')
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ImportBatchSummary, ImportPreflightResult } from '../../shared/archiveContracts'
-import { getArchiveApi } from '../archiveApi'
+import { getImportClient } from '../clients/importClient'
 import { useI18n } from '../i18n'
 import { BatchListPage } from './BatchListPage'
 import { ImportDropzone } from '../components/ImportDropzone'
@@ -63,7 +63,8 @@ export function ImportPage(props: {
   onOpenReviewQueue?: () => void
 }) {
   const { t } = useI18n()
-  const archiveApi = useMemo(() => getArchiveApi(), [])
+  const importClient = useMemo(() => getImportClient(), [])
+  const { onBatchesUpdated, onOpenReviewQueue, onSelectBatch } = props
   const [batches, setBatches] = useState<ImportBatchSummary[]>([])
   const [phase, setPhase] = useState<'idle' | 'selected' | 'preflight_ready' | 'importing' | 'completed' | 'error'>('idle')
   const [selectedFiles, setSelectedFiles] = useState<SelectedImportFile[]>([])
@@ -84,13 +85,13 @@ export function ImportPage(props: {
   const skipEmptySelectionResetRef = useRef(false)
 
   useEffect(() => {
-    void archiveApi.listImportBatches().then((nextBatches) => {
+    void importClient.listImportBatches().then((nextBatches) => {
       if (nextBatches.length > 0) {
         setBatches(nextBatches)
-        props.onBatchesUpdated?.(nextBatches)
+        onBatchesUpdated?.(nextBatches)
       }
     })
-  }, [archiveApi, props.onBatchesUpdated])
+  }, [importClient, onBatchesUpdated])
 
   useEffect(() => {
     if (selectedFiles.length === 0) {
@@ -111,7 +112,7 @@ export function ImportPage(props: {
     setPreflightResult(null)
     setPhase('selected')
 
-    void archiveApi
+    void importClient
       .preflightImportBatch({ sourcePaths: selectedFiles.map((file) => file.path) })
       .then((result) => {
         if (cancelled) {
@@ -137,14 +138,14 @@ export function ImportPage(props: {
     return () => {
       cancelled = true
     }
-  }, [archiveApi, selectedFiles, t])
+  }, [importClient, selectedFiles, t])
 
   const handleChooseFiles = async () => {
     if (phase === 'importing') {
       return
     }
 
-    const sourcePaths = await archiveApi.selectImportFiles()
+    const sourcePaths = await importClient.selectImportFiles()
     if (sourcePaths.length === 0) {
       return
     }
@@ -172,10 +173,10 @@ export function ImportPage(props: {
         supportedSourcePaths,
         t('import.preflight.sourceLabelMultiple', { count: supportedSourcePaths.length })
       )
-      const createdBatch = await archiveApi.createImportBatch({ sourcePaths: supportedSourcePaths, sourceLabel })
-      const nextBatches = await archiveApi.listImportBatches()
+      const createdBatch = await importClient.createImportBatch({ sourcePaths: supportedSourcePaths, sourceLabel })
+      const nextBatches = await importClient.listImportBatches()
       setBatches(nextBatches)
-      props.onBatchesUpdated?.(nextBatches)
+      onBatchesUpdated?.(nextBatches)
 
       const failedFiles = (createdBatch.files ?? [])
         .filter((file) => file.parserStatus !== 'parsed')
@@ -290,7 +291,7 @@ export function ImportPage(props: {
             <button
               type="button"
               onClick={() => {
-                props.onSelectBatch?.(importOutcome.batch.batchId)
+                onSelectBatch?.(importOutcome.batch.batchId)
               }}
             >
               {t('import.outcome.viewBatchDetail')}
@@ -299,7 +300,7 @@ export function ImportPage(props: {
               <button
                 type="button"
                 onClick={() => {
-                  props.onOpenReviewQueue?.()
+                  onOpenReviewQueue?.()
                 }}
               >
                 {t('import.outcome.openReviewQueue')}
@@ -311,7 +312,7 @@ export function ImportPage(props: {
           </div>
         </section>
       ) : null}
-      <BatchListPage batches={batches} onSelectBatch={props.onSelectBatch} />
+      <BatchListPage batches={batches} onSelectBatch={onSelectBatch} />
     </section>
   )
 }

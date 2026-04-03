@@ -5,7 +5,7 @@ import type {
   PersonDossier,
   PersonDossierReviewShortcut
 } from '../../shared/archiveContracts'
-import { getArchiveApi } from '../archiveApi'
+import { getPeopleClient } from '../clients/peopleClient'
 import { PersonDossierView } from '../components/PersonDossierView'
 
 export function PersonDetailPage(props: {
@@ -15,7 +15,7 @@ export function PersonDetailPage(props: {
   onOpenGroupPortrait?: (canonicalPersonId: string) => void
   onOpenMemoryWorkspace?: (scope: MemoryWorkspaceScope) => void
 }) {
-  const archiveApi = useMemo(() => getArchiveApi(), [])
+  const peopleClient = useMemo(() => getPeopleClient(), [])
   const [dossier, setDossier] = useState<PersonDossier | null>(null)
   const [contextPackMode, setContextPackMode] = useState<ContextPackExportMode>('approved_plus_derived')
   const [contextPackDestination, setContextPackDestination] = useState('')
@@ -29,12 +29,12 @@ export function PersonDetailPage(props: {
       return
     }
 
-    void archiveApi.getPersonDossier(props.canonicalPersonId).then(setDossier)
+    void peopleClient.getPersonDossier(props.canonicalPersonId).then(setDossier)
     setContextPackStatus('')
-  }, [archiveApi, props.canonicalPersonId])
+  }, [peopleClient, props.canonicalPersonId])
 
   const handlePickContextPackDestination = async () => {
-    const selected = await archiveApi.selectContextPackExportDestination()
+    const selected = await peopleClient.selectContextPackExportDestination()
     if (selected) {
       setContextPackDestination(selected)
     }
@@ -48,7 +48,7 @@ export function PersonDetailPage(props: {
     setIsExportingContextPack(true)
     setContextPackStatus('')
 
-    const destinationRoot = contextPackDestination || await archiveApi.selectContextPackExportDestination()
+    const destinationRoot = contextPackDestination || await peopleClient.selectContextPackExportDestination()
     if (!destinationRoot) {
       setIsExportingContextPack(false)
       return
@@ -57,7 +57,7 @@ export function PersonDetailPage(props: {
     setContextPackDestination(destinationRoot)
 
     try {
-      const result = await archiveApi.exportPersonContextPack({
+      const result = await peopleClient.exportPersonContextPack({
         canonicalPersonId: props.canonicalPersonId,
         destinationRoot,
         mode: contextPackMode

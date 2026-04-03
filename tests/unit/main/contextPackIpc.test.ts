@@ -44,7 +44,7 @@ vi.mock('../../../src/main/services/contextPackService', () => ({
   exportContextPackToDirectory
 }))
 
-import { registerContextPackIpc } from '../../../src/main/ipc/contextPackIpc'
+import { registerPeopleIpc } from '../../../src/main/modules/people/registerPeopleIpc'
 
 function appPathsFixture(): AppPaths {
   return {
@@ -110,7 +110,7 @@ function groupPackFixture() {
   }
 }
 
-describe('registerContextPackIpc', () => {
+describe('registerPeopleIpc context-pack handlers', () => {
   beforeEach(() => {
     handlerMap.clear()
     showOpenDialog.mockReset()
@@ -129,7 +129,7 @@ describe('registerContextPackIpc', () => {
   it('returns the e2e export destination override without opening a dialog', async () => {
     process.env.FORGETME_E2E_CONTEXT_PACK_DESTINATION_DIR = '/tmp/context-pack-exports'
 
-    registerContextPackIpc(appPathsFixture())
+    registerPeopleIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:selectContextPackExportDestination')
     expect(handler).toBeTypeOf('function')
@@ -142,7 +142,7 @@ describe('registerContextPackIpc', () => {
     openDatabase.mockReturnValue({ close })
     buildPersonContextPack.mockReturnValue(personPackFixture())
 
-    registerContextPackIpc(appPathsFixture())
+    registerPeopleIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:getPersonContextPack')
     const result = await handler?.({}, {
@@ -182,7 +182,7 @@ describe('registerContextPackIpc', () => {
       }
     })
 
-    registerContextPackIpc(appPathsFixture())
+    registerPeopleIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:exportPersonContextPack')
     const result = await handler?.({}, {
@@ -223,7 +223,7 @@ describe('registerContextPackIpc', () => {
       }
     })
 
-    registerContextPackIpc(appPathsFixture())
+    registerPeopleIpc(appPathsFixture())
 
     const handler = handlerMap.get('archive:exportGroupContextPack')
     const result = await handler?.({}, {

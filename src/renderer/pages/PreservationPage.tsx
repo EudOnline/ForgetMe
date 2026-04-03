@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { BackupExportResult, RestoreRunResult } from '../../shared/archiveContracts'
-import { getArchiveApi } from '../archiveApi'
+import { getOpsClient } from '../clients/opsClient'
 import { useI18n } from '../i18n'
 
 function asErrorMessage(error: unknown) {
@@ -9,7 +9,7 @@ function asErrorMessage(error: unknown) {
 
 export function PreservationPage() {
   const { t } = useI18n()
-  const archiveApi = useMemo(() => getArchiveApi(), [])
+  const opsClient = useMemo(() => getOpsClient(), [])
   const [destinationRoot, setDestinationRoot] = useState('')
   const [exportRoot, setExportRoot] = useState('')
   const [targetRoot, setTargetRoot] = useState('')
@@ -42,21 +42,21 @@ export function PreservationPage() {
   }
 
   const handlePickExportDestination = async () => {
-    const selected = await archiveApi.selectBackupExportDestination()
+    const selected = await opsClient.selectBackupExportDestination()
     if (selected) {
       setDestinationRoot(selected)
     }
   }
 
   const handlePickExportSource = async () => {
-    const selected = await archiveApi.selectBackupExportSource()
+    const selected = await opsClient.selectBackupExportSource()
     if (selected) {
       setExportRoot(selected)
     }
   }
 
   const handlePickRestoreTarget = async () => {
-    const selected = await archiveApi.selectRestoreTargetDirectory()
+    const selected = await opsClient.selectRestoreTargetDirectory()
     if (selected) {
       setTargetRoot(selected)
     }
@@ -66,7 +66,7 @@ export function PreservationPage() {
     setIsWorking(true)
     setStatus(null)
 
-    const nextDestinationRoot = destinationRoot || await archiveApi.selectBackupExportDestination()
+    const nextDestinationRoot = destinationRoot || await opsClient.selectBackupExportDestination()
     if (!nextDestinationRoot) {
       setIsWorking(false)
       return
@@ -74,7 +74,7 @@ export function PreservationPage() {
 
     setDestinationRoot(nextDestinationRoot)
     try {
-      const result = await archiveApi.createBackupExport({
+      const result = await opsClient.createBackupExport({
         destinationRoot: nextDestinationRoot,
         encryptionPassword: exportPassword || undefined
       })
@@ -102,8 +102,8 @@ export function PreservationPage() {
     setIsWorking(true)
     setStatus(null)
 
-    const nextExportRoot = exportRoot || lastExport?.exportRoot || await archiveApi.selectBackupExportSource()
-    const nextTargetRoot = targetRoot || await archiveApi.selectRestoreTargetDirectory()
+    const nextExportRoot = exportRoot || lastExport?.exportRoot || await opsClient.selectBackupExportSource()
+    const nextTargetRoot = targetRoot || await opsClient.selectRestoreTargetDirectory()
 
     if (!nextExportRoot || !nextTargetRoot) {
       setIsWorking(false)
@@ -113,7 +113,7 @@ export function PreservationPage() {
     setExportRoot(nextExportRoot)
     setTargetRoot(nextTargetRoot)
     try {
-      const result = await archiveApi.restoreBackupExport({
+      const result = await opsClient.restoreBackupExport({
         exportRoot: nextExportRoot,
         targetRoot: nextTargetRoot,
         encryptionPassword: restorePassword || undefined
@@ -143,8 +143,8 @@ export function PreservationPage() {
     setIsWorking(true)
     setStatus(null)
 
-    const nextExportRoot = exportRoot || lastExport?.exportRoot || await archiveApi.selectBackupExportSource()
-    const nextTargetRoot = targetRoot || await archiveApi.selectRestoreTargetDirectory()
+    const nextExportRoot = exportRoot || lastExport?.exportRoot || await opsClient.selectBackupExportSource()
+    const nextTargetRoot = targetRoot || await opsClient.selectRestoreTargetDirectory()
 
     if (!nextExportRoot || !nextTargetRoot) {
       setIsWorking(false)
@@ -154,7 +154,7 @@ export function PreservationPage() {
     setExportRoot(nextExportRoot)
     setTargetRoot(nextTargetRoot)
     try {
-      const result = await archiveApi.runRecoveryDrill({
+      const result = await opsClient.runRecoveryDrill({
         exportRoot: nextExportRoot,
         targetRoot: nextTargetRoot,
         encryptionPassword: restorePassword || undefined

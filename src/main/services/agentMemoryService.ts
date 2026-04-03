@@ -6,7 +6,7 @@ import type {
 import {
   listAgentMemories,
   upsertAgentMemory
-} from './agentPersistenceService'
+} from './governancePersistenceService'
 import type { ArchiveDatabase } from './db'
 
 type CreateAgentMemoryServiceInput = {

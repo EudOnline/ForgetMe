@@ -3,7 +3,7 @@ import type {
   AgentProposalRecord,
   AgentProposalStatus,
   AgentVoteRecord
-} from '../../shared/archiveContracts'
+} from '../../shared/objectiveRuntimeContracts'
 
 export type EvaluateProposalStatusInput = {
   proposal: AgentProposalRecord

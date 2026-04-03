@@ -1,3 +1,5 @@
+import fs from 'node:fs'
+import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getArchiveApi } from '../../../src/renderer/archiveApi'
 
@@ -52,7 +54,72 @@ describe('archiveApi preservation methods', () => {
   })
 })
 
+describe('archiveApi hardening', () => {
+  it('does not attempt renderer-side Electron access when window.archiveApi is missing', async () => {
+    const requireSpy = vi.fn()
+    vi.stubGlobal('window', { require: requireSpy })
+
+    const archiveApi = getArchiveApi()
+
+    await expect(archiveApi.listImportBatches()).resolves.toEqual([])
+    expect(requireSpy).not.toHaveBeenCalled()
+  })
+
+  it('prefers the preload-provided archiveApi bridge when present', async () => {
+    const listImportBatches = vi.fn().mockResolvedValue([{ batchId: 'batch-1' }])
+    vi.stubGlobal('window', {
+      archiveApi: {
+        listImportBatches
+      }
+    })
+
+    const archiveApi = getArchiveApi()
+
+    await expect(archiveApi.listImportBatches()).resolves.toEqual([{ batchId: 'batch-1' }])
+    expect(listImportBatches).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('archiveApi agent runtime methods', () => {
+  it('is composed from feature clients instead of a monolithic fallback archive api', () => {
+    const source = fs.readFileSync(
+      path.resolve('src/renderer/archiveApi.ts'),
+      'utf8'
+    )
+    const clientIndexSource = fs.readFileSync(
+      path.resolve('src/renderer/clients/index.ts'),
+      'utf8'
+    )
+
+    expect(source).toContain("from './clients'")
+    expect(source).toContain('buildArchiveApiBridge')
+    expect(source).not.toContain('Object.assign')
+    expect(clientIndexSource).toContain("from './importClient'")
+    expect(clientIndexSource).toContain("from './reviewClient'")
+    expect(clientIndexSource).toContain("from './workspaceClient'")
+    expect(clientIndexSource).toContain("from './objectiveClient'")
+    expect(clientIndexSource).toContain("from './opsClient'")
+    expect(clientIndexSource).toContain('Object.assign')
+  })
+
+  it('keeps the renderer archive api free of legacy run-centric agent calls', () => {
+    const source = fs.readFileSync(
+      path.resolve('src/renderer/archiveApi.ts'),
+      'utf8'
+    )
+
+    expect(source).not.toMatch('previewAgentTask')
+    expect(source).not.toMatch('runAgentTask')
+    expect(source).not.toMatch('listAgentRuns')
+    expect(source).not.toMatch('getAgentRun')
+    expect(source).not.toMatch('listAgentSuggestions')
+    expect(source).not.toMatch('refreshAgentSuggestions')
+    expect(source).not.toMatch('dismissAgentSuggestion')
+    expect(source).not.toMatch('runAgentSuggestion')
+    expect(source).not.toMatch('getAgentRuntimeSettings')
+    expect(source).not.toMatch('updateAgentRuntimeSettings')
+  })
+
   it('exposes only objective runtime methods in the fallback API', async () => {
     vi.stubGlobal('window', {})
 
@@ -70,6 +137,7 @@ describe('archiveApi agent runtime methods', () => {
       status: 'in_progress',
       ownerRole: 'workspace'
     }))
+    await expect(archiveApi.refreshObjectiveTriggers()).resolves.toEqual([])
     await expect(archiveApi.listAgentObjectives({
       ownerRole: 'workspace'
     })).resolves.toEqual([])
@@ -137,6 +205,28 @@ describe('archiveApi agent runtime methods', () => {
       checkpoints: [],
       subagents: []
     })
+    const refreshObjectiveTriggers = vi.fn().mockResolvedValue([
+      {
+        objectiveId: 'objective-1',
+        title: 'Verify an external claim before responding',
+        objectiveKind: 'evidence_investigation',
+        status: 'in_progress',
+        prompt: 'Check the source before we answer the user.',
+        initiatedBy: 'operator',
+        ownerRole: 'workspace',
+        mainThreadId: 'thread-main-1',
+        riskLevel: 'medium',
+        budget: null,
+        requiresOperatorInput: false,
+        createdAt: '2026-03-30T00:00:00.000Z',
+        updatedAt: '2026-03-30T00:00:00.000Z',
+        threads: [],
+        participants: [],
+        proposals: [],
+        checkpoints: [],
+        subagents: []
+      }
+    ])
     const listAgentObjectives = vi.fn().mockResolvedValue([
       {
         objectiveId: 'objective-1',
@@ -304,6 +394,7 @@ describe('archiveApi agent runtime methods', () => {
     vi.stubGlobal('window', {
       archiveApi: {
         createAgentObjective,
+        refreshObjectiveTriggers,
         listAgentObjectives,
         getAgentObjective,
         getAgentThread,
@@ -320,6 +411,7 @@ describe('archiveApi agent runtime methods', () => {
       prompt: 'Check the source before we answer the user.',
       initiatedBy: 'operator'
     })
+    const refreshedObjectives = await archiveApi.refreshObjectiveTriggers()
     const objectives = await archiveApi.listAgentObjectives({
       ownerRole: 'workspace'
     })
@@ -343,6 +435,7 @@ describe('archiveApi agent runtime methods', () => {
 
     expect(createdObjective.objectiveId).toBe('objective-1')
     expect(createdObjective.mainThreadId).toBe('thread-main-1')
+    expect(refreshedObjectives[0]?.objectiveId).toBe('objective-1')
     expect(objectives[0]?.objectiveId).toBe('objective-1')
     expect(objective?.proposals[0]?.proposalId).toBe('proposal-1')
     expect(thread?.messages[0]?.body).toContain('Check the source')
@@ -358,6 +451,7 @@ describe('archiveApi agent runtime methods', () => {
     expect('runAgentSuggestion' in archiveApiRecord).toBe(false)
     expect('getAgentRuntimeSettings' in archiveApiRecord).toBe(false)
     expect('updateAgentRuntimeSettings' in archiveApiRecord).toBe(false)
+    expect(refreshObjectiveTriggers).toHaveBeenCalledWith()
   })
 })
 

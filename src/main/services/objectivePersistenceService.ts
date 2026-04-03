@@ -11,6 +11,7 @@ export {
   getProposal,
   listObjectives,
   recordProposalVote,
+  updateObjectiveStatus,
   updateProposalStatus,
   updateSubagent,
   updateThreadStatus,
@@ -32,6 +33,7 @@ export type {
   CreateThreadInput,
   CreateToolExecutionInput,
   RecordProposalVoteInput,
+  UpdateObjectiveStatusInput,
   UpdateSubagentInput,
   UpdateThreadStatusInput,
   UpdateToolExecutionInput

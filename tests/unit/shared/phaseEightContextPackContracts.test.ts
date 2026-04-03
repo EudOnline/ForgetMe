@@ -20,7 +20,7 @@ import {
   groupContextPackInputSchema,
   personContextPackExportInputSchema,
   personContextPackInputSchema
-} from '../../../src/shared/ipcSchemas'
+} from '../../../src/shared/schemas/workspace'
 
 describe('phase-eight context pack contracts', () => {
   it('exports person and group context pack shapes', () => {

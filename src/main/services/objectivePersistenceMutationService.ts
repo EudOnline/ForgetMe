@@ -3,13 +3,13 @@ import type {
   AgentObjectiveRecord,
   AgentObjectiveStatus,
   AgentParticipantKind,
-  AgentRole,
   AgentThreadParticipantRecord,
   AgentThreadRecord,
   AgentThreadStatus,
   CreateAgentObjectiveInput,
   ListAgentObjectivesInput
-} from '../../shared/archiveContracts'
+} from '../../shared/objectiveRuntimeContracts'
+import type { AgentRole } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
 import {
   getObjectiveRow,
@@ -82,6 +82,13 @@ export type UpdateThreadStatusInput = {
   status: AgentThreadStatus
   updatedAt?: string
   closedAt?: string | null
+}
+
+export type UpdateObjectiveStatusInput = {
+  objectiveId: string
+  status: AgentObjectiveStatus
+  requiresOperatorInput?: boolean
+  updatedAt?: string
 }
 
 function inTransaction<T>(db: ArchiveDatabase, callback: () => T) {
@@ -262,6 +269,37 @@ export function updateThreadStatus(db: ArchiveDatabase, input: UpdateThreadStatu
 
   const row = getThreadRow(db, input.threadId)
   return row ? mapThreadRow(row) : null
+}
+
+export function updateObjectiveStatus(db: ArchiveDatabase, input: UpdateObjectiveStatusInput): AgentObjectiveRecord | null {
+  const updatedAt = input.updatedAt ?? nowIso()
+  const hasRequiresOperatorInput = Object.prototype.hasOwnProperty.call(input, 'requiresOperatorInput')
+
+  if (hasRequiresOperatorInput) {
+    db.prepare(
+      `update agent_objectives
+       set status = ?, requires_operator_input = ?, updated_at = ?
+       where id = ?`
+    ).run(
+      input.status,
+      input.requiresOperatorInput ? 1 : 0,
+      updatedAt,
+      input.objectiveId
+    )
+  } else {
+    db.prepare(
+      `update agent_objectives
+       set status = ?, updated_at = ?
+       where id = ?`
+    ).run(
+      input.status,
+      updatedAt,
+      input.objectiveId
+    )
+  }
+
+  const row = getObjectiveRow(db, input.objectiveId)
+  return row ? mapObjectiveRow(row) : null
 }
 
 export function addThreadParticipants(db: ArchiveDatabase, input: AddThreadParticipantsInput): AgentThreadParticipantRecord[] {

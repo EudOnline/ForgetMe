@@ -3,20 +3,14 @@ import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron } from '@playwright/test'
 import { ensureAppPaths } from '../../src/main/services/appPaths'
-import { openDatabase, runMigrations } from '../../src/main/services/db'
-import { createFacilitatorAgentService } from '../../src/main/services/agents/facilitatorAgentService'
 import { createExternalVerificationBrokerService } from '../../src/main/services/externalVerificationBrokerService'
-import { createObjectiveRuntimeService } from '../../src/main/services/objectiveRuntimeService'
+import { createObjectiveModule } from '../../src/main/modules/objective/runtime/createObjectiveModule'
 import { createSubagentRegistryService } from '../../src/main/services/subagentRegistryService'
 
 async function seedDeliberationObjective(userDataDir: string) {
   const appPaths = ensureAppPaths(userDataDir)
-  const db = openDatabase(path.join(appPaths.sqliteDir, 'archive.sqlite'))
-  runMigrations(db)
-
-  const runtime = createObjectiveRuntimeService({
-    db,
-    facilitator: createFacilitatorAgentService(),
+  const objectiveModule = createObjectiveModule(appPaths)
+  const session = objectiveModule.createRuntimeSession({
     externalVerificationBroker: createExternalVerificationBrokerService({
       searchWeb: async () => [],
       openSourcePage: async ({ url }) => ({
@@ -26,35 +20,39 @@ async function seedDeliberationObjective(userDataDir: string) {
         excerpt: ''
       })
     }),
-    subagentRegistry: createSubagentRegistryService()
+    subagentRegistry: createSubagentRegistryService(),
+    roleAgentRegistry: null
   })
+  const { runtime } = session
 
-  const started = await runtime.startObjective({
-    title: 'Review whether approval is safe',
-    objectiveKind: 'review_decision',
-    prompt: 'Decide whether approval is safe and whether we need more evidence.',
-    initiatedBy: 'operator'
-  })
+  try {
+    const started = await runtime.startObjective({
+      title: 'Review whether approval is safe',
+      objectiveKind: 'review_decision',
+      prompt: 'Decide whether approval is safe and whether we need more evidence.',
+      initiatedBy: 'operator'
+    })
 
-  const proposal = runtime.createProposal({
-    objectiveId: started.objective.objectiveId,
-    threadId: started.mainThread.threadId,
-    proposedByParticipantId: 'review',
-    proposalKind: 'approve_review_item',
-    payload: { queueItemId: 'rq-deliberation-e2e' },
-    ownerRole: 'review',
-    requiresOperatorConfirmation: true
-  })
+    const proposal = runtime.createProposal({
+      objectiveId: started.objective.objectiveId,
+      threadId: started.mainThread.threadId,
+      proposedByParticipantId: 'review',
+      proposalKind: 'approve_review_item',
+      payload: { queueItemId: 'rq-deliberation-e2e' },
+      ownerRole: 'review',
+      requiresOperatorConfirmation: true
+    })
 
-  runtime.raiseBlockingChallenge({
-    objectiveId: started.objective.objectiveId,
-    threadId: started.mainThread.threadId,
-    proposalId: proposal.proposalId,
-    fromParticipantId: 'governance',
-    body: 'Need stronger evidence before this can proceed.'
-  })
-
-  db.close()
+    runtime.raiseBlockingChallenge({
+      objectiveId: started.objective.objectiveId,
+      threadId: started.mainThread.threadId,
+      proposalId: proposal.proposalId,
+      fromParticipantId: 'governance',
+      body: 'Need stronger evidence before this can proceed.'
+    })
+  } finally {
+    session.close()
+  }
 }
 
 async function launchApp(userDataDir: string) {

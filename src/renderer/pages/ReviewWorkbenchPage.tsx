@@ -5,7 +5,7 @@ import type {
   ReviewWorkbenchDetail,
   ReviewWorkbenchListItem
 } from '../../shared/archiveContracts'
-import { getArchiveApi } from '../archiveApi'
+import { getReviewClient } from '../clients/reviewClient'
 import { useI18n } from '../i18n'
 import { ReviewActionBar } from '../components/ReviewActionBar'
 import { ReviewCandidateSummaryCard } from '../components/ReviewCandidateSummaryCard'
@@ -128,7 +128,7 @@ export function ReviewWorkbenchPage(props: {
   initialQueueItemId?: string | null
 }) {
   const { t } = useI18n()
-  const archiveApi = useMemo(() => getArchiveApi(), [])
+  const reviewClient = useMemo(() => getReviewClient(), [])
   const [items, setItems] = useState<ReviewWorkbenchListItem[]>([])
   const [peopleInbox, setPeopleInbox] = useState<ReviewInboxPersonSummary[]>([])
   const [conflictGroups, setConflictGroups] = useState<ReviewConflictGroupSummary[]>([])
@@ -161,9 +161,9 @@ export function ReviewWorkbenchPage(props: {
     preferredConflictGroupKey?: string | null
   ) => {
     const [nextPeopleInbox, nextConflictGroups, nextItems] = await Promise.all([
-      archiveApi.listReviewInboxPeople(),
-      archiveApi.listReviewConflictGroups(),
-      archiveApi.listReviewWorkbenchItems({ status: 'pending' })
+      reviewClient.listReviewInboxPeople(),
+      reviewClient.listReviewConflictGroups(),
+      reviewClient.listReviewWorkbenchItems({ status: 'pending' })
     ])
 
     setPeopleInbox(nextPeopleInbox)
@@ -234,19 +234,19 @@ export function ReviewWorkbenchPage(props: {
         return null
       }
 
-      const staleDetail = await archiveApi.getReviewWorkbenchItem(staleQueueItemId)
+      const staleDetail = await reviewClient.getReviewWorkbenchItem(staleQueueItemId)
       if (selectedQueueItemIdRef.current === staleQueueItemId) {
         setDetail(staleDetail)
       }
       return staleDetail
     }
 
-    const nextDetail = await archiveApi.getReviewWorkbenchItem(resolvedQueueItemId)
+    const nextDetail = await reviewClient.getReviewWorkbenchItem(resolvedQueueItemId)
     if (selectedQueueItemIdRef.current === resolvedQueueItemId) {
       setDetail(nextDetail)
     }
     return nextDetail
-  }, [archiveApi, props.initialQueueItemId])
+  }, [reviewClient, props.initialQueueItemId])
 
   useEffect(() => {
     void refreshWorkbench(props.initialQueueItemId ?? null)
@@ -256,11 +256,11 @@ export function ReviewWorkbenchPage(props: {
     setErrorMessage(null)
     selectedQueueItemIdRef.current = queueItemId
     setSelectedQueueItemId(queueItemId)
-    const nextDetail = await archiveApi.getReviewWorkbenchItem(queueItemId)
+    const nextDetail = await reviewClient.getReviewWorkbenchItem(queueItemId)
     if (selectedQueueItemIdRef.current === queueItemId) {
       setDetail(nextDetail)
     }
-  }, [archiveApi])
+  }, [reviewClient])
 
   const handleSelectPerson = async (person: ReviewInboxPersonSummary) => {
     setErrorMessage(null)
@@ -297,7 +297,7 @@ export function ReviewWorkbenchPage(props: {
     setIsBusy(true)
     setErrorMessage(null)
     try {
-      await archiveApi.approveSafeReviewGroup({ groupKey: batchApprovalSummary.groupKey })
+      await reviewClient.approveSafeReviewGroup({ groupKey: batchApprovalSummary.groupKey })
       setIsBatchConfirming(false)
       await refreshWorkbench(undefined, selectedInboxPersonKeyRef.current, batchApprovalSummary.groupKey)
     } catch (error) {
@@ -512,15 +512,15 @@ export function ReviewWorkbenchPage(props: {
               queueStatus={detail.queueItem.status}
               undoJournalId={detail.impactPreview.undoImpact.affectedJournalId}
               busy={isBusy}
-              onApprove={() => void runAction(() => archiveApi.approveReviewItem(detail.queueItem.id))}
-              onReject={() => void runAction(() => archiveApi.rejectReviewItem({ queueItemId: detail.queueItem.id }))}
+              onApprove={() => void runAction(() => reviewClient.approveReviewItem(detail.queueItem.id))}
+              onReject={() => void runAction(() => reviewClient.rejectReviewItem({ queueItemId: detail.queueItem.id }))}
               onUndo={() => {
                 const journalId = detail.impactPreview.undoImpact.affectedJournalId
 
                 if (!journalId) {
                   return
                 }
-                void runAction(() => archiveApi.undoDecision(journalId))
+                void runAction(() => reviewClient.undoDecision(journalId))
               }}
             />
           ) : null}

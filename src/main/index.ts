@@ -1,18 +1,9 @@
 import fs from 'node:fs'
 import { join } from 'node:path'
 import { app, BrowserWindow } from 'electron'
-import { registerArchiveIpc } from './ipc/archiveIpc'
-import { registerAgentIpc } from './ipc/agentIpc'
-import { registerContextPackIpc } from './ipc/contextPackIpc'
-import { registerPreservationIpc } from './ipc/preservationIpc'
-import { registerEnrichmentIpc } from './ipc/enrichmentIpc'
-import { registerMemoryWorkspaceIpc } from './ipc/memoryWorkspaceIpc'
-import { registerPeopleIpc } from './ipc/peopleIpc'
-import { registerReviewIpc } from './ipc/reviewIpc'
-import { registerSearchIpc } from './ipc/searchIpc'
+import { registerIpc } from './bootstrap/registerIpc'
+import { createServiceContainer } from './bootstrap/serviceContainer'
 import { ensureAppPaths } from './services/appPaths'
-import { createApprovedDraftProviderSendRetryRunner } from './services/approvedDraftProviderSendRetryRunnerService'
-import { createEnrichmentRunner } from './services/enrichmentRunnerService'
 
 const e2eUserDataDir = process.env.FORGETME_E2E_USER_DATA_DIR?.trim() || null
 
@@ -33,6 +24,11 @@ const resolveAppDataRoot = () => {
 }
 
 const resolvePreloadPath = () => {
+  const cjsPath = join(__dirname, '../preload/index.cjs')
+  if (fs.existsSync(cjsPath)) {
+    return cjsPath
+  }
+
   const mjsPath = join(__dirname, '../preload/index.mjs')
   if (fs.existsSync(mjsPath)) {
     return mjsPath
@@ -48,9 +44,20 @@ const createWindow = () => {
     show: false,
     webPreferences: {
       preload: resolvePreloadPath(),
-      contextIsolation: false,
-      nodeIntegration: true
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
     }
+  })
+
+  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  window.webContents.on('will-navigate', (event, url) => {
+    const currentUrl = window.webContents.getURL()
+    if (!currentUrl || url === currentUrl) {
+      return
+    }
+
+    event.preventDefault()
   })
 
   window.once('ready-to-show', () => {
@@ -64,22 +71,13 @@ const createWindow = () => {
   }
 }
 
-let enrichmentRunner: ReturnType<typeof createEnrichmentRunner> | null = null
-let approvedDraftProviderSendRetryRunner: ReturnType<typeof createApprovedDraftProviderSendRetryRunner> | null = null
+let backgroundRunners: ReturnType<ReturnType<typeof createServiceContainer>['startBackgroundRunners']> | null = null
 
 app.whenReady().then(() => {
   const appPaths = ensureAppPaths(resolveAppDataRoot())
-  registerArchiveIpc(appPaths)
-  registerAgentIpc(appPaths)
-  registerContextPackIpc(appPaths)
-  registerPreservationIpc(appPaths)
-  registerEnrichmentIpc(appPaths)
-  registerMemoryWorkspaceIpc(appPaths)
-  registerPeopleIpc(appPaths)
-  registerReviewIpc(appPaths)
-  registerSearchIpc(appPaths)
-  enrichmentRunner = createEnrichmentRunner({ appPaths })
-  approvedDraftProviderSendRetryRunner = createApprovedDraftProviderSendRetryRunner({ appPaths })
+  const serviceContainer = createServiceContainer(appPaths)
+  registerIpc(serviceContainer)
+  backgroundRunners = serviceContainer.startBackgroundRunners()
   createWindow()
 
   app.on('activate', () => {
@@ -90,8 +88,8 @@ app.whenReady().then(() => {
 })
 
 app.on('before-quit', () => {
-  enrichmentRunner?.stop()
-  approvedDraftProviderSendRetryRunner?.stop()
+  backgroundRunners?.enrichmentRunner.stop()
+  backgroundRunners?.approvedDraftProviderSendRetryRunner.stop()
 })
 
 app.on('window-all-closed', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { documentEvidenceInputSchema, enrichmentJobFilterSchema, structuredFieldCandidateFilterSchema } from '../../../src/shared/ipcSchemas'
+import { documentEvidenceInputSchema, enrichmentJobFilterSchema, structuredFieldCandidateFilterSchema } from '../../../src/shared/schemas/ops'
 
 describe('phase-three IPC schemas', () => {
   it('accepts enrichment job status filters', () => {

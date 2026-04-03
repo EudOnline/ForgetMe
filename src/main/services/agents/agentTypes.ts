@@ -2,34 +2,15 @@ import type {
   AgentArtifactRef,
   AgentExecutionBudget,
   AgentMessageKind,
-  AgentMessageRecord,
   AgentMessageRecordV2,
   AgentObjectiveRecord,
   AgentProposalRecord,
   AgentProposalKind,
   AgentRole,
-  AgentRunRecord,
   AgentSkillPackId,
-  AgentThreadRecord,
-  AgentTaskKind,
-  RunAgentTaskInput
+  AgentThreadRecord
 } from '../../../shared/archiveContracts'
 import type { ArchiveDatabase } from '../db'
-
-export type AgentAdapterMessage = Pick<AgentMessageRecord, 'sender' | 'content'>
-
-export type AgentAdapterResult = {
-  messages?: AgentAdapterMessage[]
-  summary?: string
-}
-
-export type AgentExecutionContext = {
-  db: ArchiveDatabase
-  run: AgentRunRecord
-  input: RunAgentTaskInput
-  taskKind: AgentTaskKind
-  assignedRoles: AgentRole[]
-}
 
 export type AgentMessageDraft = {
   toParticipantId?: string | null
@@ -82,7 +63,5 @@ export type AgentReceiveResult = {
 
 export type AgentAdapter = {
   role: AgentRole
-  canHandle(taskKind: AgentTaskKind): boolean
-  execute(context: AgentExecutionContext): Promise<AgentAdapterResult>
   receive?(context: AgentReceiveContext): Promise<AgentReceiveResult>
 }

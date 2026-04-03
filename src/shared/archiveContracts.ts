@@ -1,3 +1,41 @@
+import type {
+  AgentArtifactRef,
+  AgentCheckpointKind,
+  AgentCheckpointRecord,
+  AgentExecutionBudget,
+  AgentMessageKind,
+  AgentMessageRecordV2,
+  AgentObjectiveDetail,
+  AgentObjectiveInitiator,
+  AgentObjectiveKind,
+  AgentObjectiveRecord,
+  AgentObjectiveRiskLevel,
+  AgentObjectiveStatus,
+  AgentParticipantKind,
+  AgentProposalKind,
+  AgentProposalRecord,
+  AgentProposalStatus,
+  AgentSkillPackId,
+  AgentSubagentRecord,
+  AgentSubagentStatus,
+  AgentThreadDetail,
+  AgentThreadKind,
+  AgentThreadParticipantRecord,
+  AgentThreadRecord,
+  AgentThreadStatus,
+  AgentToolExecutionRecord,
+  AgentToolExecutionStatus,
+  AgentVoteRecord,
+  AgentVoteValue,
+  ConfirmAgentProposalInput,
+  CreateAgentObjectiveInput,
+  CreateAgentProposalInput,
+  GetAgentObjectiveInput,
+  GetAgentThreadInput,
+  ListAgentObjectivesInput,
+  RespondToAgentProposalInput,
+} from './objectiveRuntimeContracts'
+
 export type ImportBatchSummary = {
   batchId: string
   sourceLabel: string
@@ -1440,14 +1478,12 @@ export type ImportPreflightResult = {
 }
 
 export type AgentRole =
-  | 'orchestrator'
   | 'ingestion'
   | 'review'
   | 'workspace'
   | 'governance'
 
 export type AgentTaskKindByRole = {
-  orchestrator: 'orchestrator.plan_next_action'
   ingestion:
     | 'ingestion.import_batch'
     | 'ingestion.rerun_enrichment'
@@ -1469,48 +1505,6 @@ export type AgentTaskKindByRole = {
 
 export type AgentTaskKind = AgentTaskKindByRole[AgentRole]
 
-export type AgentRunStatus =
-  | 'queued'
-  | 'running'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
-
-export type AgentRunExecutionOrigin =
-  | 'operator_manual'
-  | 'operator_suggestion'
-  | 'auto_runner'
-
-export type AgentRunRecord = {
-  runId: string
-  role: AgentRole
-  taskKind: AgentTaskKind | null
-  targetRole: AgentRole | null
-  assignedRoles: AgentRole[]
-  latestAssistantResponse: string | null
-  status: AgentRunStatus
-  executionOrigin: AgentRunExecutionOrigin
-  prompt: string
-  confirmationToken: string | null
-  policyVersion: string | null
-  errorMessage: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export type AgentMessageRecord = {
-  messageId: string
-  runId: string
-  ordinal: number
-  sender: 'system' | 'agent' | 'user' | 'tool'
-  content: string
-  createdAt: string
-}
-
-export type AgentRunDetail = AgentRunRecord & {
-  messages: AgentMessageRecord[]
-}
-
 export type AgentMemoryRecord = {
   memoryId: string
   role: AgentRole
@@ -1528,445 +1522,43 @@ export type AgentPolicyVersionRecord = {
   createdAt: string
 }
 
-export type AgentTriggerKind =
-  | 'governance.failed_runs_detected'
-  | 'review.safe_group_available'
-  | 'ingestion.failed_enrichment_job'
-
-export type AgentSuggestionStatus =
-  | 'suggested'
-  | 'dismissed'
-  | 'executed'
-
-export type AgentSuggestionPriority =
-  | 'low'
-  | 'medium'
-  | 'high'
-  | 'critical'
-
-export type AgentAutonomyMode =
-  | 'manual_only'
-  | 'suggest_safe_auto_run'
-
-export type AgentRuntimeSettingsRecord = {
-  settingsId: string
-  autonomyMode: AgentAutonomyMode
-  updatedAt: string
-}
-
-export type AgentObjectiveKind =
-  | 'review_decision'
-  | 'evidence_investigation'
-  | 'user_response'
-  | 'policy_change'
-  | 'publication'
-
-export type AgentObjectiveStatus =
-  | 'open'
-  | 'in_progress'
-  | 'awaiting_operator'
-  | 'blocked'
-  | 'stalled'
-  | 'completed'
-  | 'cancelled'
-
-export type AgentObjectiveInitiator =
-  | 'operator'
-  | 'system'
-  | 'proposal_followup'
-
-export type AgentObjectiveRiskLevel =
-  | 'low'
-  | 'medium'
-  | 'high'
-  | 'critical'
-
-export type AgentThreadKind =
-  | 'main'
-  | 'subthread'
-
-export type AgentThreadStatus =
-  | 'open'
-  | 'waiting'
-  | 'completed'
-  | 'blocked'
-  | 'cancelled'
-
-export type AgentParticipantKind =
-  | 'role'
-  | 'subagent'
-  | 'operator'
-  | 'broker'
-
-export type AgentMessageKind =
-  | 'goal'
-  | 'stance'
-  | 'question'
-  | 'challenge'
-  | 'proposal'
-  | 'evidence_request'
-  | 'evidence_response'
-  | 'tool_request'
-  | 'tool_result'
-  | 'risk_notice'
-  | 'vote'
-  | 'veto'
-  | 'decision'
-  | 'final_response'
-
-export type AgentProposalKind =
-  | 'approve_review_item'
-  | 'reject_review_item'
-  | 'approve_safe_group'
-  | 'rerun_enrichment'
-  | 'ask_memory_workspace'
-  | 'run_compare'
-  | 'spawn_subagent'
-  | 'search_web'
-  | 'verify_external_claim'
-  | 'compose_reviewed_draft'
-  | 'publish_draft'
-  | 'create_policy_draft'
-  | 'respond_to_user'
-
-export type AgentProposalStatus =
-  | 'open'
-  | 'under_review'
-  | 'challenged'
-  | 'approved'
-  | 'vetoed'
-  | 'committable'
-  | 'awaiting_operator'
-  | 'committed'
-  | 'blocked'
-  | 'superseded'
-
-export type AgentVoteValue =
-  | 'approve'
-  | 'challenge'
-  | 'reject'
-  | 'veto'
-
-export type AgentCheckpointKind =
-  | 'goal_accepted'
-  | 'participants_invited'
-  | 'evidence_gap_detected'
-  | 'subagent_spawned'
-  | 'tool_action_executed'
-  | 'external_verification_completed'
-  | 'proposal_raised'
-  | 'challenge_raised'
-  | 'veto_issued'
-  | 'consensus_reached'
-  | 'awaiting_operator_confirmation'
-  | 'committed'
-  | 'blocked'
-  | 'user_facing_result_prepared'
-
-export type AgentSubagentStatus =
-  | 'running'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
-
-export type AgentToolExecutionStatus =
-  | 'requested'
-  | 'authorized'
-  | 'completed'
-  | 'blocked'
-  | 'failed'
-
-export type AgentSkillPackId =
-  | 'web-verifier'
-  | 'evidence-checker'
-  | 'policy-auditor'
-  | 'draft-composer'
-  | 'compare-analyst'
-
-export type AgentArtifactRef = {
-  kind:
-    | 'review_queue_item'
-    | 'review_group'
-    | 'file'
-    | 'enrichment_job'
-    | 'workspace_turn'
-    | 'compare_session'
-    | 'policy_version'
-    | 'memory_record'
-    | 'external_citation_bundle'
-  id: string
-  label: string
-}
-
-export type AgentExecutionBudget = {
-  maxRounds: number
-  maxToolCalls: number
-  timeoutMs: number
-}
-
-export type AgentObjectiveRecord = {
-  objectiveId: string
-  title: string
-  objectiveKind: AgentObjectiveKind
-  status: AgentObjectiveStatus
-  prompt: string
-  initiatedBy: AgentObjectiveInitiator
-  ownerRole: AgentRole
-  mainThreadId: string
-  riskLevel: AgentObjectiveRiskLevel
-  budget: AgentExecutionBudget | null
-  requiresOperatorInput: boolean
-  createdAt: string
-  updatedAt: string
-}
-
-export type AgentThreadRecord = {
-  threadId: string
-  objectiveId: string
-  parentThreadId: string | null
-  threadKind: AgentThreadKind
-  ownerRole: AgentRole
-  title: string
-  status: AgentThreadStatus
-  createdAt: string
-  updatedAt: string
-  closedAt: string | null
-}
-
-export type AgentThreadParticipantRecord = {
-  threadParticipantId: string
-  objectiveId: string
-  threadId: string
-  participantKind: AgentParticipantKind
-  participantId: string
-  role: AgentRole | null
-  displayLabel: string
-  invitedByParticipantId: string | null
-  joinedAt: string
-  leftAt: string | null
-}
-
-export type AgentMessageRecordV2 = {
-  messageId: string
-  objectiveId: string
-  threadId: string
-  fromParticipantId: string
-  toParticipantId: string | null
-  kind: AgentMessageKind
-  body: string
-  refs: AgentArtifactRef[]
-  replyToMessageId: string | null
-  round: number
-  confidence: number | null
-  blocking: boolean
-  createdAt: string
-}
-
-export type AgentProposalRecord = {
-  proposalId: string
-  objectiveId: string
-  threadId: string
-  proposedByParticipantId: string
-  proposalKind: AgentProposalKind
-  payload: Record<string, unknown>
-  ownerRole: AgentRole
-  status: AgentProposalStatus
-  requiredApprovals: AgentRole[]
-  allowVetoBy: AgentRole[]
-  requiresOperatorConfirmation: boolean
-  toolPolicyId: string | null
-  budget: AgentExecutionBudget | null
-  derivedFromMessageIds: string[]
-  artifactRefs: AgentArtifactRef[]
-  createdAt: string
-  updatedAt: string
-  committedAt: string | null
-}
-
-export type AgentVoteRecord = {
-  voteId: string
-  objectiveId: string
-  threadId: string
-  proposalId: string
-  voterRole: AgentRole
-  vote: AgentVoteValue
-  comment: string | null
-  createdAt: string
-}
-
-export type AgentCheckpointRecord = {
-  checkpointId: string
-  objectiveId: string
-  threadId: string
-  checkpointKind: AgentCheckpointKind
-  title: string
-  summary: string
-  relatedMessageId: string | null
-  relatedProposalId: string | null
-  artifactRefs: AgentArtifactRef[]
-  createdAt: string
-}
-
-export type AgentSubagentRecord = {
-  subagentId: string
-  objectiveId: string
-  threadId: string
-  parentThreadId: string
-  parentAgentRole: AgentRole
-  specialization: AgentSkillPackId
-  skillPackIds: AgentSkillPackId[]
-  toolPolicyId: string
-  budget: AgentExecutionBudget
-  expectedOutputSchema: string
-  status: AgentSubagentStatus
-  summary: string | null
-  createdAt: string
-  completedAt: string | null
-}
-
-export type AgentToolExecutionRecord = {
-  toolExecutionId: string
-  objectiveId: string
-  threadId: string
-  proposalId: string | null
-  requestedByParticipantId: string
-  toolName: string
-  toolPolicyId: string | null
-  status: AgentToolExecutionStatus
-  inputPayload: Record<string, unknown>
-  outputPayload: Record<string, unknown> | null
-  artifactRefs: AgentArtifactRef[]
-  createdAt: string
-  completedAt: string | null
-}
-
-export type AgentObjectiveDetail = AgentObjectiveRecord & {
-  threads: AgentThreadRecord[]
-  participants: AgentThreadParticipantRecord[]
-  proposals: AgentProposalRecord[]
-  checkpoints: AgentCheckpointRecord[]
-  subagents: AgentSubagentRecord[]
-  toolExecutions?: AgentToolExecutionRecord[]
-}
-
-export type AgentThreadDetail = AgentThreadRecord & {
-  participants: AgentThreadParticipantRecord[]
-  messages: AgentMessageRecordV2[]
-  proposals: AgentProposalRecord[]
-  votes: AgentVoteRecord[]
-  checkpoints: AgentCheckpointRecord[]
-  subagents: AgentSubagentRecord[]
-  toolExecutions?: AgentToolExecutionRecord[]
-}
-
-export type CreateAgentObjectiveInput = {
-  title: string
-  objectiveKind: AgentObjectiveKind
-  prompt: string
-  initiatedBy?: AgentObjectiveInitiator
-  ownerRole?: AgentRole
-  initialParticipants?: AgentRole[]
-  riskLevel?: AgentObjectiveRiskLevel
-  budget?: AgentExecutionBudget
-}
-
-export type ListAgentObjectivesInput = {
-  status?: AgentObjectiveStatus
-  ownerRole?: AgentRole
-  limit?: number
-}
-
-export type GetAgentObjectiveInput = {
-  objectiveId: string
-}
-
-export type GetAgentThreadInput = {
-  threadId: string
-}
-
-export type CreateAgentProposalInput = {
-  objectiveId: string
-  threadId: string
-  proposalKind: AgentProposalKind
-  ownerRole: AgentRole
-  payload: Record<string, unknown>
-  requiredApprovals?: AgentRole[]
-  allowVetoBy?: AgentRole[]
-  requiresOperatorConfirmation?: boolean
-  toolPolicyId?: string
-  budget?: AgentExecutionBudget
-  derivedFromMessageIds?: string[]
-  artifactRefs?: AgentArtifactRef[]
-}
-
-export type RespondToAgentProposalInput = {
-  proposalId: string
-  responderRole: AgentRole
-  response: AgentVoteValue
-  comment?: string
-  artifactRefs?: AgentArtifactRef[]
-}
-
-export type ConfirmAgentProposalInput = {
-  proposalId: string
-  decision: 'confirm' | 'block'
-  operatorNote?: string
-}
-
-export type AgentSuggestionRecord = {
-  suggestionId: string
-  triggerKind: AgentTriggerKind
-  status: AgentSuggestionStatus
-  role: AgentRole
-  taskKind: AgentTaskKind
-  taskInput: RunAgentTaskInput
-  dedupeKey: string
-  sourceRunId: string | null
-  executedRunId: string | null
-  priority: AgentSuggestionPriority
-  rationale: string
-  autoRunnable: boolean
-  followUpOfSuggestionId: string | null
-  attemptCount: number
-  cooldownUntil: string | null
-  createdAt: string
-  updatedAt: string
-  lastObservedAt: string
-}
-
-export type RunAgentTaskInput = {
-  [Role in AgentRole]: {
-    prompt: string
-    role: Role
-    taskKind?: AgentTaskKindByRole[Role]
-    confirmationToken?: string
-  }
-}[AgentRole]
-
-export type RunAgentTaskResult = {
-  runId: string
-  status: AgentRunStatus
-  targetRole: AgentRole | null
-  assignedRoles: AgentRole[]
-  latestAssistantResponse: string | null
-}
-
-export type AgentExecutionPreview = {
-  taskKind: AgentTaskKind
-  targetRole: AgentRole
-  assignedRoles: AgentRole[]
-  requiresConfirmation: boolean
-}
-
-export type ListAgentRunsInput = {
-  role?: AgentRole
-  status?: AgentRunStatus
-  limit?: number
-}
-
-export type GetAgentRunInput = {
-  runId: string
-}
+export type {
+  AgentArtifactRef,
+  AgentCheckpointKind,
+  AgentCheckpointRecord,
+  AgentExecutionBudget,
+  AgentMessageKind,
+  AgentMessageRecordV2,
+  AgentObjectiveDetail,
+  AgentObjectiveInitiator,
+  AgentObjectiveKind,
+  AgentObjectiveRecord,
+  AgentObjectiveRiskLevel,
+  AgentObjectiveStatus,
+  AgentParticipantKind,
+  AgentProposalKind,
+  AgentProposalRecord,
+  AgentProposalStatus,
+  AgentSkillPackId,
+  AgentSubagentRecord,
+  AgentSubagentStatus,
+  AgentThreadDetail,
+  AgentThreadKind,
+  AgentThreadParticipantRecord,
+  AgentThreadRecord,
+  AgentThreadStatus,
+  AgentToolExecutionRecord,
+  AgentToolExecutionStatus,
+  AgentVoteRecord,
+  AgentVoteValue,
+  ConfirmAgentProposalInput,
+  CreateAgentObjectiveInput,
+  CreateAgentProposalInput,
+  GetAgentObjectiveInput,
+  GetAgentThreadInput,
+  ListAgentObjectivesInput,
+  RespondToAgentProposalInput,
+} from './objectiveRuntimeContracts'
 
 export type ListAgentMemoriesInput = {
   role?: AgentRole
@@ -1976,27 +1568,6 @@ export type ListAgentMemoriesInput = {
 export type ListAgentPolicyVersionsInput = {
   role?: AgentRole
   policyKey?: string
-}
-
-export type ListAgentSuggestionsInput = {
-  status?: AgentSuggestionStatus
-  role?: AgentRole
-  limit?: number
-}
-
-export type DismissAgentSuggestionInput = {
-  suggestionId: string
-}
-
-export type RunAgentSuggestionInput = {
-  suggestionId: string
-  confirmationToken?: string
-}
-
-export type GetAgentRuntimeSettingsInput = {}
-
-export type UpdateAgentRuntimeSettingsInput = {
-  autonomyMode: AgentAutonomyMode
 }
 
 export interface ArchiveApi {
@@ -2010,6 +1581,7 @@ export interface ArchiveApi {
   createImportBatch: (input: CreateImportBatchInput) => Promise<ImportBatchSummary>
   preflightImportBatch: (input: { sourcePaths: string[] }) => Promise<ImportPreflightResult>
   createAgentObjective: (input: CreateAgentObjectiveInput) => Promise<AgentObjectiveDetail>
+  refreshObjectiveTriggers: () => Promise<AgentObjectiveDetail[]>
   listAgentObjectives: (input?: ListAgentObjectivesInput) => Promise<AgentObjectiveRecord[]>
   getAgentObjective: (input: GetAgentObjectiveInput) => Promise<AgentObjectiveDetail | null>
   getAgentThread: (input: GetAgentThreadInput) => Promise<AgentThreadDetail | null>

@@ -13,7 +13,7 @@ import {
   listApprovedPersonaDraftPublicationsInputSchema,
   openApprovedDraftPublicationEntryInputSchema,
   publishApprovedPersonaDraftInputSchema
-} from '../../../src/shared/ipcSchemas'
+} from '../../../src/shared/schemas/workspace'
 
 describe('phase-ten approved draft publication contracts', () => {
   it('exports approved draft publication shapes', () => {

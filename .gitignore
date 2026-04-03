@@ -3,6 +3,7 @@
 node_modules/
 dist/
 out/
+release/
 coverage/
 .local-dev/
 playwright-report/

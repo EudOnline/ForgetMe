@@ -52,7 +52,7 @@ import {
   runMemoryWorkspaceCompareMatrixInputSchema,
   transitionPersonaDraftReviewInputSchema,
   updatePersonaDraftReviewInputSchema
-} from '../../../src/shared/ipcSchemas'
+} from '../../../src/shared/schemas/workspace'
 
 describe('phase-eight memory workspace contracts', () => {
   it('exports scope and workspace response shapes', () => {

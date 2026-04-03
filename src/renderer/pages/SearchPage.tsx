@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react'
 import type { ArchiveSearchResult, DecisionJournalSearchResult } from '../../shared/archiveContracts'
-import { getArchiveApi } from '../archiveApi'
+import { getImportClient } from '../clients/importClient'
+import { getReviewClient } from '../clients/reviewClient'
 import { useI18n } from '../i18n'
 import { SearchFilters } from '../components/SearchFilters'
 
 export function SearchPage() {
   const { t } = useI18n()
-  const archiveApi = useMemo(() => getArchiveApi(), [])
+  const importClient = useMemo(() => getImportClient(), [])
+  const reviewClient = useMemo(() => getReviewClient(), [])
   const [results, setResults] = useState<ArchiveSearchResult[]>([])
   const [decisionResults, setDecisionResults] = useState<DecisionJournalSearchResult[]>([])
 
@@ -16,8 +18,8 @@ export function SearchPage() {
       <SearchFilters
         onSearch={async (input) => {
           const [archiveResults, journalResults] = await Promise.all([
-            archiveApi.searchArchive(input),
-            archiveApi.searchDecisionJournal({ query: input.query })
+            importClient.searchArchive(input),
+            reviewClient.searchDecisionJournal({ query: input.query })
           ])
           setResults(archiveResults)
           setDecisionResults(journalResults)

@@ -9,7 +9,7 @@ import type {
   AgentProposalRecord,
   ConfirmAgentProposalInput,
   RespondToAgentProposalInput
-} from '../../shared/archiveContracts'
+} from '../../shared/objectiveRuntimeContracts'
 import type { ArchiveDatabase } from './db'
 
 type ProposalStateService = ReturnType<typeof createObjectiveRuntimeProposalStateService>

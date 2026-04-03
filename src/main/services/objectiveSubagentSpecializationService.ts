@@ -15,7 +15,7 @@ import {
 } from './objectiveSubagentVerificationWorkflowService'
 import { runMemoryWorkspaceCompare } from './memoryWorkspaceCompareService'
 import { askMemoryWorkspacePersisted } from './memoryWorkspaceSessionService'
-import { listAgentPolicyVersions } from './agentPersistenceService'
+import { listAgentPolicyVersions } from './governancePersistenceService'
 import type {
   AgentArtifactRef,
   AgentMessageKind,

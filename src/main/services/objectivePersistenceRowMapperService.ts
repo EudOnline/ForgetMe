@@ -14,7 +14,6 @@ import type {
   AgentProposalKind,
   AgentProposalRecord,
   AgentProposalStatus,
-  AgentRole,
   AgentSubagentRecord,
   AgentSubagentStatus,
   AgentToolExecutionRecord,
@@ -24,7 +23,8 @@ import type {
   AgentThreadStatus,
   AgentVoteRecord,
   AgentVoteValue
-} from '../../shared/archiveContracts'
+} from '../../shared/objectiveRuntimeContracts'
+import type { AgentRole } from '../../shared/archiveContracts'
 
 export type AgentObjectiveRow = {
   id: string

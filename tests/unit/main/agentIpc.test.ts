@@ -1,3 +1,5 @@
+import fs from 'node:fs'
+import path from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppPaths } from '../../../src/main/services/appPaths'
 
@@ -43,7 +45,7 @@ vi.mock('../../../src/main/services/db', () => ({
   runMigrations
 }))
 
-vi.mock('../../../src/main/services/agentPersistenceService', () => ({
+vi.mock('../../../src/main/services/governancePersistenceService', () => ({
   listAgentMemories,
   listAgentPolicyVersions
 }))
@@ -72,7 +74,7 @@ vi.mock('../../../src/main/services/subagentRegistryService', () => ({
   createSubagentRegistryService
 }))
 
-import { registerAgentIpc } from '../../../src/main/ipc/agentIpc'
+import { registerObjectiveIpc } from '../../../src/main/modules/objective/registerObjectiveIpc'
 
 function appPathsFixture(): AppPaths {
   return {
@@ -85,7 +87,7 @@ function appPathsFixture(): AppPaths {
   }
 }
 
-describe('registerAgentIpc', () => {
+describe('registerObjectiveIpc', () => {
   beforeEach(() => {
     handlerMap.clear()
     openDatabase.mockReset()
@@ -100,10 +102,45 @@ describe('registerAgentIpc', () => {
     createSubagentRegistryService.mockReset()
   })
 
+  it('does not keep legacy run-centric handler names in the ipc source', () => {
+    const source = fs.readFileSync(
+      path.resolve('src/main/modules/objective/registerObjectiveIpc.ts'),
+      'utf8'
+    )
+
+    expect(source).not.toMatch('archive:previewAgentTask')
+    expect(source).not.toMatch('archive:runAgentTask')
+    expect(source).not.toMatch('archive:listAgentRuns')
+    expect(source).not.toMatch('archive:getAgentRun')
+    expect(source).not.toMatch('archive:listAgentSuggestions')
+    expect(source).not.toMatch('archive:refreshAgentSuggestions')
+    expect(source).not.toMatch('archive:dismissAgentSuggestion')
+    expect(source).not.toMatch('archive:runAgentSuggestion')
+    expect(source).not.toMatch('archive:getAgentRuntimeSettings')
+    expect(source).not.toMatch('archive:updateAgentRuntimeSettings')
+  })
+
+  it('moves ipc registration into bootstrap-owned module wiring', () => {
+    const mainSource = fs.readFileSync(
+      path.resolve('src/main/index.ts'),
+      'utf8'
+    )
+    const bootstrapSource = fs.readFileSync(
+      path.resolve('src/main/bootstrap/registerIpc.ts'),
+      'utf8'
+    )
+
+    expect(mainSource).toContain("from './bootstrap/registerIpc'")
+    expect(mainSource).toContain("from './bootstrap/serviceContainer'")
+    expect(bootstrapSource).toContain("from '../modules/objective/registerObjectiveIpc'")
+    expect(bootstrapSource).not.toContain("from '../ipc/agentIpc'")
+  })
+
   it('registers objective runtime handlers and omits obsolete run-centric handlers', async () => {
-    registerAgentIpc(appPathsFixture())
+    registerObjectiveIpc(appPathsFixture())
 
     expect(handlerMap.has('archive:createAgentObjective')).toBe(true)
+    expect(handlerMap.has('archive:refreshObjectiveTriggers')).toBe(true)
     expect(handlerMap.has('archive:listAgentObjectives')).toBe(true)
     expect(handlerMap.has('archive:getAgentObjective')).toBe(true)
     expect(handlerMap.has('archive:getAgentThread')).toBe(true)
@@ -254,6 +291,9 @@ describe('registerAgentIpc', () => {
           objectiveId: 'objective-1'
         }
       }),
+      refreshObjectiveTriggers: vi.fn().mockReturnValue([
+        objectiveDetail
+      ]),
       listObjectives: vi.fn().mockReturnValue([
         {
           objectiveId: 'objective-1',
@@ -294,9 +334,10 @@ describe('registerAgentIpc', () => {
     createSubagentRegistryService.mockReturnValue(subagentRegistry)
     createObjectiveRuntimeService.mockReturnValue(objectiveRuntime)
 
-    registerAgentIpc(appPathsFixture())
+    registerObjectiveIpc(appPathsFixture())
 
     expect(handlerMap.has('archive:createAgentObjective')).toBe(true)
+    expect(handlerMap.has('archive:refreshObjectiveTriggers')).toBe(true)
     expect(handlerMap.has('archive:listAgentObjectives')).toBe(true)
     expect(handlerMap.has('archive:getAgentObjective')).toBe(true)
     expect(handlerMap.has('archive:getAgentThread')).toBe(true)
@@ -309,6 +350,7 @@ describe('registerAgentIpc', () => {
       prompt: 'Check the source before we answer the user.',
       initiatedBy: 'operator'
     })
+    const refreshed = await handlerMap.get('archive:refreshObjectiveTriggers')?.({}, undefined)
     const objectives = await handlerMap.get('archive:listAgentObjectives')?.({}, {
       ownerRole: 'workspace',
       limit: 10
@@ -331,15 +373,15 @@ describe('registerAgentIpc', () => {
       operatorNote: 'Confirmed after reviewing the evidence bundle.'
     })
 
-    expect(createFacilitatorAgentService).toHaveBeenCalledTimes(6)
-    expect(createRoleAgentRegistryService).toHaveBeenCalledTimes(6)
-    expect(createExternalWebSearchService).toHaveBeenCalledTimes(6)
-    expect(createExternalVerificationBrokerService).toHaveBeenCalledTimes(6)
+    expect(createFacilitatorAgentService).toHaveBeenCalledTimes(7)
+    expect(createRoleAgentRegistryService).toHaveBeenCalledTimes(7)
+    expect(createExternalWebSearchService).toHaveBeenCalledTimes(7)
+    expect(createExternalVerificationBrokerService).toHaveBeenCalledTimes(7)
     expect(createExternalVerificationBrokerService).toHaveBeenCalledWith({
       searchWeb: externalWebSearch.searchWeb,
       openSourcePage: externalWebSearch.openSourcePage
     })
-    expect(createSubagentRegistryService).toHaveBeenCalledTimes(6)
+    expect(createSubagentRegistryService).toHaveBeenCalledTimes(7)
     expect(createObjectiveRuntimeService).toHaveBeenCalledWith({
       db,
       facilitator,
@@ -353,6 +395,7 @@ describe('registerAgentIpc', () => {
       prompt: 'Check the source before we answer the user.',
       initiatedBy: 'operator'
     })
+    expect(objectiveRuntime.refreshObjectiveTriggers).toHaveBeenCalledWith()
     expect(objectiveRuntime.listObjectives).toHaveBeenCalledWith({
       ownerRole: 'workspace',
       limit: 10
@@ -375,6 +418,7 @@ describe('registerAgentIpc', () => {
       operatorNote: 'Confirmed after reviewing the evidence bundle.'
     })
     expect(created).toEqual(objectiveDetail)
+    expect(refreshed).toEqual([objectiveDetail])
     expect(objectives).toEqual([
       expect.objectContaining({
         objectiveId: 'objective-1',
@@ -391,7 +435,7 @@ describe('registerAgentIpc', () => {
       proposalId: 'proposal-1',
       status: 'committed'
     }))
-    expect(close).toHaveBeenCalledTimes(6)
+    expect(close).toHaveBeenCalledTimes(7)
   })
 
   it('returns persisted memory and policy reads through the persistence service', async () => {
@@ -421,7 +465,7 @@ describe('registerAgentIpc', () => {
     listAgentMemories.mockReturnValue(memoriesResult)
     listAgentPolicyVersions.mockReturnValue(policyVersionsResult)
 
-    registerAgentIpc(appPathsFixture())
+    registerObjectiveIpc(appPathsFixture())
 
     const memories = await handlerMap.get('archive:listAgentMemories')?.({}, { role: 'governance' })
     const policyVersions = await handlerMap.get('archive:listAgentPolicyVersions')?.({}, {
@@ -504,6 +548,7 @@ describe('registerAgentIpc', () => {
           objectiveId: 'objective-async'
         }
       }),
+      refreshObjectiveTriggers: vi.fn().mockResolvedValue([]),
       listObjectives: vi.fn().mockReturnValue([]),
       getObjectiveDetail: vi.fn().mockImplementation(({ objectiveId }: { objectiveId: string }) => (
         objectiveId === 'objective-async' ? objectiveDetail : null
@@ -521,7 +566,7 @@ describe('registerAgentIpc', () => {
     createSubagentRegistryService.mockReturnValue(subagentRegistry)
     createObjectiveRuntimeService.mockReturnValue(objectiveRuntime)
 
-    registerAgentIpc(appPathsFixture())
+    registerObjectiveIpc(appPathsFixture())
 
     const created = await handlerMap.get('archive:createAgentObjective')?.({}, {
       title: 'Async startup objective',

@@ -8,7 +8,6 @@ import type {
   AgentProposalRecord,
   AgentSkillPackId,
   AgentThreadDetail,
-  ArchiveApi,
   ConfirmAgentProposalInput,
   CreateAgentObjectiveInput,
   CreateAgentProposalInput,
@@ -16,7 +15,8 @@ import type {
   GetAgentThreadInput,
   ListAgentObjectivesInput,
   RespondToAgentProposalInput
-} from '../../../src/shared/archiveContracts'
+} from '../../../src/shared/objectiveRuntimeContracts'
+import type { ArchiveApi } from '../../../src/shared/archiveContracts'
 import {
   agentCheckpointSummarySchema,
   confirmAgentProposalInputSchema,
@@ -26,7 +26,7 @@ import {
   getAgentThreadInputSchema,
   listAgentObjectivesInputSchema,
   respondToAgentProposalInputSchema
-} from '../../../src/shared/ipcSchemas'
+} from '../../../src/shared/schemas/objective'
 
 describe('message-native agent runtime shared contracts', () => {
   it('parses objective creation and objective/thread lookup inputs', () => {
@@ -52,6 +52,26 @@ describe('message-native agent runtime shared contracts', () => {
   })
 
   it('requires bounded policy on external verification and subagent proposals', () => {
+    expect(createAgentProposalInputSchema.safeParse({
+      objectiveId: 'objective-1',
+      threadId: 'thread-1',
+      proposalKind: 'adopt_compare_recommendation',
+      ownerRole: 'workspace',
+      payload: {
+        compareSessionId: 'compare-session-1',
+        recommendedCompareRunId: 'compare-run-2',
+        recommendedTargetLabel: 'SiliconFlow / Compare'
+      },
+      requiresOperatorConfirmation: true,
+      artifactRefs: [
+        {
+          kind: 'compare_session',
+          id: 'compare-session-1',
+          label: 'Memory Workspace Compare'
+        }
+      ]
+    }).success).toBe(true)
+
     expect(createAgentProposalInputSchema.safeParse({
       objectiveId: 'objective-1',
       threadId: 'thread-1',

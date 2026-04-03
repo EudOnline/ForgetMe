@@ -20,17 +20,60 @@ npm install
 npm run dev
 ```
 
+## Architecture Snapshot
+
+- renderer root is `src/renderer/app-shell/AppShell.tsx`
+- preload bridge is composed from `src/preload/modules/*`
+- main-process IPC registration is assembled in `src/main/bootstrap/registerIpc.ts`
+- domain entrypoints live under `src/main/modules/{import,people,review,workspace,objective,ops}`
+- renderer fallback access is assembled from `src/renderer/clients/*`, with `src/renderer/archiveApi.ts` acting as the thin bridge entrypoint
+
 ## Test Commands
 
 ```bash
+npm run lint
+npm run test:typecheck
+npm run test:unit
+npm run test:e2e:objective
 npm run verify:release
 ```
 
-The release verification gate bundles the following smoke suite:
+The release verification gate bundles the following smoke suite and packaging check:
 
 ```bash
 npm run test:e2e -- tests/e2e/import-batch.spec.ts tests/e2e/person-review-flow.spec.ts tests/e2e/memory-workspace-flow.spec.ts tests/e2e/memory-workspace-approved-draft-hosted-share-link-flow.spec.ts
 ```
+
+## Distribution Commands
+
+```bash
+npm run pack
+npm run dist
+npm run release:doctor
+npm run dist:release
+```
+
+- `npm run pack` builds an unpacked app bundle into `release/`
+- `npm run dist` builds installer artifacts into `release/` and still allows ad-hoc signing in local environments
+- `npm run release:doctor` prints whether signing and notarization inputs are complete for a formal macOS release
+- `npm run dist:release` hard-fails before packaging unless both signing and notarization credentials are present
+- `npm run verify:release` now ends with `npm run pack`, so the release gate fails if packaging regresses
+
+### macOS Signing & Notarization
+
+The repository is now configured for hardened-runtime mac builds and can be notarized when release credentials are present.
+
+- Signing inputs:
+  - `CSC_LINK` for a base64-encoded or file-backed Developer ID certificate
+  - `CSC_KEY_PASSWORD` for the certificate password
+  - optional `CSC_NAME` when the signing identity is already installed in the keychain
+- Notarization inputs:
+  - App Store Connect API key flow: `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`
+  - or Apple ID flow: `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`
+
+Use `npm run release:doctor` to confirm which credentials are still missing before a release build.
+
+Without those credentials, local `npm run pack` and `npm run dist` still work as packaging checks, but electron-builder will fall back to ad-hoc signing and skip notarization. Use `npm run dist:release` when the build must refuse that fallback.
 
 ## Release Readiness
 
@@ -296,7 +339,7 @@ The gateway also forwards objective/runtime metadata so outbound model traffic s
 
 ```bash
 npm run test:typecheck
-npm run test:unit -- tests/unit/main/facilitatorAgentService.test.ts tests/unit/main/workspaceAgentService.test.ts tests/unit/main/reviewAgentService.test.ts tests/unit/main/governanceAgentService.test.ts tests/unit/main/ingestionAgentService.test.ts tests/unit/main/agentAutonomyPolicy.test.ts tests/unit/main/agentProactiveTriggerService.test.ts tests/unit/main/agentSuggestionFollowupService.test.ts tests/unit/main/objectiveRuntimeService.test.ts tests/unit/main/subagentRegistryService.test.ts tests/unit/main/toolBrokerService.test.ts tests/unit/main/agentIpc.test.ts tests/unit/preload/index.test.ts tests/unit/renderer/archiveApi.test.ts tests/unit/renderer/objectiveWorkbenchPage.test.tsx tests/unit/repo/objectiveRuntimeCleanup.test.ts
+npm run test:unit -- tests/unit/main/facilitatorAgentService.test.ts tests/unit/main/objectiveRuntimeService.test.ts tests/unit/main/objectiveModule.test.ts tests/unit/main/objectiveRuntimeLegacyImports.test.ts tests/unit/main/agentIpc.test.ts tests/unit/main/bootstrap/registerIpc.test.ts tests/unit/preload/index.test.ts tests/unit/renderer/archiveApi.test.ts tests/unit/renderer/objectiveWorkbenchPage.test.tsx tests/unit/repo/engineeringConvergenceStructure.test.ts
 npm run test:e2e:objective
 npm run build
 ```
@@ -304,10 +347,10 @@ npm run build
 ### Completion Verification
 
 ```bash
+npm run lint
 npm run test:typecheck
-npm run test:unit -- tests/unit/main/memoryWorkspaceService.test.ts tests/unit/main/memoryWorkspaceSessionService.test.ts tests/unit/main/memoryWorkspaceIpc.test.ts tests/unit/renderer/archiveApi.test.ts tests/unit/preload/index.test.ts tests/unit/renderer/memoryWorkspacePage.test.tsx
-npm run test:e2e -- tests/e2e/memory-workspace-flow.spec.ts
-npm run test:e2e:objective
+npm run test:unit
+npm run test:e2e -- tests/e2e/import-batch.spec.ts tests/e2e/memory-workspace-flow.spec.ts tests/e2e/review-workbench-single-item-flow.spec.ts tests/e2e/objective-workbench-operator-confirmation-flow.spec.ts
 npm run build
 ```
 
@@ -315,4 +358,5 @@ npm run build
 
 The local-first runner, shared review queue, formal approved profile read model, and phase-five single-item review workbench are now wired end-to-end.
 The archive now also carries `Memory Workspace` through deterministic saved-session follow-up continuity, quote-backed evidence, advice responses, persona guardrails, reviewed draft sandbox flows, internal handoff, provider-boundary send, retry recovery, local publication/share packaging, hosted share-link creation and revocation, and human-readable share-page replay.
+The current engineering-convergence baseline uses an `AppShell` renderer root, domain preload modules, bootstrap-owned IPC registration, feature-owned main-process module entrypoints, and a thin renderer archive bridge assembled from domain clients.
 The latest approved-draft share slice is documented in `docs/plans/2026-03-19-phase-ten-m-approved-draft-hosted-share-link-implementation-plan.md`.

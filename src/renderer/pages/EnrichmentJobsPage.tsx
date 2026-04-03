@@ -1,19 +1,19 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { EnrichmentJob, ProviderEgressArtifact } from '../../shared/archiveContracts'
-import { getArchiveApi } from '../archiveApi'
+import { getOpsClient } from '../clients/opsClient'
 import { useI18n } from '../i18n'
 import { EnrichmentJobTable } from '../components/EnrichmentJobTable'
 
 export function EnrichmentJobsPage(props?: { onSelectFile?: (fileId: string) => void }) {
   const { t } = useI18n()
-  const archiveApi = useMemo(() => getArchiveApi(), [])
+  const opsClient = useMemo(() => getOpsClient(), [])
   const [jobs, setJobs] = useState<EnrichmentJob[]>([])
   const [selectedBoundaryJobId, setSelectedBoundaryJobId] = useState<string | null>(null)
   const [selectedBoundaryArtifacts, setSelectedBoundaryArtifacts] = useState<ProviderEgressArtifact[]>([])
 
-  const refresh = async () => {
-    setJobs(await archiveApi.listEnrichmentJobs())
-  }
+  const refresh = useCallback(async () => {
+    setJobs(await opsClient.listEnrichmentJobs())
+  }, [opsClient])
 
   useEffect(() => {
     void refresh()
@@ -22,11 +22,11 @@ export function EnrichmentJobsPage(props?: { onSelectFile?: (fileId: string) => 
     }, 2_000)
 
     return () => globalThis.clearInterval(timer)
-  }, [archiveApi])
+  }, [refresh])
 
   const handleInspectBoundary = async (jobId: string) => {
     setSelectedBoundaryJobId(jobId)
-    setSelectedBoundaryArtifacts(await archiveApi.listProviderEgressArtifacts(jobId))
+    setSelectedBoundaryArtifacts(await opsClient.listProviderEgressArtifacts(jobId))
   }
 
   const firstArtifact = selectedBoundaryArtifacts[0] ?? null
@@ -41,7 +41,7 @@ export function EnrichmentJobsPage(props?: { onSelectFile?: (fileId: string) => 
         onInspectFile={props?.onSelectFile}
         onInspectBoundary={handleInspectBoundary}
         onRerun={async (jobId) => {
-          await archiveApi.rerunEnrichmentJob(jobId)
+          await opsClient.rerunEnrichmentJob(jobId)
           await refresh()
         }}
       />

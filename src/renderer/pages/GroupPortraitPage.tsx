@@ -7,7 +7,7 @@ import type {
   MemoryWorkspaceScope,
   PersonDossierReviewShortcut
 } from '../../shared/archiveContracts'
-import { getArchiveApi } from '../archiveApi'
+import { getPeopleClient } from '../clients/peopleClient'
 import { useI18n } from '../i18n'
 import { GroupPortraitView } from '../components/GroupPortraitView'
 
@@ -21,7 +21,7 @@ export function GroupPortraitPage(props: {
   onOpenMemoryWorkspace?: (scope: MemoryWorkspaceScope) => void
 }) {
   const { t } = useI18n()
-  const archiveApi = useMemo(() => getArchiveApi(), [])
+  const peopleClient = useMemo(() => getPeopleClient(), [])
   const [portrait, setPortrait] = useState<GroupPortrait | null>(null)
   const [browseSummaries, setBrowseSummaries] = useState<GroupPortraitBrowseSummary[]>([])
   const [contextPackMode, setContextPackMode] = useState<ContextPackExportMode>('approved_plus_derived')
@@ -33,17 +33,17 @@ export function GroupPortraitPage(props: {
     if (!props.canonicalPersonId) {
       setPortrait(null)
       setContextPackStatus('')
-      void archiveApi.listGroupPortraits().then(setBrowseSummaries)
+      void peopleClient.listGroupPortraits().then(setBrowseSummaries)
       return
     }
 
     setBrowseSummaries([])
-    void archiveApi.getGroupPortrait(props.canonicalPersonId).then(setPortrait)
+    void peopleClient.getGroupPortrait(props.canonicalPersonId).then(setPortrait)
     setContextPackStatus('')
-  }, [archiveApi, props.canonicalPersonId])
+  }, [peopleClient, props.canonicalPersonId])
 
   const handlePickContextPackDestination = async () => {
-    const selected = await archiveApi.selectContextPackExportDestination()
+    const selected = await peopleClient.selectContextPackExportDestination()
     if (selected) {
       setContextPackDestination(selected)
     }
@@ -57,7 +57,7 @@ export function GroupPortraitPage(props: {
     setIsExportingContextPack(true)
     setContextPackStatus('')
 
-    const destinationRoot = contextPackDestination || await archiveApi.selectContextPackExportDestination()
+    const destinationRoot = contextPackDestination || await peopleClient.selectContextPackExportDestination()
     if (!destinationRoot) {
       setIsExportingContextPack(false)
       return
@@ -66,7 +66,7 @@ export function GroupPortraitPage(props: {
     setContextPackDestination(destinationRoot)
 
     try {
-      const result = await archiveApi.exportGroupContextPack({
+      const result = await peopleClient.exportGroupContextPack({
         anchorPersonId: props.canonicalPersonId,
         destinationRoot,
         mode: contextPackMode

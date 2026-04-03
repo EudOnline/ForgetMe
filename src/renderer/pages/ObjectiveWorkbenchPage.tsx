@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import type {
   AgentObjectiveDetail,
@@ -8,7 +8,7 @@ import type {
   AgentThreadDetail,
   CreateAgentObjectiveInput
 } from '../../shared/archiveContracts'
-import { getArchiveApi } from '../archiveApi'
+import { getObjectiveClient } from '../clients/objectiveClient'
 import { useI18n } from '../i18n'
 
 const objectiveKinds: CreateAgentObjectiveInput['objectiveKind'][] = [
@@ -92,7 +92,7 @@ function inferConfidence(proposal: AgentProposalRecord | null, blocker: string |
 }
 
 export function ObjectiveWorkbenchPage() {
-  const archiveApi = useMemo(() => getArchiveApi(), [])
+  const objectiveClient = useMemo(() => getObjectiveClient(), [])
   const { t } = useI18n()
   const [objectives, setObjectives] = useState<AgentObjectiveRecord[]>([])
   const [selectedObjectiveId, setSelectedObjectiveId] = useState<string | null>(null)
@@ -110,40 +110,21 @@ export function ObjectiveWorkbenchPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [pendingActionId, setPendingActionId] = useState<string | null>(null)
 
-  const refreshObjectives = async (preferredObjectiveId?: string | null) => {
-    setIsLoading(true)
-    setErrorMessage(null)
-
+  const loadThreadDetail = useCallback(async (threadId: string) => {
     try {
-      const nextObjectives = await archiveApi.listAgentObjectives()
-      const nextSelectedObjectiveId = preferredObjectiveId && nextObjectives.some((item) => item.objectiveId === preferredObjectiveId)
-        ? preferredObjectiveId
-        : selectedObjectiveId && nextObjectives.some((item) => item.objectiveId === selectedObjectiveId)
-          ? selectedObjectiveId
-          : nextObjectives[0]?.objectiveId ?? null
-
-      setObjectives(nextObjectives)
-      setSelectedObjectiveId(nextSelectedObjectiveId)
-
-      if (nextSelectedObjectiveId) {
-        await loadObjectiveDetail(nextSelectedObjectiveId)
-      } else {
-        setObjectiveDetail(null)
-        setSelectedThreadId(null)
-        setThreadDetail(null)
-      }
+      const detail = await objectiveClient.getAgentThread({ threadId })
+      setThreadDetail(detail)
     } catch (error) {
+      setThreadDetail(null)
       setErrorMessage(t('objectiveWorkbench.loadFailed', {
         message: asErrorMessage(error)
       }))
-    } finally {
-      setIsLoading(false)
     }
-  }
+  }, [objectiveClient, t])
 
-  const loadObjectiveDetail = async (objectiveId: string) => {
+  const loadObjectiveDetail = useCallback(async (objectiveId: string) => {
     try {
-      const detail = await archiveApi.getAgentObjective({ objectiveId })
+      const detail = await objectiveClient.getAgentObjective({ objectiveId })
       const nextThreadId = detail?.mainThreadId || detail?.threads[0]?.threadId || null
       setObjectiveDetail(detail)
       setActiveProposalId((current) => (
@@ -170,23 +151,43 @@ export function ObjectiveWorkbenchPage() {
         message: asErrorMessage(error)
       }))
     }
-  }
+  }, [objectiveClient, loadThreadDetail, t])
 
-  const loadThreadDetail = async (threadId: string) => {
+  const refreshObjectives = useCallback(async (preferredObjectiveId?: string | null) => {
+    setIsLoading(true)
+    setErrorMessage(null)
+
     try {
-      const detail = await archiveApi.getAgentThread({ threadId })
-      setThreadDetail(detail)
+      await objectiveClient.refreshObjectiveTriggers()
+      const nextObjectives = await objectiveClient.listAgentObjectives()
+      const nextSelectedObjectiveId = preferredObjectiveId && nextObjectives.some((item) => item.objectiveId === preferredObjectiveId)
+        ? preferredObjectiveId
+        : selectedObjectiveId && nextObjectives.some((item) => item.objectiveId === selectedObjectiveId)
+          ? selectedObjectiveId
+          : nextObjectives[0]?.objectiveId ?? null
+
+      setObjectives(nextObjectives)
+      setSelectedObjectiveId(nextSelectedObjectiveId)
+
+      if (nextSelectedObjectiveId) {
+        await loadObjectiveDetail(nextSelectedObjectiveId)
+      } else {
+        setObjectiveDetail(null)
+        setSelectedThreadId(null)
+        setThreadDetail(null)
+      }
     } catch (error) {
-      setThreadDetail(null)
       setErrorMessage(t('objectiveWorkbench.loadFailed', {
         message: asErrorMessage(error)
       }))
+    } finally {
+      setIsLoading(false)
     }
-  }
+  }, [loadObjectiveDetail, objectiveClient, selectedObjectiveId, t])
 
   useEffect(() => {
     void refreshObjectives()
-  }, [])
+  }, [refreshObjectives])
 
   useEffect(() => {
     if (!selectedObjectiveId) {
@@ -195,7 +196,7 @@ export function ObjectiveWorkbenchPage() {
     }
 
     void loadObjectiveDetail(selectedObjectiveId)
-  }, [selectedObjectiveId])
+  }, [loadObjectiveDetail, selectedObjectiveId])
 
   useEffect(() => {
     if (!selectedThreadId) {
@@ -204,7 +205,7 @@ export function ObjectiveWorkbenchPage() {
     }
 
     void loadThreadDetail(selectedThreadId)
-  }, [selectedThreadId])
+  }, [loadThreadDetail, selectedThreadId])
 
   const visibleCheckpoints = useMemo(() => {
     if (!objectiveDetail) {
@@ -235,6 +236,29 @@ export function ObjectiveWorkbenchPage() {
     return (objectiveDetail?.toolExecutions ?? [])
       .filter((execution) => !selectedThreadId || execution.threadId === selectedThreadId)
   }, [objectiveDetail, selectedThreadId, threadDetail])
+
+  const facilitatorRound = useMemo(() => {
+    const threadMessages = threadDetail?.messages ?? []
+    return threadMessages.reduce((highestRound, message) => (
+      Math.max(highestRound, message.round ?? 0)
+    ), 0)
+  }, [threadDetail])
+
+  const facilitatorReason = useMemo(() => {
+    if (!objectiveDetail) {
+      return null
+    }
+
+    if (objectiveDetail.status === 'stalled') {
+      return visibleCheckpoints.find((checkpoint) => checkpoint.checkpointKind === 'stalled')?.summary ?? null
+    }
+
+    if (objectiveDetail.status === 'completed') {
+      return visibleCheckpoints.find((checkpoint) => checkpoint.title === 'Objective completed')?.summary ?? null
+    }
+
+    return null
+  }, [objectiveDetail, visibleCheckpoints])
 
   const roleStances = useMemo(() => {
     if (!objectiveDetail) {
@@ -279,7 +303,7 @@ export function ObjectiveWorkbenchPage() {
 
   const selectedProposal = visibleProposals.find((proposal) => proposal.proposalId === activeProposalId) ?? null
 
-  const participantLabel = (participantId: string) => {
+  const participantLabel = useCallback((participantId: string) => {
     if (participantId === 'operator') {
       return 'operator'
     }
@@ -288,7 +312,7 @@ export function ObjectiveWorkbenchPage() {
       ?? objectiveDetail?.participants.find((candidate) => candidate.participantId === participantId)
 
     return participant?.displayLabel ?? participantId
-  }
+  }, [objectiveDetail?.participants, threadDetail?.participants])
 
   const proposalSourceLabel = (proposal: AgentProposalRecord) => {
     if (proposal.proposedByParticipantId === 'operator') {
@@ -362,7 +386,7 @@ export function ObjectiveWorkbenchPage() {
     setStatusMessage(null)
 
     try {
-      const created = await archiveApi.createAgentObjective({
+      const created = await objectiveClient.createAgentObjective({
         title: titleInput.trim(),
         objectiveKind,
         prompt: promptInput.trim(),
@@ -405,7 +429,7 @@ export function ObjectiveWorkbenchPage() {
     setStatusMessage(null)
 
     try {
-      await archiveApi.respondToAgentProposal({
+      await objectiveClient.respondToAgentProposal({
         proposalId: proposal.proposalId,
         responderRole: response === 'approve' ? proposal.ownerRole : 'governance',
         response,
@@ -434,7 +458,7 @@ export function ObjectiveWorkbenchPage() {
     setStatusMessage(null)
 
     try {
-      await archiveApi.confirmAgentProposal({
+      await objectiveClient.confirmAgentProposal({
         proposalId: proposal.proposalId,
         decision,
         operatorNote: decision === 'confirm'
@@ -643,6 +667,30 @@ export function ObjectiveWorkbenchPage() {
 
           <section aria-label={t('objectiveWorkbench.runtimeTitle')}>
             <h2>{t('objectiveWorkbench.runtimeTitle')}</h2>
+            <p>
+              <span>{t('objectiveWorkbench.objectiveStatusLabel')}</span>
+              {objectiveDetail ? ` ${humanize(objectiveDetail.status)}` : ` ${t('objectiveWorkbench.none')}`}
+            </p>
+            <p>
+              <span>{t('objectiveWorkbench.threadStatusLabel')}</span>
+              {threadDetail ? ` ${humanize(threadDetail.status)}` : ` ${t('objectiveWorkbench.none')}`}
+            </p>
+            <p>
+              <span>{t('objectiveWorkbench.operatorInputLabel')}</span>
+              {objectiveDetail
+                ? ` ${objectiveDetail.requiresOperatorInput
+                    ? t('objectiveWorkbench.operatorInputRequired')
+                    : t('objectiveWorkbench.operatorInputNone')}`
+                : ` ${t('objectiveWorkbench.none')}`}
+            </p>
+            <p>
+              <span>{t('objectiveWorkbench.facilitatorRoundLabel')}</span>
+              {threadDetail ? ` ${facilitatorRound}` : ` ${t('objectiveWorkbench.none')}`}
+            </p>
+            <p>
+              <span>{t('objectiveWorkbench.facilitatorReasonLabel')}</span>
+              {facilitatorReason ? ` ${facilitatorReason}` : ` ${t('objectiveWorkbench.none')}`}
+            </p>
             <p>
               <span>{t('objectiveWorkbench.blockedReasonLabel')}</span>
               {blockedReason ? ` ${blockedReason}` : ` ${t('objectiveWorkbench.none')}`}

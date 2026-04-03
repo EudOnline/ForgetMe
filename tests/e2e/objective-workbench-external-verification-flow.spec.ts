@@ -3,20 +3,14 @@ import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron } from '@playwright/test'
 import { ensureAppPaths } from '../../src/main/services/appPaths'
-import { openDatabase, runMigrations } from '../../src/main/services/db'
-import { createFacilitatorAgentService } from '../../src/main/services/agents/facilitatorAgentService'
 import { createExternalVerificationBrokerService } from '../../src/main/services/externalVerificationBrokerService'
-import { createObjectiveRuntimeService } from '../../src/main/services/objectiveRuntimeService'
+import { createObjectiveModule } from '../../src/main/modules/objective/runtime/createObjectiveModule'
 import { createSubagentRegistryService } from '../../src/main/services/subagentRegistryService'
 
 async function seedExternalVerificationObjective(userDataDir: string) {
   const appPaths = ensureAppPaths(userDataDir)
-  const db = openDatabase(path.join(appPaths.sqliteDir, 'archive.sqlite'))
-  runMigrations(db)
-
-  const runtime = createObjectiveRuntimeService({
-    db,
-    facilitator: createFacilitatorAgentService(),
+  const objectiveModule = createObjectiveModule(appPaths)
+  const session = objectiveModule.createRuntimeSession({
     externalVerificationBroker: createExternalVerificationBrokerService({
       searchWeb: async () => [
         {
@@ -33,25 +27,29 @@ async function seedExternalVerificationObjective(userDataDir: string) {
         excerpt: 'The announcement date is March 30, 2026. The official record was published by the agency.'
       })
     }),
-    subagentRegistry: createSubagentRegistryService()
+    subagentRegistry: createSubagentRegistryService(),
+    roleAgentRegistry: null
   })
+  const { runtime } = session
 
-  const started = await runtime.startObjective({
-    title: 'Verify an external claim before responding',
-    objectiveKind: 'evidence_investigation',
-    prompt: 'Check the external source before we answer the user.',
-    initiatedBy: 'operator'
-  })
+  try {
+    const started = await runtime.startObjective({
+      title: 'Verify an external claim before responding',
+      objectiveKind: 'evidence_investigation',
+      prompt: 'Check the external source before we answer the user.',
+      initiatedBy: 'operator'
+    })
 
-  await runtime.requestExternalVerification({
-    objectiveId: started.objective.objectiveId,
-    threadId: started.mainThread.threadId,
-    proposedByParticipantId: 'workspace',
-    claim: 'The source confirms the announcement date.',
-    query: 'official announcement date'
-  })
-
-  db.close()
+    await runtime.requestExternalVerification({
+      objectiveId: started.objective.objectiveId,
+      threadId: started.mainThread.threadId,
+      proposedByParticipantId: 'workspace',
+      claim: 'The source confirms the announcement date.',
+      query: 'official announcement date'
+    })
+  } finally {
+    session.close()
+  }
 }
 
 async function launchApp(userDataDir: string) {

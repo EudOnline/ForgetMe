@@ -13,7 +13,7 @@ import type {
   AgentProposalRecord,
   AgentProposalStatus,
   AgentThreadDetail
-} from '../../shared/archiveContracts'
+} from '../../shared/objectiveRuntimeContracts'
 import type { ArchiveDatabase } from './db'
 
 export type ObjectiveProposalRuntimeState = {

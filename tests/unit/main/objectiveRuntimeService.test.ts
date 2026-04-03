@@ -3,15 +3,13 @@ import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
+import { runMemoryWorkspaceCompare } from '../../../src/main/services/memoryWorkspaceCompareService'
 import { createFacilitatorAgentService } from '../../../src/main/services/agents/facilitatorAgentService'
 import { createRoleAgentRegistryService } from '../../../src/main/services/agents/roleAgentRegistryService'
 import { createExternalVerificationBrokerService } from '../../../src/main/services/externalVerificationBrokerService'
 import { createObjectiveRuntimeService } from '../../../src/main/services/objectiveRuntimeService'
-import {
-  buildObjectiveSuggestionSeed,
-  createObjectiveFromSuggestionSeed
-} from '../../../src/main/services/objectiveSuggestionBridgeService'
 import { createSubagentRegistryService } from '../../../src/main/services/subagentRegistryService'
+import { seedMemoryWorkspaceScenario } from './helpers/memoryWorkspaceScenario'
 
 function setupDatabase() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-objective-runtime-flow-'))
@@ -28,14 +26,6 @@ describe('objective runtime service', () => {
         if (role === 'workspace') {
           return {
             role: 'workspace',
-            canHandle() {
-              return true
-            },
-            async execute() {
-              return {
-                messages: []
-              }
-            },
             async receive() {
               return {
                 messages: [],
@@ -65,14 +55,6 @@ describe('objective runtime service', () => {
         if (role === 'review') {
           return {
             role: 'review',
-            canHandle() {
-              return true
-            },
-            async execute() {
-              return {
-                messages: []
-              }
-            },
             async receive() {
               return {
                 messages: [
@@ -190,7 +172,176 @@ describe('objective runtime service', () => {
     db.close()
   })
 
-  it('creates an objective plus a seeded proposal from a proactive bridge seed', async () => {
+  it('continues into a second facilitator round when an earlier participant needs to react to a later challenge', async () => {
+    const db = setupDatabase()
+    const roleAgentRegistry = {
+      get(role: string) {
+        if (role === 'workspace') {
+          return {
+            role: 'workspace',
+            async receive(context: any) {
+              const sawReviewChallenge = context.messages.some((message: any) => (
+                message.kind === 'challenge'
+                && message.fromParticipantId === 'review'
+              ))
+
+              if (sawReviewChallenge) {
+                return {
+                  messages: [
+                    {
+                      kind: 'stance' as const,
+                      body: 'Workspace acknowledged the review challenge and narrowed the investigation scope.'
+                    }
+                  ]
+                }
+              }
+
+              return {
+                messages: [],
+                proposals: [
+                  {
+                    proposalKind: 'verify_external_claim' as const,
+                    payload: {
+                      claim: 'The source confirms the announcement date.',
+                      query: 'official announcement date'
+                    },
+                    ownerRole: 'workspace' as const,
+                    requiredApprovals: ['workspace' as const],
+                    allowVetoBy: ['governance' as const],
+                    toolPolicyId: 'external-verification-policy',
+                    budget: {
+                      maxRounds: 2,
+                      maxToolCalls: 3,
+                      timeoutMs: 30_000
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+
+        if (role === 'review') {
+          return {
+            role: 'review',
+            async receive() {
+              return {
+                messages: [
+                  {
+                    kind: 'challenge' as const,
+                    body: 'Review needs stronger evidence before approval.',
+                    blocking: true
+                  }
+                ]
+              }
+            }
+          }
+        }
+
+        return {
+          role,
+          async receive() {
+            return {
+              messages: []
+            }
+          }
+        }
+      }
+    }
+
+    const runtime = createObjectiveRuntimeService({
+      db,
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => [],
+        openSourcePage: async ({ url }) => ({
+          url,
+          title: null,
+          publishedAt: null,
+          excerpt: ''
+        })
+      }),
+      subagentRegistry: createSubagentRegistryService(),
+      roleAgentRegistry
+    } as any)
+
+    const started = await runtime.startObjective({
+      title: 'Verify an external claim before responding',
+      objectiveKind: 'evidence_investigation',
+      prompt: 'Check the external source before we answer the user.',
+      initiatedBy: 'operator'
+    })
+    const mainThread = runtime.getThreadDetail({
+      threadId: started.mainThread.threadId
+    })
+
+    expect(mainThread?.messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'stance',
+        fromParticipantId: 'workspace',
+        body: 'Workspace acknowledged the review challenge and narrowed the investigation scope.'
+      })
+    ]))
+
+    db.close()
+  })
+
+  it('marks silent objectives as stalled and parks the main thread in waiting state', async () => {
+    const db = setupDatabase()
+    const roleAgentRegistry = {
+      get(role: string) {
+        return {
+          role,
+          async receive() {
+            return {
+              messages: []
+            }
+          }
+        }
+      }
+    }
+
+    const runtime = createObjectiveRuntimeService({
+      db,
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => [],
+        openSourcePage: async ({ url }) => ({
+          url,
+          title: null,
+          publishedAt: null,
+          excerpt: ''
+        })
+      }),
+      subagentRegistry: createSubagentRegistryService(),
+      roleAgentRegistry
+    } as any)
+
+    const started = await runtime.startObjective({
+      title: 'Verify an external claim before responding',
+      objectiveKind: 'evidence_investigation',
+      prompt: 'Check the external source before we answer the user.',
+      initiatedBy: 'operator'
+    })
+    const detail = runtime.getObjectiveDetail({
+      objectiveId: started.objective.objectiveId
+    })
+    const mainThread = runtime.getThreadDetail({
+      threadId: started.mainThread.threadId
+    })
+
+    expect(detail?.status).toBe('stalled')
+    expect(mainThread?.status).toBe('waiting')
+    expect(detail?.checkpoints).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        checkpointKind: 'stalled'
+      })
+    ]))
+
+    db.close()
+  })
+
+  it('creates an objective plus a native proposal without relying on legacy suggestion bridges', async () => {
     const db = setupDatabase()
     const runtime = createObjectiveRuntimeService({
       db,
@@ -207,25 +358,33 @@ describe('objective runtime service', () => {
       subagentRegistry: createSubagentRegistryService()
     })
 
-    const seed = buildObjectiveSuggestionSeed({
-      triggerKind: 'review.safe_group_available',
-      dedupeKey: 'review.safe-group::group-safe-42::follow-up::suggestion-1',
-      sourceRunId: 'run-safe-group-followup',
-      taskInput: {
-        role: 'review',
-        taskKind: 'review.apply_safe_group',
-        prompt: 'Apply safe group group-safe-42.'
-      },
-      rationale: 'The safe group recommendation is ready to apply manually.',
-      autoRunnable: false
+    const started = await runtime.startObjective({
+      title: 'Review safe group group-safe-42',
+      objectiveKind: 'review_decision',
+      prompt: 'Apply safe group group-safe-42.',
+      initiatedBy: 'system'
     })
-
-    const detail = await createObjectiveFromSuggestionSeed(runtime, seed)
+    runtime.createProposal({
+      objectiveId: started.objective.objectiveId,
+      threadId: started.mainThread.threadId,
+      proposedByParticipantId: 'review',
+      proposalKind: 'approve_safe_group',
+      payload: {
+        groupKey: 'group-safe-42'
+      },
+      ownerRole: 'review',
+      requiredApprovals: ['review'],
+      allowVetoBy: ['governance'],
+      requiresOperatorConfirmation: true
+    })
+    const detail = runtime.getObjectiveDetail({
+      objectiveId: started.objective.objectiveId
+    })
 
     expect(detail).toEqual(expect.objectContaining({
       objectiveKind: 'review_decision'
     }))
-    expect((detail as any)?.proposals).toEqual(expect.arrayContaining([
+    expect(detail?.proposals).toEqual(expect.arrayContaining([
       expect.objectContaining({
         proposalKind: 'approve_safe_group',
         payload: {
@@ -233,6 +392,419 @@ describe('objective runtime service', () => {
         }
       })
     ]))
+
+    db.close()
+  })
+
+  it('creates native triggered objectives from safe review groups and failed enrichment jobs without duplicating them on refresh', async () => {
+    const db = setupDatabase()
+    const createdAt = '2026-03-31T00:00:00.000Z'
+    const runtime = createObjectiveRuntimeService({
+      db,
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => [],
+        openSourcePage: async ({ url }) => ({
+          url,
+          title: null,
+          publishedAt: null,
+          excerpt: ''
+        })
+      }),
+      subagentRegistry: createSubagentRegistryService()
+    })
+
+    db.prepare('insert into import_batches (id, source_label, status, created_at) values (?, ?, ?, ?)').run('batch-trigger', 'trigger', 'ready', createdAt)
+    db.prepare('insert into vault_files (id, batch_id, source_path, frozen_path, file_name, extension, mime_type, file_size, sha256, duplicate_class, parser_status, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run('file-safe-1', 'batch-trigger', '/tmp/safe-1.pdf', '/tmp/safe-1.pdf', 'safe-1.pdf', '.pdf', 'application/pdf', 1, 'hash-safe-1', 'unique', 'parsed', createdAt)
+    db.prepare('insert into vault_files (id, batch_id, source_path, frozen_path, file_name, extension, mime_type, file_size, sha256, duplicate_class, parser_status, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run('file-safe-2', 'batch-trigger', '/tmp/safe-2.pdf', '/tmp/safe-2.pdf', 'safe-2.pdf', '.pdf', 'application/pdf', 1, 'hash-safe-2', 'unique', 'parsed', createdAt)
+    db.prepare('insert into vault_files (id, batch_id, source_path, frozen_path, file_name, extension, mime_type, file_size, sha256, duplicate_class, parser_status, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run('file-failed-1', 'batch-trigger', '/tmp/failed-1.pdf', '/tmp/failed-1.pdf', 'failed-1.pdf', '.pdf', 'application/pdf', 1, 'hash-failed-1', 'unique', 'parsed', createdAt)
+    db.prepare('insert into enrichment_jobs (id, file_id, enhancer_type, provider, model, status, attempt_count, input_hash, started_at, finished_at, error_message, usage_json, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run('job-safe-1', 'file-safe-1', 'document_ocr', 'siliconflow', 'fixture-model', 'completed', 1, null, createdAt, createdAt, null, '{}', createdAt, createdAt)
+    db.prepare('insert into enrichment_jobs (id, file_id, enhancer_type, provider, model, status, attempt_count, input_hash, started_at, finished_at, error_message, usage_json, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run('job-safe-2', 'file-safe-2', 'document_ocr', 'siliconflow', 'fixture-model', 'completed', 1, null, createdAt, createdAt, null, '{}', createdAt, createdAt)
+    db.prepare('insert into enrichment_jobs (id, file_id, enhancer_type, provider, model, status, attempt_count, input_hash, started_at, finished_at, error_message, usage_json, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run('job-failed-1', 'file-failed-1', 'document_ocr', 'siliconflow', 'fixture-model', 'failed', 2, null, createdAt, createdAt, 'provider timeout', '{}', createdAt, createdAt)
+    db.prepare('insert into people (id, display_name, source_type, confidence, created_at) values (?, ?, ?, ?, ?)').run('person-safe', 'Alice Chen', 'import', 1, createdAt)
+    db.prepare('insert into canonical_people (id, primary_display_name, normalized_name, alias_count, first_seen_at, last_seen_at, evidence_count, manual_labels_json, status, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run('cp-safe', 'Alice Chen', 'alice chen', 1, createdAt, createdAt, 2, '[]', 'approved', createdAt, createdAt)
+    db.prepare('insert into person_memberships (id, canonical_person_id, anchor_person_id, status, created_at, updated_at) values (?, ?, ?, ?, ?, ?)').run('pm-safe', 'cp-safe', 'person-safe', 'active', createdAt, createdAt)
+    db.prepare('insert into relations (id, source_id, source_type, target_id, target_type, relation_type, confidence, created_at) values (?, ?, ?, ?, ?, ?, ?, ?)').run('rel-safe-1', 'person-safe', 'person', 'file-safe-1', 'file', 'mentioned_in', 1, createdAt)
+    db.prepare('insert into relations (id, source_id, source_type, target_id, target_type, relation_type, confidence, created_at) values (?, ?, ?, ?, ?, ?, ?, ?)').run('rel-safe-2', 'person-safe', 'person', 'file-safe-2', 'file', 'mentioned_in', 1, createdAt)
+    db.prepare('insert into structured_field_candidates (id, file_id, job_id, field_type, field_key, field_value_json, document_type, confidence, risk_level, source_page, source_span_json, status, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run('fc-safe-1', 'file-safe-1', 'job-safe-1', 'education', 'school_name', '{\"value\":\"北京大学\"}', 'transcript', 0.99, 'high', 1, null, 'pending', createdAt)
+    db.prepare('insert into structured_field_candidates (id, file_id, job_id, field_type, field_key, field_value_json, document_type, confidence, risk_level, source_page, source_span_json, status, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run('fc-safe-2', 'file-safe-2', 'job-safe-2', 'education', 'school_name', '{\"value\":\"北京大学\"}', 'transcript', 0.98, 'high', 1, null, 'pending', createdAt)
+    db.prepare('insert into review_queue (id, item_type, candidate_id, status, priority, confidence, summary_json, created_at) values (?, ?, ?, ?, ?, ?, ?, ?)').run('rq-safe-1', 'structured_field_candidate', 'fc-safe-1', 'pending', 0, 0.99, '{\"fieldKey\":\"school_name\"}', createdAt)
+    db.prepare('insert into review_queue (id, item_type, candidate_id, status, priority, confidence, summary_json, created_at) values (?, ?, ?, ?, ?, ?, ?, ?)').run('rq-safe-2', 'structured_field_candidate', 'fc-safe-2', 'pending', 0, 0.98, '{\"fieldKey\":\"school_name\"}', createdAt)
+
+    const firstRefresh = await (runtime as any).refreshObjectiveTriggers()
+    const secondRefresh = await (runtime as any).refreshObjectiveTriggers()
+    const objectives = runtime.listObjectives()
+    const reviewObjective = objectives.find((objective) => objective.title === 'Review safe group cp-safe::structured_field_candidate::school_name')
+    const enrichmentObjective = objectives.find((objective) => objective.title === 'Investigate failed enrichment job job-failed-1')
+    const reviewDetail = reviewObjective
+      ? runtime.getObjectiveDetail({ objectiveId: reviewObjective.objectiveId })
+      : null
+    const enrichmentDetail = enrichmentObjective
+      ? runtime.getObjectiveDetail({ objectiveId: enrichmentObjective.objectiveId })
+      : null
+
+    expect(firstRefresh).toHaveLength(2)
+    expect(secondRefresh).toEqual([])
+    expect(reviewDetail?.proposals).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        proposalKind: 'approve_safe_group',
+        proposedByParticipantId: 'review',
+        payload: {
+          groupKey: 'cp-safe::structured_field_candidate::school_name'
+        }
+      })
+    ]))
+    expect(enrichmentDetail?.proposals).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        proposalKind: 'rerun_enrichment',
+        proposedByParticipantId: 'ingestion',
+        payload: {
+          jobId: 'job-failed-1'
+        }
+      })
+    ]))
+    expect(objectives.filter((objective) => objective.title === 'Review safe group cp-safe::structured_field_candidate::school_name')).toHaveLength(1)
+    expect(objectives.filter((objective) => objective.title === 'Investigate failed enrichment job job-failed-1')).toHaveLength(1)
+
+    db.close()
+  })
+
+  it('creates a native compare review objective for judge-assisted recommendations without duplicating it on refresh', async () => {
+    const db = seedMemoryWorkspaceScenario()
+    const runtime = createObjectiveRuntimeService({
+      db,
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => [],
+        openSourcePage: async ({ url }) => ({
+          url,
+          title: null,
+          publishedAt: null,
+          excerpt: ''
+        })
+      }),
+      subagentRegistry: createSubagentRegistryService()
+    })
+
+    const session = await runMemoryWorkspaceCompare(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '她有哪些已保存的资料和已确认信息？',
+      judge: {
+        enabled: true,
+        provider: 'siliconflow',
+        model: 'judge-test-model'
+      },
+      targets: [
+        {
+          targetId: 'baseline-local',
+          label: 'Local baseline',
+          executionMode: 'local_baseline'
+        },
+        {
+          targetId: 'siliconflow-compare',
+          label: 'SiliconFlow / Compare',
+          executionMode: 'provider_model',
+          provider: 'siliconflow',
+          model: 'sf-test-model'
+        }
+      ]
+    }, {
+      callModel: async ({ target, baselineResponse }) => ({
+        provider: target.provider,
+        model: target.model,
+        summary: `[${target.provider}] ${baselineResponse.answer.summary}`,
+        receivedAt: '2026-03-14T04:00:02.000Z'
+      }),
+      callJudgeModel: async ({ run }) => ({
+        provider: 'siliconflow',
+        model: 'judge-test-model',
+        decision: run.target.executionMode === 'local_baseline' ? 'needs_review' : 'aligned',
+        score: run.target.executionMode === 'local_baseline' ? 3 : 5,
+        rationale: run.target.executionMode === 'local_baseline'
+          ? 'Safe but concise.'
+          : 'Aligned with the grounded baseline and preserves caution.',
+        strengths: ['Grounded'],
+        concerns: run.target.executionMode === 'local_baseline' ? ['Could be more specific'] : [],
+        receivedAt: '2026-03-14T04:00:03.000Z'
+      })
+    })
+
+    expect(session?.recommendation?.source).toBe('judge_assisted')
+
+    const firstRefresh = await (runtime as any).refreshObjectiveTriggers()
+    const secondRefresh = await (runtime as any).refreshObjectiveTriggers()
+    const objectives = runtime.listObjectives()
+    const compareObjective = objectives.find((objective) => objective.title === `Review compare recommendation ${session?.compareSessionId}`)
+    const compareDetail = compareObjective
+      ? runtime.getObjectiveDetail({ objectiveId: compareObjective.objectiveId })
+      : null
+
+    expect(firstRefresh).toHaveLength(1)
+    expect(secondRefresh).toEqual([])
+    expect(compareDetail?.objectiveKind).toBe('review_decision')
+    expect(compareDetail?.proposals).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        proposalKind: 'adopt_compare_recommendation',
+        proposedByParticipantId: 'workspace',
+        payload: {
+          compareSessionId: session?.compareSessionId,
+          recommendedCompareRunId: session?.recommendation?.recommendedCompareRunId,
+          recommendedTargetLabel: 'SiliconFlow / Compare'
+        },
+        requiresOperatorConfirmation: true
+      })
+    ]))
+    expect(objectives.filter((objective) => objective.title === `Review compare recommendation ${session?.compareSessionId}`)).toHaveLength(1)
+
+    db.close()
+  })
+
+  it('creates only the latest compare review objective per compare request family when multiple judge-assisted sessions exist', async () => {
+    const db = seedMemoryWorkspaceScenario()
+    const runtime = createObjectiveRuntimeService({
+      db,
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => [],
+        openSourcePage: async ({ url }) => ({
+          url,
+          title: null,
+          publishedAt: null,
+          excerpt: ''
+        })
+      }),
+      subagentRegistry: createSubagentRegistryService()
+    })
+
+    const compareInput = {
+      scope: { kind: 'person' as const, canonicalPersonId: 'cp-1' },
+      question: '她有哪些已保存的资料和已确认信息？',
+      judge: {
+        enabled: true as const,
+        provider: 'siliconflow' as const,
+        model: 'judge-test-model'
+      },
+      targets: [
+        {
+          targetId: 'baseline-local',
+          label: 'Local baseline',
+          executionMode: 'local_baseline' as const
+        },
+        {
+          targetId: 'siliconflow-compare',
+          label: 'SiliconFlow / Compare',
+          executionMode: 'provider_model' as const,
+          provider: 'siliconflow' as const,
+          model: 'sf-test-model'
+        }
+      ]
+    }
+
+    const compareOptions = {
+      callModel: async ({ target, baselineResponse }: { target: any; baselineResponse: any }) => ({
+        provider: target.provider,
+        model: target.model,
+        summary: `[${target.provider}] ${baselineResponse.answer.summary}`,
+        receivedAt: '2026-03-14T04:00:02.000Z'
+      }),
+      callJudgeModel: async ({ run }: { run: any }) => ({
+        provider: 'siliconflow' as const,
+        model: 'judge-test-model',
+        decision: run.target.executionMode === 'local_baseline' ? 'needs_review' as const : 'aligned' as const,
+        score: run.target.executionMode === 'local_baseline' ? 3 : 5,
+        rationale: run.target.executionMode === 'local_baseline'
+          ? 'Safe but concise.'
+          : 'Aligned with the grounded baseline and preserves caution.',
+        strengths: ['Grounded'],
+        concerns: run.target.executionMode === 'local_baseline' ? ['Could be more specific'] : [],
+        receivedAt: '2026-03-14T04:00:03.000Z'
+      })
+    }
+
+    const olderSession = await runMemoryWorkspaceCompare(db, compareInput, compareOptions)
+    const newerSession = await runMemoryWorkspaceCompare(db, compareInput, compareOptions)
+
+    expect(olderSession?.recommendation?.source).toBe('judge_assisted')
+    expect(newerSession?.recommendation?.source).toBe('judge_assisted')
+    expect(olderSession).not.toBeNull()
+    expect(newerSession).not.toBeNull()
+
+    const olderSessionId = olderSession!.compareSessionId
+    const newerSessionId = newerSession!.compareSessionId
+
+    db.prepare('update memory_workspace_compare_sessions set updated_at = ? where id = ?')
+      .run('2026-03-14T05:00:00.000Z', olderSessionId)
+    db.prepare('update memory_workspace_compare_sessions set updated_at = ? where id = ?')
+      .run('2026-03-14T06:00:00.000Z', newerSessionId)
+
+    const firstRefresh = await (runtime as any).refreshObjectiveTriggers()
+    const objectives = runtime.listObjectives()
+
+    expect(firstRefresh).toHaveLength(1)
+    expect(objectives.some((objective) => objective.title === `Review compare recommendation ${olderSessionId}`)).toBe(false)
+    expect(objectives.some((objective) => objective.title === `Review compare recommendation ${newerSessionId}`)).toBe(true)
+
+    db.close()
+  })
+
+  it('does not open a second compare review objective when the same compare request family already has one in progress', async () => {
+    const db = seedMemoryWorkspaceScenario()
+    const runtime = createObjectiveRuntimeService({
+      db,
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => [],
+        openSourcePage: async ({ url }) => ({
+          url,
+          title: null,
+          publishedAt: null,
+          excerpt: ''
+        })
+      }),
+      subagentRegistry: createSubagentRegistryService()
+    })
+
+    const compareInput = {
+      scope: { kind: 'person' as const, canonicalPersonId: 'cp-1' },
+      question: '她有哪些已保存的资料和已确认信息？',
+      judge: {
+        enabled: true as const,
+        provider: 'siliconflow' as const,
+        model: 'judge-test-model'
+      },
+      targets: [
+        {
+          targetId: 'baseline-local',
+          label: 'Local baseline',
+          executionMode: 'local_baseline' as const
+        },
+        {
+          targetId: 'siliconflow-compare',
+          label: 'SiliconFlow / Compare',
+          executionMode: 'provider_model' as const,
+          provider: 'siliconflow' as const,
+          model: 'sf-test-model'
+        }
+      ]
+    }
+
+    const compareOptions = {
+      callModel: async ({ target, baselineResponse }: { target: any; baselineResponse: any }) => ({
+        provider: target.provider,
+        model: target.model,
+        summary: `[${target.provider}] ${baselineResponse.answer.summary}`,
+        receivedAt: '2026-03-14T04:00:02.000Z'
+      }),
+      callJudgeModel: async ({ run }: { run: any }) => ({
+        provider: 'siliconflow' as const,
+        model: 'judge-test-model',
+        decision: run.target.executionMode === 'local_baseline' ? 'needs_review' as const : 'aligned' as const,
+        score: run.target.executionMode === 'local_baseline' ? 3 : 5,
+        rationale: run.target.executionMode === 'local_baseline'
+          ? 'Safe but concise.'
+          : 'Aligned with the grounded baseline and preserves caution.',
+        strengths: ['Grounded'],
+        concerns: run.target.executionMode === 'local_baseline' ? ['Could be more specific'] : [],
+        receivedAt: '2026-03-14T04:00:03.000Z'
+      })
+    }
+
+    const firstSession = await runMemoryWorkspaceCompare(db, compareInput, compareOptions)
+    expect(firstSession).not.toBeNull()
+    expect(firstSession?.recommendation?.source).toBe('judge_assisted')
+
+    db.prepare('update memory_workspace_compare_sessions set updated_at = ? where id = ?')
+      .run('2026-03-14T05:00:00.000Z', firstSession!.compareSessionId)
+
+    const firstRefresh = await (runtime as any).refreshObjectiveTriggers()
+
+    const secondSession = await runMemoryWorkspaceCompare(db, compareInput, compareOptions)
+    expect(secondSession).not.toBeNull()
+    expect(secondSession?.recommendation?.source).toBe('judge_assisted')
+
+    db.prepare('update memory_workspace_compare_sessions set updated_at = ? where id = ?')
+      .run('2026-03-14T06:00:00.000Z', secondSession!.compareSessionId)
+
+    const secondRefresh = await (runtime as any).refreshObjectiveTriggers()
+    const objectives = runtime.listObjectives()
+
+    expect(firstRefresh).toHaveLength(1)
+    expect(secondRefresh).toEqual([])
+    expect(objectives.filter((objective) => objective.title.startsWith('Review compare recommendation '))).toHaveLength(1)
+    expect(objectives.some((objective) => objective.title === `Review compare recommendation ${firstSession!.compareSessionId}`)).toBe(true)
+    expect(objectives.some((objective) => objective.title === `Review compare recommendation ${secondSession!.compareSessionId}`)).toBe(false)
+
+    db.close()
+  })
+
+  it('does not create a compare review objective for deterministic recommendations', async () => {
+    const db = seedMemoryWorkspaceScenario()
+    const runtime = createObjectiveRuntimeService({
+      db,
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => [],
+        openSourcePage: async ({ url }) => ({
+          url,
+          title: null,
+          publishedAt: null,
+          excerpt: ''
+        })
+      }),
+      subagentRegistry: createSubagentRegistryService()
+    })
+
+    const session = await runMemoryWorkspaceCompare(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '她有哪些已保存的资料和已确认信息？',
+      judge: {
+        enabled: true,
+        provider: 'siliconflow',
+        model: 'judge-test-model'
+      },
+      targets: [
+        {
+          targetId: 'baseline-local',
+          label: 'Local baseline',
+          executionMode: 'local_baseline'
+        },
+        {
+          targetId: 'siliconflow-compare',
+          label: 'SiliconFlow / Compare',
+          executionMode: 'provider_model',
+          provider: 'siliconflow',
+          model: 'sf-test-model'
+        }
+      ]
+    }, {
+      callModel: async ({ target, baselineResponse }) => ({
+        provider: target.provider,
+        model: target.model,
+        summary: `[${target.provider}] ${baselineResponse.answer.summary}`,
+        receivedAt: '2026-03-14T04:00:02.000Z'
+      }),
+      callJudgeModel: async ({ run }) => ({
+        provider: 'siliconflow',
+        model: 'judge-test-model',
+        decision: run.target.executionMode === 'local_baseline' ? 'aligned' : 'needs_review',
+        score: run.target.executionMode === 'local_baseline' ? 5 : 3,
+        rationale: run.target.executionMode === 'local_baseline'
+          ? 'Grounded and safe.'
+          : 'Grounded, but the provider phrasing should be reviewed.',
+        strengths: ['Grounded'],
+        concerns: run.target.executionMode === 'local_baseline' ? [] : ['Compare phrasing with the baseline'],
+        receivedAt: '2026-03-14T04:00:03.000Z'
+      })
+    })
+
+    expect(session).not.toBeNull()
+    expect(session?.recommendation?.source).toBe('deterministic')
+
+    const refresh = await (runtime as any).refreshObjectiveTriggers()
+    const objectives = runtime.listObjectives()
+
+    expect(refresh).toEqual([])
+    expect(objectives.filter((objective) => objective.title.startsWith('Review compare recommendation '))).toEqual([])
 
     db.close()
   })
@@ -457,6 +1029,12 @@ describe('objective runtime service', () => {
       response: 'approve',
       comment: 'Owner approved this review action.'
     })
+    const detailAfterApprove = runtime.getObjectiveDetail({
+      objectiveId: started.objective.objectiveId
+    })
+    const threadAfterApprove = runtime.getThreadDetail({
+      threadId: started.mainThread.threadId
+    })
     const confirmed = await runtime.confirmAgentProposal({
       proposalId: proposal.proposalId,
       decision: 'confirm',
@@ -464,6 +1042,8 @@ describe('objective runtime service', () => {
     })
 
     expect(approved?.status).toBe('awaiting_operator')
+    expect(detailAfterApprove?.status).toBe('awaiting_operator')
+    expect(threadAfterApprove?.status).toBe('waiting')
     expect(confirmed?.status).toBe('committed')
 
     const blockedProposal = runtime.createProposal({

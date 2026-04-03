@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { enrichmentAttemptFilterSchema, personProfileAttributeFilterSchema, profileAttributeCandidateFilterSchema } from '../../../src/shared/ipcSchemas'
+import { enrichmentAttemptFilterSchema } from '../../../src/shared/schemas/ops'
+import { personProfileAttributeFilterSchema, profileAttributeCandidateFilterSchema } from '../../../src/shared/schemas/people'
 
 describe('phase-four IPC schemas', () => {
   it('accepts enrichment attempt filters', () => {
