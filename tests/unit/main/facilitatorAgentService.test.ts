@@ -62,10 +62,10 @@ describe('facilitator agent service', () => {
     db.close()
   })
 
-  it('classifies awaiting-operator handoff when a proposal requires operator confirmation', () => {
+  it('plans an awaiting-operator handoff when a proposal requires operator confirmation', () => {
     const facilitator = createFacilitatorAgentService() as any
 
-    const result = facilitator.classifyStopState({
+    const result = facilitator.planNextStep({
       objective: {
         status: 'in_progress',
         requiresOperatorInput: false
@@ -85,17 +85,18 @@ describe('facilitator agent service', () => {
     })
 
     expect(result).toEqual(expect.objectContaining({
-      reason: 'awaiting_operator',
+      threadState: 'awaiting_operator',
+      nextAction: 'pause_for_operator',
       nextObjectiveStatus: 'awaiting_operator',
       nextThreadStatus: 'waiting',
       requiresOperatorInput: true
     }))
   })
 
-  it('classifies stalled objectives after two idle rounds without new artifacts', () => {
+  it('plans a stalled checkpoint after two idle rounds without new artifacts', () => {
     const facilitator = createFacilitatorAgentService() as any
 
-    const result = facilitator.classifyStopState({
+    const result = facilitator.planNextStep({
       objective: {
         status: 'in_progress',
         requiresOperatorInput: false
@@ -111,7 +112,8 @@ describe('facilitator agent service', () => {
     })
 
     expect(result).toEqual(expect.objectContaining({
-      reason: 'stalled',
+      threadState: 'stalled',
+      nextAction: 'mark_stalled',
       nextObjectiveStatus: 'stalled',
       nextThreadStatus: 'waiting',
       requiresOperatorInput: false,
@@ -121,10 +123,10 @@ describe('facilitator agent service', () => {
     }))
   })
 
-  it('classifies completed objectives after convergence and a user-facing result', () => {
+  it('plans convergence completion after a user-facing result exists', () => {
     const facilitator = createFacilitatorAgentService() as any
 
-    const result = facilitator.classifyStopState({
+    const result = facilitator.planNextStep({
       objective: {
         status: 'in_progress',
         requiresOperatorInput: false
@@ -148,7 +150,8 @@ describe('facilitator agent service', () => {
     })
 
     expect(result).toEqual(expect.objectContaining({
-      reason: 'completed',
+      threadState: 'ready_to_converge',
+      nextAction: 'compose_final_response',
       nextObjectiveStatus: 'completed',
       nextThreadStatus: 'completed',
       requiresOperatorInput: false

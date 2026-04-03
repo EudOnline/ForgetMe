@@ -35,3 +35,9 @@ export type {
   ListAgentObjectivesInput,
   RespondToAgentProposalInput
 } from '../objectiveRuntimeContracts'
+
+export type {
+  VerificationJudgement,
+  VerificationSourceAssessment,
+  VerificationVerdict
+} from './verification'

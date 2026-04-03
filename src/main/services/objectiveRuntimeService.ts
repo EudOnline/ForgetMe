@@ -100,10 +100,72 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
   async function deliberateThread(input: {
     threadId: string
   }) {
+    function applyFacilitatorPlan(plan: ReturnType<FacilitatorService['planNextStep']>, objectiveId: string, threadId: string) {
+      updateObjectiveStatus(db, {
+        objectiveId,
+        status: plan.nextObjectiveStatus,
+        requiresOperatorInput: plan.requiresOperatorInput
+      })
+      updateThreadStatus(db, {
+        threadId,
+        status: plan.nextThreadStatus
+      })
+
+      if (plan.checkpoint) {
+        const objectiveDetail = getObjectiveDetail(db, { objectiveId })
+        const hasEquivalentCheckpoint = objectiveDetail?.checkpoints.some((checkpoint) => (
+          checkpoint.threadId === threadId
+          && checkpoint.checkpointKind === plan.checkpoint?.checkpointKind
+          && checkpoint.title === plan.checkpoint?.title
+          && checkpoint.summary === plan.checkpoint?.summary
+        ))
+
+        if (!hasEquivalentCheckpoint) {
+          createCheckpoint(db, {
+            objectiveId,
+            threadId,
+            checkpointKind: plan.checkpoint.checkpointKind,
+            title: plan.checkpoint.title,
+            summary: plan.checkpoint.summary
+          })
+        }
+      }
+
+      return {
+        objective: getObjectiveDetail(db, { objectiveId }),
+        thread: getThreadDetail(db, { threadId })
+      }
+    }
+
     let roundsWithoutProgress = 0
-    let lastResult = await deliberationService.deliberateThreadPass(input)
+
+    let currentThread = getThreadDetail(db, { threadId: input.threadId })
+    if (!currentThread) {
+      throw new Error(`thread not found: ${input.threadId}`)
+    }
+
+    let currentObjective = getObjectiveDetail(db, { objectiveId: currentThread.objectiveId })
+    if (!currentObjective) {
+      throw new Error(`objective not found: ${currentThread.objectiveId}`)
+    }
 
     for (let roundIndex = 0; roundIndex < 6; roundIndex += 1) {
+      const prePlan = dependencies.facilitator.planNextStep({
+        objective: currentObjective,
+        thread: currentThread,
+        roundsWithoutProgress,
+        hasNewArtifacts: false
+      })
+
+      if (prePlan.nextAction !== 'continue_deliberation') {
+        const applied = applyFacilitatorPlan(prePlan, currentObjective.objectiveId, currentThread.threadId)
+        return {
+          objective: applied.objective ?? currentObjective,
+          thread: applied.thread ?? currentThread
+        }
+      }
+
+      const lastResult = await deliberationService.deliberateThreadPass(input)
       const hasNewArtifacts = (
         lastResult.newMessageCount
         + lastResult.newProposalCount
@@ -112,62 +174,35 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
 
       roundsWithoutProgress = hasNewArtifacts ? 0 : roundsWithoutProgress + 1
 
-      const stopState = dependencies.facilitator.classifyStopState({
+      currentObjective = lastResult.objective
+      currentThread = lastResult.thread
+
+      const plan = dependencies.facilitator.planNextStep({
         objective: lastResult.objective,
         thread: lastResult.thread,
         roundsWithoutProgress,
         hasNewArtifacts
       })
 
-      if (stopState.reason !== 'progress') {
-        updateObjectiveStatus(db, {
-          objectiveId: lastResult.objective.objectiveId,
-          status: stopState.nextObjectiveStatus,
-          requiresOperatorInput: stopState.requiresOperatorInput
-        })
-        updateThreadStatus(db, {
-          threadId: lastResult.thread.threadId,
-          status: stopState.nextThreadStatus
-        })
-
-        if (stopState.checkpoint) {
-          const hasEquivalentCheckpoint = lastResult.objective.checkpoints.some((checkpoint) => (
-            checkpoint.threadId === lastResult.thread.threadId
-            && checkpoint.checkpointKind === stopState.checkpoint?.checkpointKind
-            && checkpoint.title === stopState.checkpoint?.title
-            && checkpoint.summary === stopState.checkpoint?.summary
-          ))
-
-          if (!hasEquivalentCheckpoint) {
-            createCheckpoint(db, {
-              objectiveId: lastResult.objective.objectiveId,
-              threadId: lastResult.thread.threadId,
-              checkpointKind: stopState.checkpoint.checkpointKind,
-              title: stopState.checkpoint.title,
-              summary: stopState.checkpoint.summary
-            })
-          }
-        }
-
+      if (plan.nextAction !== 'continue_deliberation') {
+        const applied = applyFacilitatorPlan(plan, lastResult.objective.objectiveId, lastResult.thread.threadId)
         return {
-          objective: getObjectiveDetail(db, { objectiveId: lastResult.objective.objectiveId }) ?? lastResult.objective,
-          thread: getThreadDetail(db, { threadId: lastResult.thread.threadId }) ?? lastResult.thread
+          objective: applied.objective ?? lastResult.objective,
+          thread: applied.thread ?? lastResult.thread
         }
       }
 
       if (roundIndex === 5) {
         return {
-          objective: lastResult.objective,
-          thread: lastResult.thread
+          objective: currentObjective,
+          thread: currentThread
         }
       }
-
-      lastResult = await deliberationService.deliberateThreadPass(input)
     }
 
     return {
-      objective: lastResult.objective,
-      thread: lastResult.thread
+      objective: currentObjective,
+      thread: currentThread
     }
   }
 

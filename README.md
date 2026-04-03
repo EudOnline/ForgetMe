@@ -316,9 +316,10 @@ npm run build
 - a facilitator starts scoped objectives and keeps deliberation inside explicit threads instead of raw console runs
 - proactive triggers and follow-up suggestions can now seed fresh objectives instead of stopping at passive suggestions
 - proposals can pause for governance challenge, operator confirmation, or external verification before any mutation happens
-- external verification is brokered through a bounded web-search boundary with captured evidence and source tracing
-- subagents stay constrained to proposal-scoped work, with persisted lineage, bounded budgets, and specialized compare / draft / policy runners
-- proposal provenance, tool executions, and subagent lineage are visible in `Objective Workbench` so operators can audit why a thread moved forward
+- external verification is brokered through a bounded web-search boundary with structured `supported / contradicted / mixed / insufficient` verdicts, captured evidence, and source tracing
+- facilitator control flow is driven by explicit thread-state planning so stalled, evidence-gated, operator-gated, and converged threads are surfaced as distinct runtime states
+- subagents stay constrained to proposal-scoped work, record an explicit execution plan before tool use, enforce delegation depth, and keep budget use attributable to planned steps
+- proposal provenance, tool executions, planner checkpoints, and subagent lineage are visible in `Objective Workbench` so operators can audit why a thread moved forward, paused, or stopped
 - objective state, thread messages, proposals, checkpoints, operational memories, and policy history are all persisted in SQLite
 
 ### Objective Runtime Traffic via LiteLLM

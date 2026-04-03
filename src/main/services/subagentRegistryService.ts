@@ -4,6 +4,7 @@ import type {
   AgentRole,
   AgentSkillPackId
 } from '../../shared/archiveContracts'
+import type { SubagentPlanningSchemaId } from './objectiveSubagentPlanSchemaService'
 import { draftComposerSkillPack } from './skillPacks/draftComposerSkillPack'
 import { evidenceCheckerSkillPack } from './skillPacks/evidenceCheckerSkillPack'
 import { webVerifierSkillPack, type SkillPackTemplate } from './skillPacks/webVerifierSkillPack'
@@ -11,21 +12,28 @@ import { webVerifierSkillPack, type SkillPackTemplate } from './skillPacks/webVe
 export type SubagentProfile = SkillPackTemplate & {
   defaultToolPolicyId: string | null
   defaultBudget: AgentExecutionBudget
+  planningSchema: SubagentPlanningSchemaId
+  maxDelegationDepth: number
+  requiresPlanApproval?: boolean
 }
 
 const SUBAGENT_PROFILES: Record<AgentSkillPackId, SubagentProfile> = {
   'web-verifier': {
     ...webVerifierSkillPack,
     defaultToolPolicyId: 'external-verification-policy',
+    planningSchema: 'web-verification-plan',
+    maxDelegationDepth: 2,
     defaultBudget: {
       maxRounds: 2,
-      maxToolCalls: 3,
+      maxToolCalls: 5,
       timeoutMs: 30_000
     }
   },
   'evidence-checker': {
     ...evidenceCheckerSkillPack,
     defaultToolPolicyId: 'local-evidence-policy',
+    planningSchema: 'local-evidence-check-plan',
+    maxDelegationDepth: 2,
     defaultBudget: {
       maxRounds: 2,
       maxToolCalls: 2,
@@ -38,6 +46,8 @@ const SUBAGENT_PROFILES: Record<AgentSkillPackId, SubagentProfile> = {
     toolWhitelist: ['read_policy_versions', 'compare_policy_versions'],
     outputSchema: 'policyAuditResultSchema',
     defaultToolPolicyId: 'policy-audit-policy',
+    planningSchema: 'policy-audit-plan',
+    maxDelegationDepth: 1,
     defaultBudget: {
       maxRounds: 2,
       maxToolCalls: 2,
@@ -47,6 +57,8 @@ const SUBAGENT_PROFILES: Record<AgentSkillPackId, SubagentProfile> = {
   'draft-composer': {
     ...draftComposerSkillPack,
     defaultToolPolicyId: 'draft-composer-policy',
+    planningSchema: 'draft-composition-plan',
+    maxDelegationDepth: 1,
     defaultBudget: {
       maxRounds: 2,
       maxToolCalls: 2,
@@ -59,6 +71,8 @@ const SUBAGENT_PROFILES: Record<AgentSkillPackId, SubagentProfile> = {
     toolWhitelist: ['run_compare', 'summarize_compare_results'],
     outputSchema: 'compareAnalysisResultSchema',
     defaultToolPolicyId: 'workspace-compare-policy',
+    planningSchema: 'compare-analysis-plan',
+    maxDelegationDepth: 1,
     defaultBudget: {
       maxRounds: 2,
       maxToolCalls: 2,
@@ -94,7 +108,10 @@ export function createSubagentRegistryService() {
       toolWhitelist: [...profile.toolWhitelist],
       outputSchema: profile.outputSchema,
       defaultToolPolicyId: profile.defaultToolPolicyId,
-      defaultBudget: { ...profile.defaultBudget }
+      defaultBudget: { ...profile.defaultBudget },
+      planningSchema: profile.planningSchema,
+      maxDelegationDepth: profile.maxDelegationDepth,
+      ...(profile.requiresPlanApproval ? { requiresPlanApproval: true } : {})
     }
   }
 

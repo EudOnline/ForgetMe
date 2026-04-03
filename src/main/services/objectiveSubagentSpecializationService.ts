@@ -2,6 +2,8 @@ import type {
   CitationBundle,
   createExternalVerificationBrokerService
 } from './externalVerificationBrokerService'
+import type { RunnerSubagentDelegationResult } from './objectiveSubagentDelegationService'
+import type { ObjectiveSubagentExecutionPlan } from './objectiveSubagentPlanningService'
 import {
   runCompareAnalystWorkflow,
   runDraftComposerWorkflow,
@@ -52,6 +54,7 @@ export type ActiveSubagentExecutionContext = {
     subagentId: string
   }
   toolPolicyId: string
+  executionPlan: ObjectiveSubagentExecutionPlan
   remainingBudget: {
     maxRounds: number
     maxToolCalls: number
@@ -67,6 +70,14 @@ export type ActiveSubagentExecutionContext = {
       artifactRefs?: AgentArtifactRef[]
     }>
   }) => Promise<T>
+  delegateSubagentFromRunner: (input: {
+    proposal: AgentProposalRecord
+    parentSubthreadId: string
+    requestedByParticipantId: string
+    specialization: AgentSkillPackId
+    payload: Record<string, unknown>
+    approvalComment: string
+  }) => Promise<RunnerSubagentDelegationResult>
 }
 
 export type RegisteredSubagentOutcome<TExtra extends Record<string, unknown> = Record<never, never>> = {
@@ -120,7 +131,7 @@ export function createObjectiveSubagentSpecializationService(dependencies: {
       goalBody: `Verify the external claim "${input.claim}" using the bounded query "${input.query}".`,
       spawnSummary: `Spawned web-verifier in subthread ${title} for bounded external verification.`,
       failureLabel: 'Web verifier',
-      run: async ({ subthread, createdSubagent, runTool }) => {
+      run: async ({ subthread, createdSubagent, runTool, delegateSubagentFromRunner }) => {
         return runWebVerifierWorkflow({
           proposal: input.proposal,
           subthreadThreadId: subthread.threadId,
@@ -131,7 +142,7 @@ export function createObjectiveSubagentSpecializationService(dependencies: {
           runTool,
           appendRuntimeMessage: dependencies.helpers.appendRuntimeMessage,
           externalVerificationBroker: dependencies.externalVerificationBroker,
-          delegateSubagentFromRunner: dependencies.delegateSubagentFromRunner
+          delegateSubagentFromRunner
         })
       }
     })
@@ -153,7 +164,7 @@ export function createObjectiveSubagentSpecializationService(dependencies: {
       goalBody: `Review local document evidence for file "${input.fileId}" and summarize approved fields, pending candidates, and the most relevant OCR excerpt.`,
       spawnSummary: `Spawned evidence-checker in subthread ${title} for bounded local evidence checking.`,
       failureLabel: 'Evidence checker',
-      run: async ({ subthread, createdSubagent, runTool }) => {
+      run: async ({ subthread, createdSubagent, runTool, delegateSubagentFromRunner }) => {
         return runEvidenceCheckerWorkflow({
           db,
           proposal: input.proposal,
@@ -164,7 +175,7 @@ export function createObjectiveSubagentSpecializationService(dependencies: {
           crossCheckQuery: input.crossCheckQuery,
           runTool,
           appendRuntimeMessage: dependencies.helpers.appendRuntimeMessage,
-          delegateSubagentFromRunner: dependencies.delegateSubagentFromRunner
+          delegateSubagentFromRunner
         })
       }
     })

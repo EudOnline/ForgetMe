@@ -4,6 +4,10 @@ import type {
 import { createObjectiveSubagentDelegationService } from './objectiveSubagentDelegationService'
 import { createObjectiveSubagentLifecycleService } from './objectiveSubagentLifecycleService'
 import {
+  createObjectiveSubagentPlanningService,
+  type ObjectiveSubagentExecutionPlan
+} from './objectiveSubagentPlanningService'
+import {
   createObjectiveSubagentSpecializationService,
   type ActiveSubagentExecutionContext,
   type AskMemoryWorkspacePersistedService,
@@ -25,6 +29,8 @@ import type {
   AgentThreadDetail
 } from '../../shared/archiveContracts'
 import {
+  createCheckpoint,
+  getThreadDetail,
   type CreateProposalInput
 } from './objectivePersistenceService'
 import type { ArchiveDatabase } from './db'
@@ -81,6 +87,9 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
   const toolExecutionService = createObjectiveSubagentToolExecutionService({
     db
   })
+  const planningService = createObjectiveSubagentPlanningService({
+    subagentRegistry: dependencies.subagentRegistry
+  })
 
   function getSubagentProfile(specialization: AgentSkillPackId) {
     return dependencies.subagentRegistry.getProfile(specialization)
@@ -93,6 +102,37 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
     }
 
     return toolPolicyId
+  }
+
+  function formatExecutionPlan(plan: ObjectiveSubagentExecutionPlan) {
+    const lines = [
+      `Execution plan for ${plan.specialization}:`,
+      ...plan.steps.map((step, index) => `${index + 1}. ${step.title}`),
+      `Stop conditions: ${plan.stopConditions.join('; ')}.`,
+      `Delegation allowed: ${plan.delegationAllowed ? 'yes' : 'no'}.`
+    ]
+
+    return lines.join('\n')
+  }
+
+  function getThreadDelegationDepth(threadId: string) {
+    let depth = 0
+    let currentThreadId: string | null = threadId
+
+    while (currentThreadId) {
+      const thread = getThreadDetail(db, { threadId: currentThreadId })
+      if (!thread) {
+        break
+      }
+
+      if (thread.threadKind === 'subthread') {
+        depth += 1
+      }
+
+      currentThreadId = thread.parentThreadId
+    }
+
+    return depth + 1
   }
 
   const lifecycleService = createObjectiveSubagentLifecycleService({
@@ -112,11 +152,21 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
     run: (context: ActiveSubagentExecutionContext) => Promise<RegisteredSubagentOutcome<TExtra>>
   }) {
     const profile = getSubagentProfile(input.specialization)
+    const executionDepth = getThreadDelegationDepth(input.proposal.threadId)
+    if (executionDepth > profile.maxDelegationDepth) {
+      throw new Error(`Subagent delegation depth exceeds max delegation depth ${profile.maxDelegationDepth} for ${input.specialization}.`)
+    }
+
+    const executionPlan = planningService.createPlan({
+      specialization: input.specialization,
+      proposal: input.proposal
+    })
     const toolPolicyId = input.proposal.toolPolicyId ?? getRequiredToolPolicyId(input.specialization)
     const executionBudget = input.proposal.budget ?? { ...profile.defaultBudget }
     const remainingBudget = {
       ...executionBudget
     }
+    const consumedSingleUsePlanSteps = new Set<string>()
 
     toolExecutionService.consumeExecutionRound(remainingBudget)
 
@@ -131,6 +181,42 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
       spawnSummary: input.spawnSummary
     })
 
+    dependencies.helpers.appendRuntimeMessage({
+      objectiveId: input.proposal.objectiveId,
+      threadId: execution.subthread.threadId,
+      fromParticipantId: execution.createdSubagent.subagentId,
+      kind: 'decision',
+      body: formatExecutionPlan(executionPlan)
+    })
+    createCheckpoint(db, {
+      objectiveId: input.proposal.objectiveId,
+      threadId: execution.subthread.threadId,
+      checkpointKind: 'subagent_plan_recorded',
+      title: 'Subagent plan recorded',
+      summary: `Recorded execution plan for ${input.specialization}.`,
+      relatedProposalId: input.proposal.proposalId
+    })
+
+    const resolvePlanStep = (toolName: string) => {
+      for (const step of executionPlan.toolSequence) {
+        if (step.toolName !== toolName) {
+          continue
+        }
+
+        if (!step.repeatable && consumedSingleUsePlanSteps.has(step.stepId)) {
+          continue
+        }
+
+        if (!step.repeatable) {
+          consumedSingleUsePlanSteps.add(step.stepId)
+        }
+
+        return step
+      }
+
+      throw new Error(`Tool ${toolName} is not permitted by the execution plan for ${input.specialization}.`)
+    }
+
     const runTool = <T,>(toolInput: {
       toolName: string
       inputPayload: Record<string, unknown>
@@ -140,26 +226,46 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
         artifactRefs?: AgentArtifactRef[]
       }>
     }) => toolExecutionService.runAuthorizedTool({
-      objectiveId: input.proposal.objectiveId,
-      threadId: execution.subthread.threadId,
-      proposalId: input.proposal.proposalId,
-      requestedByParticipantId: execution.createdSubagent.subagentId,
-      role: input.proposal.ownerRole,
-      toolName: toolInput.toolName,
-      toolPolicyId,
-      skillPackIds: profile.skillPackIds,
-      remainingBudget,
-      inputPayload: toolInput.inputPayload,
-      run: toolInput.run
+      ...(() => {
+        const planStep = resolvePlanStep(toolInput.toolName)
+
+        return {
+          objectiveId: input.proposal.objectiveId,
+          threadId: execution.subthread.threadId,
+          proposalId: input.proposal.proposalId,
+          requestedByParticipantId: execution.createdSubagent.subagentId,
+          role: input.proposal.ownerRole,
+          toolName: toolInput.toolName,
+          toolPolicyId,
+          skillPackIds: profile.skillPackIds,
+          remainingBudget,
+          inputPayload: {
+            ...toolInput.inputPayload,
+            planStepId: planStep.stepId,
+            planStepTitle: planStep.title
+          },
+          run: toolInput.run
+        }
+      })()
     })
 
     try {
+      const delegateSubagentFromRunner: ActiveSubagentExecutionContext['delegateSubagentFromRunner'] = async (delegateInput) => {
+        if (!executionPlan.delegationAllowed) {
+          throw new Error(`Execution plan does not allow nested delegation for ${input.specialization}.`)
+        }
+
+        return delegationService.delegateSubagentFromRunner(delegateInput)
+      }
+
       const outcome = await input.run({
         ...execution,
+        executionPlan,
         toolPolicyId,
         remainingBudget,
         skillPackIds: profile.skillPackIds,
-        runTool
+        runTool,
+        delegateSubagentFromRunner
       })
       const {
         summary,

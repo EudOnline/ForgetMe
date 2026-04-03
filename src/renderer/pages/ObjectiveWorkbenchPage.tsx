@@ -335,7 +335,10 @@ export function ObjectiveWorkbenchPage() {
       })
     }
 
-    const failedSubagent = [...(threadDetail?.subagents ?? [])]
+    const failedSubagentPool = (threadDetail?.subagents?.length ?? 0) > 0
+      ? (threadDetail?.subagents ?? [])
+      : (objectiveDetail?.subagents ?? [])
+    const failedSubagent = [...failedSubagentPool]
       .reverse()
       .find((subagent) => subagent.status === 'failed')
     if (failedSubagent?.summary) {
@@ -361,7 +364,7 @@ export function ObjectiveWorkbenchPage() {
     }
 
     return null
-  }, [participantLabel, t, threadDetail, visibleToolExecutions])
+  }, [objectiveDetail, participantLabel, t, threadDetail, visibleToolExecutions])
 
   const subagentLineage = useMemo(() => {
     return (objectiveDetail?.subagents ?? [])

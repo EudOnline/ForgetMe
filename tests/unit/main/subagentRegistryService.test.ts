@@ -4,6 +4,7 @@ import { createSubagentRegistryService } from '../../../src/main/services/subage
 describe('subagentRegistryService', () => {
   it('creates a bounded web-verifier subagent template with the expected tools and schema', () => {
     const registry = createSubagentRegistryService()
+    const profile = registry.getProfile('web-verifier')
 
     const subagent = registry.createSubagent({
       objectiveId: 'objective-1',
@@ -25,6 +26,8 @@ describe('subagentRegistryService', () => {
       'capture_citation_bundle'
     ])
     expect(subagent.outputSchema).toBe('webVerificationResultSchema')
+    expect(profile.planningSchema).toBe('web-verification-plan')
+    expect(profile.maxDelegationDepth).toBe(2)
   })
 
   it('builds a spawn_subagent spec from specialization defaults instead of requiring callers to repeat template fields', () => {
@@ -96,6 +99,27 @@ describe('subagentRegistryService', () => {
         maxToolCalls: 2,
         timeoutMs: 30_000
       }
+    }))
+  })
+
+  it('exposes plan schema metadata and delegation depth for every specialization', () => {
+    const registry = createSubagentRegistryService()
+
+    expect(registry.getProfile('evidence-checker')).toEqual(expect.objectContaining({
+      planningSchema: 'local-evidence-check-plan',
+      maxDelegationDepth: 2
+    }))
+    expect(registry.getProfile('compare-analyst')).toEqual(expect.objectContaining({
+      planningSchema: 'compare-analysis-plan',
+      maxDelegationDepth: 1
+    }))
+    expect(registry.getProfile('draft-composer')).toEqual(expect.objectContaining({
+      planningSchema: 'draft-composition-plan',
+      maxDelegationDepth: 1
+    }))
+    expect(registry.getProfile('policy-auditor')).toEqual(expect.objectContaining({
+      planningSchema: 'policy-audit-plan',
+      maxDelegationDepth: 1
     }))
   })
 })

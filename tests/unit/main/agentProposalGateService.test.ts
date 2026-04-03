@@ -116,4 +116,15 @@ describe('agent proposal gate service', () => {
 
     expect(result.status).toBe('committable')
   })
+
+  it('does not treat insufficient verification evidence as effectively ready to commit', () => {
+    const result = evaluateProposalGate({
+      proposal: createProposal(),
+      messages: [],
+      votes: [createVote()],
+      evidenceVerdict: 'insufficient'
+    } as any)
+
+    expect(result.status).toBe('under_review')
+  })
 })

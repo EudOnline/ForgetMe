@@ -59,13 +59,13 @@ export async function runWebVerifierWorkflow(input: {
     inputPayload: {
       claim: input.claim,
       query: input.query,
-      maxResults: 1
+      maxResults: 3
     },
     run: async () => {
       const results = await input.externalVerificationBroker.searchClaimSources({
         claim: input.claim,
         query: input.query,
-        maxResults: 1
+        maxResults: 3
       })
 
       return {

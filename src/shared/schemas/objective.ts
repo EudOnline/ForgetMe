@@ -86,6 +86,7 @@ export const agentCheckpointKindSchema = z.enum([
   'evidence_gap_detected',
   'stalled',
   'subagent_spawned',
+  'subagent_plan_recorded',
   'tool_action_executed',
   'external_verification_completed',
   'proposal_raised',

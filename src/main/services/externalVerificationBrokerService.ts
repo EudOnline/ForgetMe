@@ -1,3 +1,9 @@
+import { judgeVerificationClaim } from './verificationClaimJudgementService'
+import type {
+  VerificationJudgement,
+  VerificationReliabilityLabel
+} from '../../shared/contracts/verification'
+
 export type VerificationSearchResult = {
   title: string
   url: string
@@ -17,7 +23,7 @@ export type VerificationSource = {
   url: string
   publishedAt: string | null
   extractedFact: string
-  reliabilityLabel: string
+  reliabilityLabel: VerificationReliabilityLabel
 }
 
 export type VerifyClaimInput = {
@@ -27,9 +33,15 @@ export type VerifyClaimInput = {
 }
 
 export type CitationBundle = {
-  verdict: 'supported' | 'not_supported'
+  verdict: VerificationJudgement['verdict']
   claim: string
   sources: VerificationSource[]
+  sourceAssessments: VerificationJudgement['sourceAssessments']
+  supportCount: number
+  contradictionCount: number
+  highReliabilitySupportCount: number
+  highReliabilityContradictionCount: number
+  summary: string
 }
 
 export type ExternalVerificationBrokerDependencies = {
@@ -195,10 +207,21 @@ export function createExternalVerificationBrokerService(
     }): Promise<CitationBundle> {
       const sources = sortSources(input.sources.filter((source) => normalizeWhitespace(source.url).length > 0))
 
-      return {
-        verdict: sources.length > 0 ? 'supported' : 'not_supported',
+      const judgement = judgeVerificationClaim({
         claim: input.claim,
         sources
+      })
+
+      return {
+        verdict: judgement.verdict,
+        claim: input.claim,
+        sources,
+        sourceAssessments: judgement.sourceAssessments,
+        supportCount: judgement.supportCount,
+        contradictionCount: judgement.contradictionCount,
+        highReliabilitySupportCount: judgement.highReliabilitySupportCount,
+        highReliabilityContradictionCount: judgement.highReliabilityContradictionCount,
+        summary: judgement.summary
       }
     },
 

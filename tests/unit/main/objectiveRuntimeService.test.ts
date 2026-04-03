@@ -341,6 +341,90 @@ describe('objective runtime service', () => {
     db.close()
   })
 
+  it('parks external-evidence threads in a waiting state instead of stalling them immediately', async () => {
+    const db = setupDatabase()
+    const roleAgentRegistry = {
+      get(role: string) {
+        if (role === 'workspace') {
+          return {
+            role,
+            async receive() {
+              return {
+                messages: [],
+                proposals: [
+                  {
+                    proposalKind: 'verify_external_claim' as const,
+                    payload: {
+                      claim: 'The official source confirms the announcement date.',
+                      query: 'official announcement date'
+                    },
+                    ownerRole: 'workspace' as const,
+                    requiredApprovals: ['workspace' as const],
+                    allowVetoBy: ['governance' as const],
+                    toolPolicyId: 'external-verification-policy',
+                    budget: {
+                      maxRounds: 2,
+                      maxToolCalls: 3,
+                      timeoutMs: 30_000
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+
+        return {
+          role,
+          async receive() {
+            return {
+              messages: []
+            }
+          }
+        }
+      }
+    }
+
+    const runtime = createObjectiveRuntimeService({
+      db,
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => [],
+        openSourcePage: async ({ url }) => ({
+          url,
+          title: null,
+          publishedAt: null,
+          excerpt: ''
+        })
+      }),
+      subagentRegistry: createSubagentRegistryService(),
+      roleAgentRegistry
+    } as any)
+
+    const started = await runtime.startObjective({
+      title: 'Wait for bounded external verification before responding',
+      objectiveKind: 'evidence_investigation',
+      prompt: 'Check the external source before we answer the user.',
+      initiatedBy: 'operator'
+    })
+    const detail = runtime.getObjectiveDetail({
+      objectiveId: started.objective.objectiveId
+    })
+    const mainThread = runtime.getThreadDetail({
+      threadId: started.mainThread.threadId
+    })
+
+    expect(detail?.status).toBe('in_progress')
+    expect(mainThread?.status).toBe('waiting')
+    expect(detail?.checkpoints).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        checkpointKind: 'evidence_gap_detected'
+      })
+    ]))
+
+    db.close()
+  })
+
   it('creates an objective plus a native proposal without relying on legacy suggestion bridges', async () => {
     const db = setupDatabase()
     const runtime = createObjectiveRuntimeService({
@@ -953,11 +1037,13 @@ describe('objective runtime service', () => {
     )
     expect(subthread?.messages.map((message) => message.kind)).toEqual([
       'goal',
+      'decision',
       'tool_result',
       'tool_result',
       'tool_result',
       'final_response'
     ])
+    expect(subthread?.messages[1]?.body).toMatch(/execution plan/i)
     expect(subthread?.messages.at(-1)?.fromParticipantId).toBe(verification.subagent.subagentId)
     expect(subthread?.status).toBe('completed')
     expect(mainThread?.messages.some((message) => (
@@ -983,6 +1069,17 @@ describe('objective runtime service', () => {
     expect(toolExecutions.every((entry) => entry.threadId === verification.subagent.threadId)).toBe(true)
     expect(toolExecutions.every((entry) => entry.status === 'completed')).toBe(true)
     expect(toolExecutions.every((entry) => entry.toolPolicyId === 'external-verification-policy')).toBe(true)
+    const plannedSteps = db.prepare(
+      `select input_payload_json as inputPayload
+       from agent_tool_executions
+       where objective_id = ?
+       order by created_at asc`
+    ).all(started.objective.objectiveId) as Array<{ inputPayload: string }>
+
+    expect(plannedSteps.every((entry) => {
+      const payload = JSON.parse(entry.inputPayload) as Record<string, unknown>
+      return typeof payload.planStepId === 'string' && payload.planStepId.length > 0
+    })).toBe(true)
     expect(detail?.subagents[0]?.status).toBe('completed')
     expect(detail?.subagents[0]?.summary).toMatch(/supported/i)
 
@@ -1156,6 +1253,7 @@ describe('objective runtime service', () => {
     expect(subthread?.threadKind).toBe('subthread')
     expect(subthread?.messages.map((message) => message.kind)).toEqual([
       'goal',
+      'decision',
       'tool_result',
       'tool_result',
       'tool_result',
@@ -1276,6 +1374,7 @@ describe('objective runtime service', () => {
     expect(subthread?.threadKind).toBe('subthread')
     expect(subthread?.messages.map((message) => message.kind)).toEqual([
       'goal',
+      'decision',
       'tool_result',
       'final_response'
     ])
@@ -1374,6 +1473,7 @@ describe('objective runtime service', () => {
     expect(detail?.subagents[0]?.status).toBe('completed')
     expect(subthread?.messages.map((message) => message.kind)).toEqual([
       'goal',
+      'decision',
       'tool_result',
       'final_response'
     ])
@@ -1511,6 +1611,7 @@ describe('objective runtime service', () => {
     expect(subagent?.status).toBe('completed')
     expect(subthread?.messages.map((message) => message.kind)).toEqual([
       'goal',
+      'decision',
       'tool_result',
       'tool_result',
       'final_response'
@@ -1617,6 +1718,7 @@ describe('objective runtime service', () => {
     expect(subagent?.status).toBe('completed')
     expect(subthread?.messages.map((message) => message.kind)).toEqual([
       'goal',
+      'decision',
       'tool_result',
       'tool_result',
       'final_response'
@@ -1717,6 +1819,7 @@ describe('objective runtime service', () => {
     expect(subagent?.status).toBe('completed')
     expect(subthread?.messages.map((message) => message.kind)).toEqual([
       'goal',
+      'decision',
       'tool_result',
       'tool_result',
       'final_response'
@@ -2216,6 +2319,200 @@ describe('objective runtime service', () => {
     expect(parentFinalIndex).toBeGreaterThan(childEvidenceIndex)
     expect(parentThread?.messages.at(parentFinalIndex)?.body).toMatch(/external verification/i)
     expect(childThread?.parentThreadId).toBe(parentSubagent?.threadId)
+
+    db.close()
+  })
+
+  it('blocks third-level nested subagent execution once delegation depth is exhausted', async () => {
+    const db = setupDatabase()
+    const createdAt = '2026-03-30T00:00:00.000Z'
+
+    db.prepare('insert into import_batches (id, source_label, status, created_at) values (?, ?, ?, ?)').run('b-1', 'depth-check', 'ready', createdAt)
+    db.prepare('insert into vault_files (id, batch_id, source_path, frozen_path, file_name, extension, mime_type, file_size, sha256, duplicate_class, parser_status, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run('f-1', 'b-1', '/tmp/license.jpg', '/tmp/license.jpg', 'license.jpg', '.jpg', 'image/jpeg', 1, 'hash-1', 'unique', 'parsed', createdAt)
+    db.prepare(`insert into enrichment_jobs (
+      id, file_id, enhancer_type, provider, model, status, attempt_count, input_hash,
+      started_at, finished_at, error_message, usage_json, created_at, updated_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run('job-1', 'f-1', 'document_ocr', 'siliconflow', 'model-a', 'completed', 1, null, createdAt, createdAt, null, '{}', createdAt, createdAt)
+    db.prepare('insert into enrichment_artifacts (id, job_id, artifact_type, payload_json, created_at) values (?, ?, ?, ?, ?)').run('ea-1', 'job-1', 'ocr_raw_text', '{"rawText":"姓名 王五 驾驶证号 B998877"}', createdAt)
+    db.prepare('insert into enrichment_artifacts (id, job_id, artifact_type, payload_json, created_at) values (?, ?, ?, ?, ?)').run('ea-2', 'job-1', 'ocr_layout_blocks', '{"layoutBlocks":[{"page":1,"text":"姓名 王五"},{"page":1,"text":"驾驶证号 B998877"}]}', createdAt)
+
+    const runtime = createObjectiveRuntimeService({
+      db,
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => [],
+        openSourcePage: async ({ url }) => ({
+          url,
+          title: null,
+          publishedAt: null,
+          excerpt: ''
+        })
+      }),
+      subagentRegistry: createSubagentRegistryService()
+    })
+
+    const started = await runtime.startObjective({
+      title: 'Bound nested delegation depth',
+      objectiveKind: 'evidence_investigation',
+      prompt: 'Allow one nested follow-up, but block a third layer.',
+      initiatedBy: 'operator'
+    })
+
+    const parentProposal = runtime.createProposal({
+      objectiveId: started.objective.objectiveId,
+      threadId: started.mainThread.threadId,
+      proposedByParticipantId: 'workspace',
+      proposalKind: 'spawn_subagent',
+      payload: {
+        specialization: 'evidence-checker',
+        skillPackIds: ['evidence-checker'],
+        expectedOutputSchema: 'localEvidenceCheckSchema',
+        fileId: 'f-1'
+      },
+      ownerRole: 'workspace',
+      requiresOperatorConfirmation: false,
+      toolPolicyId: 'local-evidence-policy',
+      budget: {
+        maxRounds: 2,
+        maxToolCalls: 2,
+        timeoutMs: 30_000
+      }
+    })
+
+    await runtime.respondToAgentProposal({
+      proposalId: parentProposal.proposalId,
+      responderRole: 'workspace',
+      response: 'approve',
+      comment: 'Owner approved the parent bounded subagent.'
+    })
+
+    const detailAfterParent = runtime.getObjectiveDetail({
+      objectiveId: started.objective.objectiveId
+    })
+    const parentSubagent = detailAfterParent?.subagents.find((candidate) => candidate.specialization === 'evidence-checker')
+
+    const childProposal = runtime.createProposal({
+      objectiveId: started.objective.objectiveId,
+      threadId: parentSubagent?.threadId ?? '',
+      proposedByParticipantId: parentSubagent?.subagentId ?? '',
+      proposalKind: 'spawn_subagent',
+      payload: {
+        specialization: 'web-verifier',
+        skillPackIds: ['web-verifier'],
+        expectedOutputSchema: 'webVerificationResultSchema',
+        claim: 'The source confirms the announcement date.',
+        query: 'official announcement date'
+      },
+      ownerRole: 'workspace',
+      requiresOperatorConfirmation: false,
+      toolPolicyId: 'external-verification-policy',
+      budget: {
+        maxRounds: 2,
+        maxToolCalls: 3,
+        timeoutMs: 30_000
+      }
+    })
+
+    await runtime.respondToAgentProposal({
+      proposalId: childProposal.proposalId,
+      responderRole: 'workspace',
+      response: 'approve',
+      comment: 'Owner approved the child bounded subagent.'
+    })
+
+    const detailAfterChild = runtime.getObjectiveDetail({
+      objectiveId: started.objective.objectiveId
+    })
+    const childSubagent = detailAfterChild?.subagents.find((candidate) => candidate.specialization === 'web-verifier')
+
+    const grandchildProposal = runtime.createProposal({
+      objectiveId: started.objective.objectiveId,
+      threadId: childSubagent?.threadId ?? '',
+      proposedByParticipantId: childSubagent?.subagentId ?? '',
+      proposalKind: 'spawn_subagent',
+      payload: {
+        specialization: 'evidence-checker',
+        skillPackIds: ['evidence-checker'],
+        expectedOutputSchema: 'localEvidenceCheckSchema',
+        fileId: 'f-1'
+      },
+      ownerRole: 'workspace',
+      requiresOperatorConfirmation: false,
+      toolPolicyId: 'local-evidence-policy',
+      budget: {
+        maxRounds: 2,
+        maxToolCalls: 2,
+        timeoutMs: 30_000
+      }
+    })
+
+    await expect(runtime.respondToAgentProposal({
+      proposalId: grandchildProposal.proposalId,
+      responderRole: 'workspace',
+      response: 'approve',
+      comment: 'Owner approved an over-depth nested subagent.'
+    })).rejects.toThrow(/delegation depth/i)
+
+    db.close()
+  })
+
+  it('does not collapse conflicting strong verification sources into a supported verdict', async () => {
+    const db = setupDatabase()
+    const runtime = createObjectiveRuntimeService({
+      db,
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => [
+          {
+            title: 'Official announcement record',
+            url: 'https://records.example.gov/releases/announcement',
+            snippet: 'The official record lists an announcement date of March 30, 2026.',
+            publishedAt: '2026-03-30T00:00:00.000Z'
+          },
+          {
+            title: 'Official correction record',
+            url: 'https://records.example.gov/releases/correction',
+            snippet: 'The official correction updates the date to April 2, 2026.',
+            publishedAt: '2026-03-31T00:00:00.000Z'
+          }
+        ],
+        openSourcePage: async ({ url }) => {
+          if (url.endsWith('/correction')) {
+            return {
+              url,
+              title: 'Official correction record',
+              publishedAt: '2026-03-31T00:00:00.000Z',
+              excerpt: 'The official record corrects the announcement date to April 2, 2026.'
+            }
+          }
+
+          return {
+            url,
+            title: 'Official announcement record',
+            publishedAt: '2026-03-30T00:00:00.000Z',
+            excerpt: 'The announcement date is March 30, 2026.'
+          }
+        }
+      }),
+      subagentRegistry: createSubagentRegistryService()
+    })
+
+    const started = await runtime.startObjective({
+      title: 'Verify a conflicting external claim before responding',
+      objectiveKind: 'evidence_investigation',
+      prompt: 'Check conflicting official records before we answer the user.',
+      initiatedBy: 'operator'
+    })
+
+    const verification = await runtime.requestExternalVerification({
+      objectiveId: started.objective.objectiveId,
+      threadId: started.mainThread.threadId,
+      proposedByParticipantId: 'workspace',
+      claim: 'The official source confirms the announcement date is March 30, 2026.',
+      query: 'official announcement date correction'
+    })
+
+    expect(verification.citationBundle.verdict).toBe('mixed')
 
     db.close()
   })

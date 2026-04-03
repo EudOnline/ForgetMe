@@ -4,6 +4,7 @@ import type {
   AgentProposalStatus,
   AgentVoteRecord
 } from '../../shared/objectiveRuntimeContracts'
+import type { VerificationVerdict } from '../../shared/contracts/verification'
 
 export type EvaluateProposalStatusInput = {
   proposal: AgentProposalRecord
@@ -27,6 +28,7 @@ export type EvaluateProposalGateInput = {
   messages?: Array<Pick<AgentMessageRecordV2, 'kind' | 'blocking'>>
   hasBlockingChallenge?: boolean
   operatorConfirmed?: boolean
+  evidenceVerdict?: VerificationVerdict | null
 }
 
 export function evaluateProposalGate(input: EvaluateProposalGateInput): EvaluateProposalStatusResult {
@@ -56,6 +58,18 @@ export function evaluateProposalGate(input: EvaluateProposalGateInput): Evaluate
   if (hasBlockingChallenge) {
     return {
       status: 'challenged',
+      ownerApproved,
+      hasGovernanceVeto,
+      hasBlockingChallenge
+    }
+  }
+
+  if (
+    input.evidenceVerdict
+    && input.evidenceVerdict !== 'supported'
+  ) {
+    return {
+      status: 'under_review',
       ownerApproved,
       hasGovernanceVeto,
       hasBlockingChallenge
