@@ -87,7 +87,7 @@ test('objective workbench exposes runtime health, incidents, and persisted runti
     await expect(page.getByRole('heading', { name: 'Recent incidents' })).toBeVisible()
     await expect(page.getByText('proposal_awaiting_operator')).toBeVisible()
     await page.getByText('proposal_awaiting_operator').click()
-    await expect(page.getByText('publish_draft')).toBeVisible()
+    await expect(page.getByText('proposalKind: publish_draft')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Runtime controls' })).toBeVisible()
     await page.getByLabel('Disable auto commit').check()
     await page.getByRole('button', { name: 'Refresh objectives' }).click()

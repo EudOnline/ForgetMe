@@ -6,7 +6,11 @@ import type {
   AgentProposalRecord,
   AgentRole,
   AgentThreadDetail,
-  CreateAgentObjectiveInput
+  CreateAgentObjectiveInput,
+  ObjectiveRuntimeEventRecord,
+  ObjectiveRuntimeScorecard,
+  ObjectiveRuntimeSettingsRecord,
+  UpdateObjectiveRuntimeSettingsInput
 } from '../../shared/archiveContracts'
 import { getObjectiveClient } from '../clients/objectiveClient'
 import { useI18n } from '../i18n'
@@ -25,6 +29,22 @@ function asErrorMessage(error: unknown) {
 
 function humanize(value: string) {
   return value.replaceAll('_', ' ')
+}
+
+function formatRuntimeSettingValue(value: unknown) {
+  if (typeof value === 'boolean') {
+    return value ? 'true' : 'false'
+  }
+
+  if (Array.isArray(value)) {
+    return value.join(', ')
+  }
+
+  if (value && typeof value === 'object') {
+    return JSON.stringify(value)
+  }
+
+  return String(value)
 }
 
 function objectiveRiskPillLabel(
@@ -124,6 +144,44 @@ export function ObjectiveWorkbenchPage() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [pendingActionId, setPendingActionId] = useState<string | null>(null)
+  const [runtimeScorecard, setRuntimeScorecard] = useState<ObjectiveRuntimeScorecard | null>(null)
+  const [runtimeEvents, setRuntimeEvents] = useState<ObjectiveRuntimeEventRecord[]>([])
+  const [selectedRuntimeEventId, setSelectedRuntimeEventId] = useState<string | null>(null)
+  const [runtimeSettings, setRuntimeSettings] = useState<ObjectiveRuntimeSettingsRecord | null>(null)
+  const [pendingRuntimeSettingKey, setPendingRuntimeSettingKey] = useState<string | null>(null)
+
+  const runtimeSettingOptions = useMemo(() => ([
+    {
+      key: 'disableAutoCommit' as const,
+      label: t('objectiveWorkbench.runtimeControlDisableAutoCommit')
+    },
+    {
+      key: 'forceOperatorForExternalActions' as const,
+      label: t('objectiveWorkbench.runtimeControlForceOperatorForExternalActions')
+    },
+    {
+      key: 'disableNestedDelegation' as const,
+      label: t('objectiveWorkbench.runtimeControlDisableNestedDelegation')
+    }
+  ]), [t])
+
+  const loadRuntimeOps = useCallback(async () => {
+    const [scorecard, events, settings] = await Promise.all([
+      objectiveClient.getObjectiveRuntimeScorecard(),
+      objectiveClient.listObjectiveRuntimeEvents(),
+      objectiveClient.getObjectiveRuntimeSettings()
+    ])
+    const nextEvents = [...events].sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+
+    setRuntimeScorecard(scorecard)
+    setRuntimeEvents(nextEvents)
+    setRuntimeSettings(settings)
+    setSelectedRuntimeEventId((current) => (
+      current && nextEvents.some((event) => event.eventId === current)
+        ? current
+        : nextEvents[0]?.eventId ?? null
+    ))
+  }, [objectiveClient])
 
   const loadThreadDetail = useCallback(async (threadId: string) => {
     try {
@@ -173,7 +231,10 @@ export function ObjectiveWorkbenchPage() {
     setErrorMessage(null)
 
     try {
-      await objectiveClient.refreshObjectiveTriggers()
+      await Promise.all([
+        objectiveClient.refreshObjectiveTriggers(),
+        loadRuntimeOps()
+      ])
       const nextObjectives = await objectiveClient.listAgentObjectives()
       const nextSelectedObjectiveId = preferredObjectiveId && nextObjectives.some((item) => item.objectiveId === preferredObjectiveId)
         ? preferredObjectiveId
@@ -198,7 +259,7 @@ export function ObjectiveWorkbenchPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [loadObjectiveDetail, objectiveClient, selectedObjectiveId, t])
+  }, [loadObjectiveDetail, loadRuntimeOps, objectiveClient, selectedObjectiveId, t])
 
   useEffect(() => {
     void refreshObjectives()
@@ -317,6 +378,7 @@ export function ObjectiveWorkbenchPage() {
   }, [objectiveDetail, threadDetail, visibleProposals, t])
 
   const selectedProposal = visibleProposals.find((proposal) => proposal.proposalId === activeProposalId) ?? null
+  const selectedRuntimeEvent = runtimeEvents.find((event) => event.eventId === selectedRuntimeEventId) ?? null
 
   const participantLabel = useCallback((participantId: string) => {
     if (participantId === 'operator') {
@@ -565,6 +627,35 @@ export function ObjectiveWorkbenchPage() {
     }
   }
 
+  const handleRuntimeSettingToggle = async (
+    settingKey: keyof UpdateObjectiveRuntimeSettingsInput['patch']
+  ) => {
+    if (!runtimeSettings) {
+      return
+    }
+
+    setPendingRuntimeSettingKey(settingKey)
+    setErrorMessage(null)
+    setStatusMessage(null)
+
+    try {
+      const patch = {
+        [settingKey]: !runtimeSettings[settingKey]
+      } as UpdateObjectiveRuntimeSettingsInput['patch']
+      const updated = await objectiveClient.updateObjectiveRuntimeSettings({ patch })
+
+      setRuntimeSettings(updated)
+      setStatusMessage(t('objectiveWorkbench.runtimeControlUpdated'))
+      await loadRuntimeOps()
+    } catch (error) {
+      setErrorMessage(t('objectiveWorkbench.runtimeControlUpdateFailed', {
+        message: asErrorMessage(error)
+      }))
+    } finally {
+      setPendingRuntimeSettingKey(null)
+    }
+  }
+
   return (
     <section className="fmObjectiveWorkbench">
       <header className="fmObjectiveWorkbenchHeader">
@@ -704,9 +795,112 @@ export function ObjectiveWorkbenchPage() {
               )}
             </section>
           </aside>
+
+          <section aria-label={t('objectiveWorkbench.runtimeHealthTitle')}>
+            <h2>{t('objectiveWorkbench.runtimeHealthTitle')}</h2>
+            {runtimeScorecard ? (
+              <>
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeHealthAutoCommittedLabel')}</span>
+                  {` ${runtimeScorecard.autoCommitCount}`}
+                </p>
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeHealthOperatorGatedLabel')}</span>
+                  {` ${runtimeScorecard.operatorGatedCount}`}
+                </p>
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeHealthOperatorBacklogLabel')}</span>
+                  {` ${runtimeScorecard.operatorBacklogSize}`}
+                </p>
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeHealthBlockedLabel')}</span>
+                  {` ${runtimeScorecard.blockedCount}`}
+                </p>
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeHealthVetoedLabel')}</span>
+                  {` ${runtimeScorecard.vetoCount}`}
+                </p>
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeHealthStalledLabel')}</span>
+                  {` ${runtimeScorecard.stalledObjectiveCount}`}
+                </p>
+              </>
+            ) : (
+              <p>{t('objectiveWorkbench.runtimeHealthEmpty')}</p>
+            )}
+          </section>
+
+          <section aria-label={t('objectiveWorkbench.runtimeControlsTitle')}>
+            <h2>{t('objectiveWorkbench.runtimeControlsTitle')}</h2>
+            {runtimeSettings ? (
+              <>
+                {runtimeSettingOptions.map((setting) => (
+                  <label key={setting.key} className="fmObjectiveWorkbenchField">
+                    <span>{setting.label}</span>
+                    <input
+                      aria-label={setting.label}
+                      type="checkbox"
+                      checked={runtimeSettings[setting.key]}
+                      disabled={pendingRuntimeSettingKey === setting.key}
+                      onChange={() => void handleRuntimeSettingToggle(setting.key)}
+                    />
+                  </label>
+                ))}
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeControlsUpdatedByLabel')}</span>
+                  {` ${runtimeSettings.updatedBy ?? t('objectiveWorkbench.none')}`}
+                </p>
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeControlsUpdatedAtLabel')}</span>
+                  {` ${runtimeSettings.updatedAt ?? t('objectiveWorkbench.none')}`}
+                </p>
+              </>
+            ) : (
+              <p>{t('objectiveWorkbench.runtimeControlsEmpty')}</p>
+            )}
+          </section>
         </div>
 
         <div className="fmObjectiveWorkbenchColumn">
+          <section aria-label={t('objectiveWorkbench.runtimeIncidentsTitle')}>
+            <h2>{t('objectiveWorkbench.runtimeIncidentsTitle')}</h2>
+            {runtimeEvents.length === 0 ? (
+              <p>{t('objectiveWorkbench.runtimeIncidentsEmpty')}</p>
+            ) : (
+              <>
+                <div className="fmObjectiveWorkbenchProposalList">
+                  {runtimeEvents.map((event) => (
+                    <article key={event.eventId} className="fmObjectiveWorkbenchProposalCard">
+                      <button
+                        type="button"
+                        className="fmObjectiveWorkbenchProposalSelect"
+                        aria-pressed={selectedRuntimeEventId === event.eventId}
+                        onClick={() => setSelectedRuntimeEventId(event.eventId)}
+                      >
+                        <strong>{event.eventType}</strong>
+                        <span>{event.objectiveId}</span>
+                      </button>
+                    </article>
+                  ))}
+                </div>
+                {selectedRuntimeEvent ? (
+                  <div className="fmObjectiveWorkbenchProposalCard">
+                    <p>
+                      <span>{t('objectiveWorkbench.runtimeIncidentsSelectedLabel')}</span>
+                      {` ${selectedRuntimeEvent.createdAt}`}
+                    </p>
+                    {Object.entries(selectedRuntimeEvent.payload).map(([key, value]) => (
+                      <p key={key}>
+                        <span>{key}:</span>
+                        {` ${formatRuntimeSettingValue(value)}`}
+                      </p>
+                    ))}
+                  </div>
+                ) : null}
+              </>
+            )}
+          </section>
+
           <section aria-label={t('objectiveWorkbench.timelineTitle')}>
             <h2>{t('objectiveWorkbench.timelineTitle')}</h2>
             {objectiveDetail?.threads.length && objectiveDetail.threads.length > 1 ? (
