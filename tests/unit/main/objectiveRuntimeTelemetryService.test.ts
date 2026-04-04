@@ -57,14 +57,16 @@ describe('objective runtime telemetry service', () => {
       objectiveId: completedObjective.objectiveId,
       threadId: completedThread.threadId,
       objectiveKind: completedObjective.objectiveKind,
-      initiatedBy: completedObjective.initiatedBy
+      initiatedBy: completedObjective.initiatedBy,
+      createdAt: '2026-04-04T12:00:00.000Z'
     })
-    telemetry.recordProposalCreated(autoCommittedProposal)
-    telemetry.recordProposalAutoCommitted(autoCommittedProposal)
+    telemetry.recordProposalCreated(autoCommittedProposal, '2026-04-04T12:01:00.000Z')
+    telemetry.recordProposalAutoCommitted(autoCommittedProposal, '2026-04-04T12:02:00.000Z')
     telemetry.recordObjectiveCompleted({
       objectiveId: completedObjective.objectiveId,
       threadId: completedThread.threadId,
-      roundCount: 4
+      roundCount: 4,
+      createdAt: '2026-04-04T12:03:00.000Z'
     })
 
     const gatedObjective = createObjective(db, {
@@ -95,12 +97,13 @@ describe('objective runtime telemetry service', () => {
       requiresOperatorConfirmation: true
     })
 
-    telemetry.recordProposalCreated(gatedProposal)
-    telemetry.recordProposalAwaitingOperator(gatedProposal)
+    telemetry.recordProposalCreated(gatedProposal, '2026-04-04T12:04:00.000Z')
+    telemetry.recordProposalAwaitingOperator(gatedProposal, '2026-04-04T12:05:00.000Z')
     telemetry.recordObjectiveStalled({
       objectiveId: gatedObjective.objectiveId,
       threadId: gatedThread.threadId,
-      roundCount: 2
+      roundCount: 2,
+      createdAt: '2026-04-04T12:06:00.000Z'
     })
     telemetry.recordEvent({
       objectiveId: gatedObjective.objectiveId,
