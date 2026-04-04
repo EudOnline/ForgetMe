@@ -383,6 +383,72 @@ function buildCompletedThreadDetail() {
   }
 }
 
+function buildRuntimeScorecard() {
+  return {
+    totalProposalCount: 4,
+    autoCommitCount: 2,
+    operatorGatedCount: 1,
+    vetoCount: 1,
+    blockedCount: 1,
+    totalObjectiveCount: 2,
+    stalledObjectiveCount: 1,
+    completedObjectiveCount: 1,
+    criticalGateRate: 1,
+    vetoRate: 0.25,
+    blockedRate: 0.25,
+    stalledObjectiveRate: 0.5,
+    meanRoundsToCompletion: 3.5,
+    operatorBacklogSize: 1,
+    autoCommitRateByRiskLevel: {
+      low: { total: 0, autoCommitted: 0, rate: null },
+      medium: { total: 2, autoCommitted: 2, rate: 1 },
+      high: { total: 1, autoCommitted: 0, rate: 0 },
+      critical: { total: 1, autoCommitted: 0, rate: 0 }
+    }
+  }
+}
+
+function buildRuntimeEvents() {
+  return [
+    {
+      eventId: 'runtime-event-1',
+      objectiveId: 'objective-1',
+      threadId: 'thread-main-1',
+      proposalId: 'proposal-2',
+      eventType: 'proposal_awaiting_operator',
+      payload: {
+        proposalKind: 'approve_review_item',
+        proposalRiskLevel: 'high',
+        blocker: 'Waiting for operator confirmation.'
+      },
+      createdAt: '2026-03-30T00:05:00.000Z'
+    },
+    {
+      eventId: 'runtime-event-2',
+      objectiveId: 'objective-1',
+      threadId: 'thread-main-1',
+      proposalId: 'proposal-1',
+      eventType: 'proposal_blocked',
+      payload: {
+        proposalKind: 'verify_external_claim',
+        proposalRiskLevel: 'critical',
+        blocker: 'Governance requested stronger evidence.'
+      },
+      createdAt: '2026-03-30T00:06:00.000Z'
+    }
+  ]
+}
+
+function buildRuntimeSettings() {
+  return {
+    disableAutoCommit: false,
+    forceOperatorForExternalActions: true,
+    disableNestedDelegation: false,
+    updatedAt: '2026-03-30T00:06:00.000Z',
+    updatedBy: 'operator'
+  }
+}
+
 describe('ObjectiveWorkbenchPage', () => {
   it('refreshes native objective triggers before loading the objective inbox', async () => {
     const refreshObjectiveTriggers = vi.fn().mockResolvedValue([])
@@ -516,6 +582,55 @@ describe('ObjectiveWorkbenchPage', () => {
         operatorNote: 'Operator confirmed after reviewing the checkpoint summary.'
       })
     })
+  })
+
+  it('shows runtime health, recent incidents, and persisted kill switches', async () => {
+    const getObjectiveRuntimeScorecard = vi.fn().mockResolvedValue(buildRuntimeScorecard())
+    const listObjectiveRuntimeEvents = vi.fn().mockResolvedValue(buildRuntimeEvents())
+    const getObjectiveRuntimeSettings = vi.fn().mockResolvedValue(buildRuntimeSettings())
+    const updateObjectiveRuntimeSettings = vi.fn().mockResolvedValue({
+      ...buildRuntimeSettings(),
+      disableAutoCommit: true,
+      updatedAt: '2026-03-30T00:07:00.000Z'
+    })
+
+    installArchiveApi({
+      refreshObjectiveTriggers: vi.fn().mockResolvedValue([]),
+      listAgentObjectives: vi.fn().mockResolvedValue([buildObjectiveSummary()]),
+      getAgentObjective: vi.fn().mockResolvedValue(buildObjectiveDetail()),
+      getAgentThread: vi.fn().mockResolvedValue(buildThreadDetail()),
+      getObjectiveRuntimeScorecard,
+      listObjectiveRuntimeEvents,
+      getObjectiveRuntimeSettings,
+      updateObjectiveRuntimeSettings
+    })
+
+    render(<ObjectiveWorkbenchPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Objective Workbench' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Runtime health' })).toBeInTheDocument()
+    expect(screen.getByText('Auto-committed proposals')).toBeInTheDocument()
+    expect(screen.getByText('Operator backlog')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Recent incidents' })).toBeInTheDocument()
+    expect(screen.getByText('proposal_blocked')).toBeInTheDocument()
+    expect(screen.getByText('Governance requested stronger evidence.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Runtime controls' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Disable auto commit')).toBeInTheDocument()
+    expect(screen.getByLabelText('Force operator for external actions')).toBeInTheDocument()
+    expect(screen.getByLabelText('Disable nested delegation')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Disable auto commit'))
+
+    await waitFor(() => {
+      expect(updateObjectiveRuntimeSettings).toHaveBeenCalledWith({
+        patch: {
+          disableAutoCommit: true
+        }
+      })
+    })
+    expect(getObjectiveRuntimeScorecard).toHaveBeenCalledWith()
+    expect(listObjectiveRuntimeEvents).toHaveBeenCalledWith()
+    expect(getObjectiveRuntimeSettings).toHaveBeenCalledWith()
   })
 
   it('shows proposal provenance, bounded tool policy details, and subagent lineage', async () => {

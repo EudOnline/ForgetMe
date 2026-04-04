@@ -67,4 +67,22 @@ describe('objective-only runtime contracts', () => {
     expect(source).toMatch("'await_operator'")
     expect(source).toMatch("'critical'")
   })
+
+  it('defines runtime ops contracts for scorecards, incidents, and persisted settings', () => {
+    const objectiveContractsSource = readSharedSource('src/shared/objectiveRuntimeContracts.ts')
+    const archiveContractsSource = readSharedSource('src/shared/archiveContracts.ts')
+    const schemaSource = readSharedSource('src/shared/schemas/objective.ts')
+
+    expect(objectiveContractsSource).toMatch('export type ObjectiveRuntimeScorecard =')
+    expect(objectiveContractsSource).toMatch('export type ObjectiveRuntimeEventRecord =')
+    expect(objectiveContractsSource).toMatch('export type ObjectiveRuntimeSettingsRecord =')
+    expect(objectiveContractsSource).toMatch('export type ListObjectiveRuntimeEventsInput =')
+    expect(objectiveContractsSource).toMatch('export type UpdateObjectiveRuntimeSettingsInput =')
+    expect(archiveContractsSource).toMatch('getObjectiveRuntimeScorecard')
+    expect(archiveContractsSource).toMatch('listObjectiveRuntimeEvents')
+    expect(archiveContractsSource).toMatch('getObjectiveRuntimeSettings')
+    expect(archiveContractsSource).toMatch('updateObjectiveRuntimeSettings')
+    expect(schemaSource).toMatch('listObjectiveRuntimeEventsInputSchema')
+    expect(schemaSource).toMatch('updateObjectiveRuntimeSettingsInputSchema')
+  })
 })
