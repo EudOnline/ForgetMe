@@ -5,6 +5,7 @@ import type {
   AgentVoteRecord
 } from '../../shared/objectiveRuntimeContracts'
 import type { VerificationVerdict } from '../../shared/contracts/verification'
+import { proposalNeedsOperator } from './objectiveAutonomySelectorsService'
 
 export type EvaluateProposalStatusInput = {
   proposal: AgentProposalRecord
@@ -21,7 +22,7 @@ export type EvaluateProposalStatusResult = {
 }
 
 export type EvaluateProposalGateInput = {
-  proposal: Pick<AgentProposalRecord, 'ownerRole' | 'requiresOperatorConfirmation'> & {
+  proposal: Pick<AgentProposalRecord, 'ownerRole' | 'requiresOperatorConfirmation' | 'proposalRiskLevel' | 'autonomyDecision'> & {
     allowVetoBy?: AgentProposalRecord['allowVetoBy']
   }
   votes?: Array<Pick<AgentVoteRecord, 'voterRole' | 'vote'>>
@@ -45,6 +46,7 @@ export function evaluateProposalGate(input: EvaluateProposalGateInput): Evaluate
   ))
   const hasBlockingChallenge = input.hasBlockingChallenge
     ?? messages.some((message) => message.kind === 'challenge' && message.blocking)
+  const needsOperator = proposalNeedsOperator(input.proposal)
 
   if (hasGovernanceVeto) {
     return {
@@ -76,7 +78,7 @@ export function evaluateProposalGate(input: EvaluateProposalGateInput): Evaluate
     }
   }
 
-  if (input.proposal.requiresOperatorConfirmation && ownerApproved) {
+  if (ownerApproved && needsOperator) {
     return {
       status: input.operatorConfirmed ? 'committed' : 'awaiting_operator',
       ownerApproved,

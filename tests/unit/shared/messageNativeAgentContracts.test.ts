@@ -63,6 +63,10 @@ describe('message-native agent runtime shared contracts', () => {
         recommendedTargetLabel: 'SiliconFlow / Compare'
       },
       requiresOperatorConfirmation: true,
+      proposalRiskLevel: 'high',
+      autonomyDecision: 'auto_commit_with_audit',
+      riskReasons: ['reversible_local_state_change'],
+      confidenceScore: 0.88,
       artifactRefs: [
         {
           kind: 'compare_session',
@@ -161,6 +165,10 @@ describe('message-native agent runtime shared contracts', () => {
       status: 'awaiting_operator',
       requiredApprovals: ['workspace'],
       allowVetoBy: ['governance'],
+      proposalRiskLevel: 'critical',
+      autonomyDecision: 'await_operator',
+      riskReasons: ['public_distribution_boundary'],
+      confidenceScore: 0.92,
       requiresOperatorConfirmation: true,
       toolPolicyId: 'tool-policy-web-1',
       budget: {
@@ -188,6 +196,10 @@ describe('message-native agent runtime shared contracts', () => {
     }
 
     expect(proposal.proposalKind).toBe('verify_external_claim')
+    expect(proposal.proposalRiskLevel).toBe('critical')
+    expect(proposal.autonomyDecision).toBe('await_operator')
+    expect(proposal.riskReasons).toContain('public_distribution_boundary')
+    expect(proposal.confidenceScore).toBe(0.92)
     expect(checkpoint.checkpointKind).toBe('proposal_raised')
 
     expectTypeOf<AgentSkillPackId>().toEqualTypeOf<

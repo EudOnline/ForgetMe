@@ -80,6 +80,26 @@ export const agentProposalKindSchema = z.enum([
   'respond_to_user'
 ])
 
+export const agentProposalRiskLevelSchema = z.enum([
+  'low',
+  'medium',
+  'high',
+  'critical'
+])
+
+export const agentProposalAutonomyDecisionSchema = z.enum([
+  'auto_commit',
+  'auto_commit_with_audit',
+  'await_operator'
+])
+
+export const verificationVerdictSchema = z.enum([
+  'supported',
+  'contradicted',
+  'mixed',
+  'insufficient'
+])
+
 export const agentCheckpointKindSchema = z.enum([
   'goal_accepted',
   'participants_invited',
@@ -129,6 +149,27 @@ export const agentExecutionBudgetSchema = z.object({
   timeoutMs: z.number().int().positive()
 })
 
+export const agentObjectiveRecordSchema = z.object({
+  objectiveId: z.string().min(1),
+  title: z.string().min(1),
+  objectiveKind: agentObjectiveKindSchema,
+  status: agentObjectiveStatusSchema,
+  prompt: z.string().min(1),
+  initiatedBy: agentObjectiveInitiatorSchema,
+  ownerRole: agentRoleSchema,
+  mainThreadId: z.string().min(1),
+  riskLevel: agentObjectiveRiskLevelSchema,
+  budget: agentExecutionBudgetSchema.nullable(),
+  requiresOperatorInput: z.boolean(),
+  awaitingOperatorCount: z.number().int().min(0).optional(),
+  blockedCount: z.number().int().min(0).optional(),
+  vetoedCount: z.number().int().min(0).optional(),
+  criticalProposalCount: z.number().int().min(0).optional(),
+  latestBlocker: z.string().min(1).nullable().optional(),
+  createdAt: z.string().min(1),
+  updatedAt: z.string().min(1)
+})
+
 export const createAgentObjectiveInputSchema = z.object({
   title: z.string().min(1),
   objectiveKind: agentObjectiveKindSchema,
@@ -160,6 +201,10 @@ const agentProposalBaseSchema = z.object({
   ownerRole: agentRoleSchema,
   requiredApprovals: z.array(agentRoleSchema).min(1).optional(),
   allowVetoBy: z.array(agentRoleSchema).min(1).optional(),
+  proposalRiskLevel: agentProposalRiskLevelSchema.optional(),
+  autonomyDecision: agentProposalAutonomyDecisionSchema.optional(),
+  riskReasons: z.array(z.string().min(1)).optional(),
+  confidenceScore: z.number().min(0).max(1).nullable().optional(),
   requiresOperatorConfirmation: z.boolean().optional(),
   derivedFromMessageIds: z.array(z.string().min(1)).optional(),
   artifactRefs: z.array(agentArtifactRefSchema).optional()
@@ -237,6 +282,13 @@ export const agentCheckpointSummarySchema = z.object({
   relatedMessageId: z.string().min(1).nullable().optional(),
   relatedProposalId: z.string().min(1).nullable().optional(),
   artifactRefs: z.array(agentArtifactRefSchema).optional().default([]),
+  metadata: z.object({
+    verificationVerdict: verificationVerdictSchema.optional(),
+    supportCount: z.number().int().nonnegative().optional(),
+    contradictionCount: z.number().int().nonnegative().optional(),
+    highReliabilitySupportCount: z.number().int().nonnegative().optional(),
+    highReliabilityContradictionCount: z.number().int().nonnegative().optional()
+  }).passthrough().optional(),
   createdAt: z.string().min(1)
 })
 

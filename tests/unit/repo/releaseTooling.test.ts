@@ -25,6 +25,7 @@ describe('release tooling', () => {
     expect(packageJson.scripts?.['release:doctor']).toContain('scripts/check-release-env.mjs')
     expect(packageJson.scripts?.['dist:release']).toContain('scripts/check-release-env.mjs')
     expect(packageJson.scripts?.['verify:release']).toContain('npm run lint')
+    expect(packageJson.scripts?.['verify:release']).toContain('npm run test:e2e:objective')
     expect(packageJson.scripts?.['verify:release']).toContain('npm run pack')
     expect(packageJson.devDependencies?.['electron-builder']).toBeTruthy()
     expect(packageJson.devDependencies?.eslint).toBeTruthy()

@@ -2,12 +2,15 @@ import crypto from 'node:crypto'
 import type {
   AgentArtifactRef,
   AgentCheckpointKind,
+  AgentCheckpointMetadata,
   AgentCheckpointRecord,
   AgentExecutionBudget,
   AgentMessageKind,
   AgentMessageRecordV2,
   AgentProposalKind,
+  AgentProposalAutonomyDecision,
   AgentProposalRecord,
+  AgentProposalRiskLevel,
   AgentProposalStatus,
   AgentSubagentRecord,
   AgentSubagentStatus,
@@ -60,6 +63,10 @@ export type CreateProposalInput = {
   status?: AgentProposalStatus
   requiredApprovals?: AgentRole[]
   allowVetoBy?: AgentRole[]
+  proposalRiskLevel?: AgentProposalRiskLevel
+  autonomyDecision?: AgentProposalAutonomyDecision
+  riskReasons?: string[]
+  confidenceScore?: number | null
   requiresOperatorConfirmation?: boolean
   toolPolicyId?: string | null
   budget?: AgentExecutionBudget | null
@@ -92,6 +99,7 @@ export type CreateCheckpointInput = {
   relatedMessageId?: string | null
   relatedProposalId?: string | null
   artifactRefs?: AgentArtifactRef[]
+  metadata?: AgentCheckpointMetadata
   createdAt?: string
 }
 
@@ -212,6 +220,10 @@ export function createProposal(db: ArchiveDatabase, input: CreateProposalInput):
       status,
       required_approvals_json,
       allow_veto_by_json,
+      proposal_risk_level,
+      autonomy_decision,
+      risk_reasons_json,
+      confidence_score,
       requires_operator_confirmation,
       tool_policy_id,
       budget_json,
@@ -220,7 +232,7 @@ export function createProposal(db: ArchiveDatabase, input: CreateProposalInput):
       created_at,
       updated_at,
       committed_at
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     proposalId,
     input.objectiveId,
@@ -232,6 +244,10 @@ export function createProposal(db: ArchiveDatabase, input: CreateProposalInput):
     input.status ?? 'open',
     serializeJson(input.requiredApprovals ?? []),
     serializeJson(input.allowVetoBy ?? []),
+    input.proposalRiskLevel ?? 'medium',
+    input.autonomyDecision ?? 'await_operator',
+    serializeJson(input.riskReasons ?? []),
+    input.confidenceScore ?? null,
     input.requiresOperatorConfirmation ? 1 : 0,
     input.toolPolicyId ?? null,
     input.budget ? serializeJson(input.budget) : null,
@@ -328,8 +344,9 @@ export function createCheckpoint(db: ArchiveDatabase, input: CreateCheckpointInp
       related_message_id,
       related_proposal_id,
       artifact_refs_json,
+      metadata_json,
       created_at
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     checkpointId,
     input.objectiveId,
@@ -340,6 +357,7 @@ export function createCheckpoint(db: ArchiveDatabase, input: CreateCheckpointInp
     input.relatedMessageId ?? null,
     input.relatedProposalId ?? null,
     serializeJson(input.artifactRefs ?? []),
+    serializeJson(input.metadata ?? {}),
     createdAt
   )
 

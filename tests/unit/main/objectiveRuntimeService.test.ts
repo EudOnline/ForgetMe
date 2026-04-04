@@ -7,7 +7,9 @@ import { runMemoryWorkspaceCompare } from '../../../src/main/services/memoryWork
 import { createFacilitatorAgentService } from '../../../src/main/services/agents/facilitatorAgentService'
 import { createRoleAgentRegistryService } from '../../../src/main/services/agents/roleAgentRegistryService'
 import { createExternalVerificationBrokerService } from '../../../src/main/services/externalVerificationBrokerService'
+import { createObjectiveRuntimeConfigService } from '../../../src/main/services/objectiveRuntimeConfigService'
 import { createObjectiveRuntimeService } from '../../../src/main/services/objectiveRuntimeService'
+import { createObjectiveRuntimeTelemetryService } from '../../../src/main/services/objectiveRuntimeTelemetryService'
 import { createSubagentRegistryService } from '../../../src/main/services/subagentRegistryService'
 import { seedMemoryWorkspaceScenario } from './helpers/memoryWorkspaceScenario'
 
@@ -471,9 +473,62 @@ describe('objective runtime service', () => {
     expect(detail?.proposals).toEqual(expect.arrayContaining([
       expect.objectContaining({
         proposalKind: 'approve_safe_group',
+        proposalRiskLevel: 'high',
+        autonomyDecision: 'auto_commit_with_audit',
+        riskReasons: expect.arrayContaining(['reversible_local_state_change']),
         payload: {
           groupKey: 'group-safe-42'
         }
+      })
+    ]))
+
+    db.close()
+  })
+
+  it('marks public publication proposals as critical and operator-gated in runtime detail', async () => {
+    const db = setupDatabase()
+    const runtime = createObjectiveRuntimeService({
+      db,
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => [],
+        openSourcePage: async ({ url }) => ({
+          url,
+          title: null,
+          publishedAt: null,
+          excerpt: ''
+        })
+      }),
+      subagentRegistry: createSubagentRegistryService()
+    })
+
+    const started = await runtime.startObjective({
+      title: 'Publish a reviewed draft publicly',
+      objectiveKind: 'publication',
+      prompt: 'Publish this reviewed draft to a public share destination.',
+      initiatedBy: 'operator'
+    })
+    runtime.createProposal({
+      objectiveId: started.objective.objectiveId,
+      threadId: started.mainThread.threadId,
+      proposedByParticipantId: 'workspace',
+      proposalKind: 'publish_draft',
+      payload: {
+        destination: 'public_share'
+      },
+      ownerRole: 'workspace',
+      requiredApprovals: ['workspace']
+    })
+    const detail = runtime.getObjectiveDetail({
+      objectiveId: started.objective.objectiveId
+    })
+
+    expect(detail?.proposals).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        proposalKind: 'publish_draft',
+        proposalRiskLevel: 'critical',
+        autonomyDecision: 'await_operator',
+        riskReasons: expect.arrayContaining(['public_distribution_boundary'])
       })
     ]))
 
@@ -635,7 +690,9 @@ describe('objective runtime service', () => {
           recommendedCompareRunId: session?.recommendation?.recommendedCompareRunId,
           recommendedTargetLabel: 'SiliconFlow / Compare'
         },
-        requiresOperatorConfirmation: true
+        proposalRiskLevel: 'medium',
+        autonomyDecision: 'auto_commit_with_audit',
+        requiresOperatorConfirmation: false
       })
     ]))
     expect(objectives.filter((objective) => objective.title === `Review compare recommendation ${session?.compareSessionId}`)).toHaveLength(1)
@@ -1056,11 +1113,11 @@ describe('objective runtime service', () => {
         'participants_invited',
         'proposal_raised',
         'subagent_spawned',
-        'external_verification_completed',
-        'awaiting_operator_confirmation'
+        'subagent_plan_recorded',
+        'external_verification_completed'
       ])
     )
-    expect(latestProposal.status).toBe('awaiting_operator')
+    expect(latestProposal.status).toBe('committable')
     expect(toolExecutions.map((entry) => entry.toolName)).toEqual([
       'search_web',
       'open_source_page',
@@ -1138,9 +1195,13 @@ describe('objective runtime service', () => {
       operatorNote: 'Confirmed after reviewing the proposal summary.'
     })
 
-    expect(approved?.status).toBe('awaiting_operator')
-    expect(detailAfterApprove?.status).toBe('awaiting_operator')
-    expect(threadAfterApprove?.status).toBe('waiting')
+    expect(approved?.status).toBe('committed')
+    expect(detailAfterApprove?.proposals.map((candidate) => candidate.status)).toEqual(
+      expect.arrayContaining(['committed'])
+    )
+    expect(threadAfterApprove?.proposals.map((candidate) => candidate.status)).toEqual(
+      expect.arrayContaining(['committed'])
+    )
     expect(confirmed?.status).toBe('committed')
 
     const blockedProposal = runtime.createProposal({
@@ -1165,6 +1226,203 @@ describe('objective runtime service', () => {
     expect(detail?.proposals.map((candidate) => candidate.status)).toEqual(
       expect.arrayContaining(['committed', 'blocked'])
     )
+
+    db.close()
+  })
+
+  it('records telemetry events and scorecard metrics for auto-committed and operator-gated proposals', async () => {
+    const db = setupDatabase()
+    const runtimeTelemetry = createObjectiveRuntimeTelemetryService({ db })
+    const runtime = createObjectiveRuntimeService({
+      db,
+      runtimeTelemetry,
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => [],
+        openSourcePage: async ({ url }) => ({
+          url,
+          title: null,
+          publishedAt: null,
+          excerpt: ''
+        })
+      }),
+      subagentRegistry: createSubagentRegistryService()
+    })
+
+    const started = await runtime.startObjective({
+      title: 'Track runtime telemetry for proposal lifecycle',
+      objectiveKind: 'user_response',
+      prompt: 'Open a minimal objective so proposal events are persisted.',
+      initiatedBy: 'operator'
+    })
+
+    const autoCommittedProposal = runtime.createProposal({
+      objectiveId: started.objective.objectiveId,
+      threadId: started.mainThread.threadId,
+      proposedByParticipantId: 'workspace',
+      proposalKind: 'respond_to_user',
+      payload: {
+        responseDraft: 'Answer with the verified local summary.'
+      },
+      ownerRole: 'workspace'
+    })
+    const gatedProposal = runtime.createProposal({
+      objectiveId: started.objective.objectiveId,
+      threadId: started.mainThread.threadId,
+      proposedByParticipantId: 'workspace',
+      proposalKind: 'publish_draft',
+      payload: {
+        destination: 'public_share'
+      },
+      ownerRole: 'workspace'
+    })
+
+    await runtime.respondToAgentProposal({
+      proposalId: autoCommittedProposal.proposalId,
+      responderRole: 'workspace',
+      response: 'approve',
+      comment: 'Owner approved the user response draft.'
+    })
+    await runtime.respondToAgentProposal({
+      proposalId: gatedProposal.proposalId,
+      responderRole: 'workspace',
+      response: 'approve',
+      comment: 'Owner approved the publication draft.'
+    })
+
+    const events = runtimeTelemetry.listEvents({
+      objectiveId: started.objective.objectiveId
+    })
+    const scorecard = runtimeTelemetry.getScorecard()
+
+    expect(events.map((event) => event.eventType)).toEqual(expect.arrayContaining([
+      'objective_started',
+      'proposal_created',
+      'proposal_auto_committed',
+      'proposal_awaiting_operator'
+    ]))
+    expect(scorecard.totalProposalCount).toBeGreaterThanOrEqual(2)
+    expect(scorecard.autoCommitCount).toBeGreaterThanOrEqual(1)
+    expect(scorecard.operatorGatedCount).toBeGreaterThanOrEqual(1)
+    expect(scorecard.operatorBacklogSize).toBeGreaterThanOrEqual(1)
+    expect(scorecard.criticalGateRate).toBe(1)
+    expect(scorecard.autoCommitRateByRiskLevel.medium.autoCommitted).toBeGreaterThanOrEqual(1)
+
+    db.close()
+  })
+
+  it('can disable global auto-commit while still allowing explicit operator confirmation', async () => {
+    const db = setupDatabase()
+    const runtime = createObjectiveRuntimeService({
+      db,
+      runtimeConfig: createObjectiveRuntimeConfigService({
+        overrides: {
+          disableAutoCommit: true
+        }
+      }),
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => [],
+        openSourcePage: async ({ url }) => ({
+          url,
+          title: null,
+          publishedAt: null,
+          excerpt: ''
+        })
+      }),
+      subagentRegistry: createSubagentRegistryService()
+    })
+
+    const started = await runtime.startObjective({
+      title: 'Require operator confirmation for all proposal commits',
+      objectiveKind: 'user_response',
+      prompt: 'Use the runtime kill switch to pause all commits.',
+      initiatedBy: 'operator'
+    })
+
+    const proposal = runtime.createProposal({
+      objectiveId: started.objective.objectiveId,
+      threadId: started.mainThread.threadId,
+      proposedByParticipantId: 'workspace',
+      proposalKind: 'respond_to_user',
+      payload: {
+        responseDraft: 'Hold this until the operator confirms.'
+      },
+      ownerRole: 'workspace'
+    })
+
+    const approved = await runtime.respondToAgentProposal({
+      proposalId: proposal.proposalId,
+      responderRole: 'workspace',
+      response: 'approve',
+      comment: 'Owner approved the response draft.'
+    })
+    const confirmed = await runtime.confirmAgentProposal({
+      proposalId: proposal.proposalId,
+      decision: 'confirm',
+      operatorNote: 'Confirmed with the kill switch still enabled.'
+    })
+
+    expect(proposal.requiresOperatorConfirmation).toBe(true)
+    expect(proposal.autonomyDecision).toBe('await_operator')
+    expect(approved?.status).toBe('awaiting_operator')
+    expect(confirmed?.status).toBe('committed')
+
+    db.close()
+  })
+
+  it('can force operator confirmation for external actions without lowering autonomy elsewhere', async () => {
+    const db = setupDatabase()
+    const runtime = createObjectiveRuntimeService({
+      db,
+      runtimeConfig: createObjectiveRuntimeConfigService({
+        overrides: {
+          forceOperatorForExternalActions: true
+        }
+      }),
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => [],
+        openSourcePage: async ({ url }) => ({
+          url,
+          title: null,
+          publishedAt: null,
+          excerpt: ''
+        })
+      }),
+      subagentRegistry: createSubagentRegistryService()
+    })
+
+    const started = await runtime.startObjective({
+      title: 'Gate external proposals only',
+      objectiveKind: 'evidence_investigation',
+      prompt: 'Force operator confirmation for external verification.',
+      initiatedBy: 'operator'
+    })
+
+    const proposal = runtime.createProposal({
+      objectiveId: started.objective.objectiveId,
+      threadId: started.mainThread.threadId,
+      proposedByParticipantId: 'workspace',
+      proposalKind: 'verify_external_claim',
+      payload: {
+        claim: 'The source confirms the announcement date.',
+        query: 'official announcement date'
+      },
+      ownerRole: 'workspace'
+    })
+
+    const approved = await runtime.respondToAgentProposal({
+      proposalId: proposal.proposalId,
+      responderRole: 'workspace',
+      response: 'approve',
+      comment: 'Owner approved the external verification step.'
+    })
+
+    expect(proposal.requiresOperatorConfirmation).toBe(true)
+    expect(proposal.autonomyDecision).toBe('await_operator')
+    expect(proposal.riskReasons).toContain('runtime_force_operator_for_external_action')
+    expect(approved?.status).toBe('awaiting_operator')
 
     db.close()
   })
@@ -1237,7 +1495,7 @@ describe('objective runtime service', () => {
       objectiveId: started.objective.objectiveId
     })
 
-    expect(approved?.status).toBe('awaiting_operator')
+    expect(approved?.status).toBe('committed')
     expect(confirmed?.status).toBe('committed')
     expect(detail?.subagents).toHaveLength(1)
     expect(detail?.subagents[0]?.specialization).toBe('web-verifier')
@@ -1366,7 +1624,7 @@ describe('objective runtime service', () => {
       toolPolicyId: string | null
     }>
 
-    expect(approved?.status).toBe('awaiting_operator')
+    expect(approved?.status).toBe('committed')
     expect(confirmed?.status).toBe('committed')
     expect(detail?.subagents).toHaveLength(1)
     expect(detail?.subagents[0]?.specialization).toBe('evidence-checker')
@@ -2452,6 +2710,86 @@ describe('objective runtime service', () => {
       response: 'approve',
       comment: 'Owner approved an over-depth nested subagent.'
     })).rejects.toThrow(/delegation depth/i)
+
+    db.close()
+  })
+
+  it('can disable nested delegation before a child subagent is spawned', async () => {
+    const db = setupDatabase()
+    const createdAt = '2026-03-30T00:00:00.000Z'
+
+    db.prepare('insert into import_batches (id, source_label, status, created_at) values (?, ?, ?, ?)').run('b-1', 'nested-delegation-kill-switch', 'ready', createdAt)
+    db.prepare('insert into vault_files (id, batch_id, source_path, frozen_path, file_name, extension, mime_type, file_size, sha256, duplicate_class, parser_status, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run('f-1', 'b-1', '/tmp/local-record.jpg', '/tmp/local-record.jpg', 'local-record.jpg', '.jpg', 'image/jpeg', 1, 'hash-1', 'unique', 'parsed', createdAt)
+    db.prepare(`insert into enrichment_jobs (
+      id, file_id, enhancer_type, provider, model, status, attempt_count, input_hash,
+      started_at, finished_at, error_message, usage_json, created_at, updated_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run('job-1', 'f-1', 'document_ocr', 'siliconflow', 'model-a', 'completed', 1, null, createdAt, createdAt, null, '{}', createdAt, createdAt)
+    db.prepare('insert into enrichment_artifacts (id, job_id, artifact_type, payload_json, created_at) values (?, ?, ?, ?, ?)').run('ea-1', 'job-1', 'ocr_raw_text', '{"rawText":"本地记录注明日期 2026-03-30"}', createdAt)
+    db.prepare('insert into enrichment_artifacts (id, job_id, artifact_type, payload_json, created_at) values (?, ?, ?, ?, ?)').run('ea-2', 'job-1', 'ocr_layout_blocks', '{"layoutBlocks":[{"page":1,"text":"本地记录注明日期 2026-03-30"}]}', createdAt)
+
+    const runtime = createObjectiveRuntimeService({
+      db,
+      runtimeConfig: createObjectiveRuntimeConfigService({
+        overrides: {
+          disableNestedDelegation: true
+        }
+      }),
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => [
+          {
+            title: 'Official announcement result',
+            url: 'https://records.example.gov/releases/announcement',
+            snippet: 'The official record lists an announcement date of March 30, 2026.',
+            publishedAt: null
+          }
+        ],
+        openSourcePage: async ({ url }) => ({
+          url,
+          title: 'Official announcement record',
+          publishedAt: '2026-03-30T00:00:00.000Z',
+          excerpt: 'The official record confirms March 30, 2026 as the announcement date.'
+        })
+      }),
+      subagentRegistry: createSubagentRegistryService()
+    })
+
+    const started = await runtime.startObjective({
+      title: 'Block nested delegation with a kill switch',
+      objectiveKind: 'evidence_investigation',
+      prompt: 'Let the evidence checker try to delegate, but stop it before the child spawn.',
+      initiatedBy: 'operator'
+    })
+
+    const proposal = runtime.createProposal({
+      objectiveId: started.objective.objectiveId,
+      threadId: started.mainThread.threadId,
+      proposedByParticipantId: 'workspace',
+      proposalKind: 'spawn_subagent',
+      payload: {
+        specialization: 'evidence-checker',
+        skillPackIds: ['evidence-checker'],
+        expectedOutputSchema: 'localEvidenceCheckSchema',
+        fileId: 'f-1',
+        crossCheckClaim: 'The source confirms the announcement date.',
+        crossCheckQuery: 'official announcement date'
+      },
+      ownerRole: 'workspace',
+      requiresOperatorConfirmation: false,
+      toolPolicyId: 'local-evidence-policy',
+      budget: {
+        maxRounds: 2,
+        maxToolCalls: 2,
+        timeoutMs: 30_000
+      }
+    })
+
+    await expect(runtime.respondToAgentProposal({
+      proposalId: proposal.proposalId,
+      responderRole: 'workspace',
+      response: 'approve',
+      comment: 'Owner approved the parent evidence checker.'
+    })).rejects.toThrow(/nested delegation is disabled by runtime config/i)
 
     db.close()
   })

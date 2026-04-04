@@ -41,6 +41,40 @@ export function getObjectiveRow(db: ArchiveDatabase, objectiveId: string) {
       risk_level as riskLevel,
       budget_json as budgetJson,
       requires_operator_input as requiresOperatorInput,
+      (
+        select count(*)
+        from agent_checkpoints checkpoints
+        where checkpoints.objective_id = agent_objectives.id
+          and checkpoints.checkpoint_kind = 'awaiting_operator_confirmation'
+      ) as awaitingOperatorCount,
+      (
+        select count(*)
+        from agent_checkpoints checkpoints
+        where checkpoints.objective_id = agent_objectives.id
+          and checkpoints.checkpoint_kind in ('blocked', 'veto_issued')
+      ) as blockedCount,
+      (
+        select count(*)
+        from agent_checkpoints checkpoints
+        where checkpoints.objective_id = agent_objectives.id
+          and checkpoints.checkpoint_kind = 'veto_issued'
+      ) as vetoedCount,
+      (
+        select count(*)
+        from agent_proposals proposals
+        where proposals.objective_id = agent_objectives.id
+          and proposals.proposal_risk_level = 'critical'
+      ) as criticalProposalCount,
+      (
+        select
+          'Blocked by ' || votes.voter_role || ': '
+          || coalesce(votes.comment, 'No rationale provided.')
+        from agent_votes votes
+        where votes.objective_id = agent_objectives.id
+          and votes.vote in ('veto', 'reject')
+        order by votes.created_at desc, votes.id desc
+        limit 1
+      ) as latestBlocker,
       created_at as createdAt,
       updated_at as updatedAt
     from agent_objectives
@@ -84,6 +118,40 @@ export function listObjectiveRows(db: ArchiveDatabase, input?: {
       risk_level as riskLevel,
       budget_json as budgetJson,
       requires_operator_input as requiresOperatorInput,
+      (
+        select count(*)
+        from agent_checkpoints checkpoints
+        where checkpoints.objective_id = agent_objectives.id
+          and checkpoints.checkpoint_kind = 'awaiting_operator_confirmation'
+      ) as awaitingOperatorCount,
+      (
+        select count(*)
+        from agent_checkpoints checkpoints
+        where checkpoints.objective_id = agent_objectives.id
+          and checkpoints.checkpoint_kind in ('blocked', 'veto_issued')
+      ) as blockedCount,
+      (
+        select count(*)
+        from agent_checkpoints checkpoints
+        where checkpoints.objective_id = agent_objectives.id
+          and checkpoints.checkpoint_kind = 'veto_issued'
+      ) as vetoedCount,
+      (
+        select count(*)
+        from agent_proposals proposals
+        where proposals.objective_id = agent_objectives.id
+          and proposals.proposal_risk_level = 'critical'
+      ) as criticalProposalCount,
+      (
+        select
+          'Blocked by ' || votes.voter_role || ': '
+          || coalesce(votes.comment, 'No rationale provided.')
+        from agent_votes votes
+        where votes.objective_id = agent_objectives.id
+          and votes.vote in ('veto', 'reject')
+        order by votes.created_at desc, votes.id desc
+        limit 1
+      ) as latestBlocker,
       created_at as createdAt,
       updated_at as updatedAt
     from agent_objectives
@@ -134,6 +202,10 @@ export function getProposalRow(db: ArchiveDatabase, proposalId: string) {
       status,
       required_approvals_json as requiredApprovalsJson,
       allow_veto_by_json as allowVetoByJson,
+      proposal_risk_level as proposalRiskLevel,
+      autonomy_decision as autonomyDecision,
+      risk_reasons_json as riskReasonsJson,
+      confidence_score as confidenceScore,
       requires_operator_confirmation as requiresOperatorConfirmation,
       tool_policy_id as toolPolicyId,
       budget_json as budgetJson,
@@ -176,6 +248,7 @@ export function getCheckpointRow(db: ArchiveDatabase, checkpointId: string) {
       related_message_id as relatedMessageId,
       related_proposal_id as relatedProposalId,
       artifact_refs_json as artifactRefsJson,
+      metadata_json as metadataJson,
       created_at as createdAt
     from agent_checkpoints
     where id = ?`
@@ -317,6 +390,10 @@ export function listProposalRowsByObjective(db: ArchiveDatabase, objectiveId: st
       status,
       required_approvals_json as requiredApprovalsJson,
       allow_veto_by_json as allowVetoByJson,
+      proposal_risk_level as proposalRiskLevel,
+      autonomy_decision as autonomyDecision,
+      risk_reasons_json as riskReasonsJson,
+      confidence_score as confidenceScore,
       requires_operator_confirmation as requiresOperatorConfirmation,
       tool_policy_id as toolPolicyId,
       budget_json as budgetJson,
@@ -344,6 +421,10 @@ export function listProposalRowsByThread(db: ArchiveDatabase, threadId: string) 
       status,
       required_approvals_json as requiredApprovalsJson,
       allow_veto_by_json as allowVetoByJson,
+      proposal_risk_level as proposalRiskLevel,
+      autonomy_decision as autonomyDecision,
+      risk_reasons_json as riskReasonsJson,
+      confidence_score as confidenceScore,
       requires_operator_confirmation as requiresOperatorConfirmation,
       tool_policy_id as toolPolicyId,
       budget_json as budgetJson,
@@ -388,6 +469,7 @@ export function listCheckpointRowsByObjective(db: ArchiveDatabase, objectiveId: 
       related_message_id as relatedMessageId,
       related_proposal_id as relatedProposalId,
       artifact_refs_json as artifactRefsJson,
+      metadata_json as metadataJson,
       created_at as createdAt
     from agent_checkpoints
     where objective_id = ?
@@ -407,6 +489,7 @@ export function listCheckpointRowsByThread(db: ArchiveDatabase, threadId: string
       related_message_id as relatedMessageId,
       related_proposal_id as relatedProposalId,
       artifact_refs_json as artifactRefsJson,
+      metadata_json as metadataJson,
       created_at as createdAt
     from agent_checkpoints
     where thread_id = ?

@@ -338,9 +338,14 @@ The gateway also forwards objective/runtime metadata so outbound model traffic s
 
 ### Message-Native Objective Runtime Verification
 
+Reference docs:
+
+- `docs/agent-runtime-risk-matrix.md`
+- `docs/agent-runtime-operator-playbook.md`
+
 ```bash
 npm run test:typecheck
-npm run test:unit -- tests/unit/main/facilitatorAgentService.test.ts tests/unit/main/objectiveRuntimeService.test.ts tests/unit/main/objectiveModule.test.ts tests/unit/main/objectiveRuntimeLegacyImports.test.ts tests/unit/main/agentIpc.test.ts tests/unit/main/bootstrap/registerIpc.test.ts tests/unit/preload/index.test.ts tests/unit/renderer/archiveApi.test.ts tests/unit/renderer/objectiveWorkbenchPage.test.tsx tests/unit/repo/engineeringConvergenceStructure.test.ts
+npm run test:unit -- tests/unit/main/objectiveAutonomySelectorsService.test.ts tests/unit/main/agentProposalGateService.test.ts tests/unit/main/objectiveRuntimeTelemetryService.test.ts tests/unit/main/objectiveRuntimeService.test.ts tests/unit/main/agentIpc.test.ts tests/unit/renderer/objectiveWorkbenchPage.test.tsx tests/unit/repo/objectiveRuntimeCleanup.test.ts
 npm run test:e2e:objective
 npm run build
 ```
@@ -351,8 +356,7 @@ npm run build
 npm run lint
 npm run test:typecheck
 npm run test:unit
-npm run test:e2e -- tests/e2e/import-batch.spec.ts tests/e2e/memory-workspace-flow.spec.ts tests/e2e/review-workbench-single-item-flow.spec.ts tests/e2e/objective-workbench-operator-confirmation-flow.spec.ts
-npm run build
+npm run verify:release
 ```
 
 ### Current Operational Note

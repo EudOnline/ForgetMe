@@ -12,6 +12,8 @@ import { createFacilitatorAgentService } from '../../../services/agents/facilita
 import { createRoleAgentRegistryService } from '../../../services/agents/roleAgentRegistryService'
 import { createExternalVerificationBrokerService } from '../../../services/externalVerificationBrokerService'
 import { createExternalWebSearchService } from '../../../services/externalWebSearchService'
+import { createObjectiveRuntimeConfigService } from '../../../services/objectiveRuntimeConfigService'
+import { createObjectiveRuntimeTelemetryService } from '../../../services/objectiveRuntimeTelemetryService'
 import { createSubagentRegistryService } from '../../../services/subagentRegistryService'
 import { openDatabase, runMigrations } from '../../../services/db'
 import type {
@@ -54,6 +56,8 @@ function createObjectiveRuntimeSession(
   const db = openArchiveDatabase(appPaths)
   const runtime = createObjectiveRuntimeService({
     db,
+    runtimeTelemetry: createObjectiveRuntimeTelemetryService({ db }),
+    runtimeConfig: createObjectiveRuntimeConfigService(),
     ...createObjectiveRuntimeDefaults(),
     ...overrides
   })

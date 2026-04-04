@@ -1,6 +1,7 @@
 import type {
   createExternalVerificationBrokerService
 } from './externalVerificationBrokerService'
+import { createObjectiveRuntimeConfigService } from './objectiveRuntimeConfigService'
 import { createObjectiveSubagentDelegationService } from './objectiveSubagentDelegationService'
 import { createObjectiveSubagentLifecycleService } from './objectiveSubagentLifecycleService'
 import {
@@ -47,6 +48,7 @@ export type ObjectiveSubagentExecutionDependencies = {
   db: ArchiveDatabase
   externalVerificationBroker: ExternalVerificationBrokerService
   subagentRegistry: SubagentRegistryService
+  runtimeConfig?: ReturnType<typeof createObjectiveRuntimeConfigService>
   runMemoryWorkspaceCompare?: RunMemoryWorkspaceCompareService
   askMemoryWorkspacePersisted?: AskMemoryWorkspacePersistedService
   listAgentPolicyVersions?: ListAgentPolicyVersionsService
@@ -74,6 +76,9 @@ export type ObjectiveSubagentExecutionDependencies = {
 
 export function createObjectiveSubagentExecutionService(dependencies: ObjectiveSubagentExecutionDependencies) {
   const { db } = dependencies
+  const runtimeConfig = dependencies.runtimeConfig ?? createObjectiveRuntimeConfigService({
+    env: {}
+  })
   let executeCommittedSpawnSubagentProposalImpl: ((proposal: AgentProposalRecord) => Promise<unknown>) | null = null
 
   function asErrorMessage(error: unknown) {
@@ -251,6 +256,10 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
 
     try {
       const delegateSubagentFromRunner: ActiveSubagentExecutionContext['delegateSubagentFromRunner'] = async (delegateInput) => {
+        if (runtimeConfig.getConfig().disableNestedDelegation) {
+          throw new Error('Nested delegation is disabled by runtime config.')
+        }
+
         if (!executionPlan.delegationAllowed) {
           throw new Error(`Execution plan does not allow nested delegation for ${input.specialization}.`)
         }
@@ -273,6 +282,7 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
         checkpointKind,
         checkpointTitle,
         checkpointSummary,
+        checkpointMetadata,
         ...extra
       } = outcome
 
@@ -285,7 +295,8 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
           refs,
           checkpointKind,
           checkpointTitle,
-          checkpointSummary
+          checkpointSummary,
+          checkpointMetadata
         }),
         ...(extra as unknown as TExtra)
       }

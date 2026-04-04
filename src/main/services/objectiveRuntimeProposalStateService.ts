@@ -1,5 +1,8 @@
 import { buildProposalCheckpoint } from './agentCheckpointService'
 import { evaluateProposalGate } from './agentProposalGateService'
+import { createObjectiveRuntimeConfigService } from './objectiveRuntimeConfigService'
+import { createObjectiveRuntimeTelemetryService } from './objectiveRuntimeTelemetryService'
+import { assessProposalRisk } from './proposalRiskAssessmentService'
 import {
   createCheckpoint,
   createProposal,
@@ -24,11 +27,41 @@ export type ObjectiveProposalRuntimeState = {
 
 export function createObjectiveRuntimeProposalStateService(dependencies: {
   db: ArchiveDatabase
+  runtimeTelemetry?: ReturnType<typeof createObjectiveRuntimeTelemetryService>
+  runtimeConfig?: ReturnType<typeof createObjectiveRuntimeConfigService>
 }) {
   const { db } = dependencies
+  const runtimeTelemetry = dependencies.runtimeTelemetry ?? createObjectiveRuntimeTelemetryService({ db })
+  const runtimeConfig = dependencies.runtimeConfig ?? createObjectiveRuntimeConfigService({
+    env: {}
+  })
 
   function createProposalWithCheckpoint(input: CreateProposalInput) {
-    const proposal = createProposal(db, input)
+    const assessedRisk = assessProposalRisk({
+      proposalKind: input.proposalKind,
+      payload: input.payload,
+      toolPolicyId: input.toolPolicyId,
+      artifactRefs: input.artifactRefs ?? []
+    })
+    const proposalRiskLevel = input.proposalRiskLevel ?? assessedRisk.proposalRiskLevel
+    const autonomyDecision = input.autonomyDecision ?? assessedRisk.autonomyDecision
+    const riskReasons = input.riskReasons ?? assessedRisk.riskReasons
+    const requiresOperatorConfirmation = autonomyDecision === 'await_operator'
+    const runtimePolicy = runtimeConfig.applyProposalPolicy({
+      proposalKind: input.proposalKind,
+      proposalRiskLevel,
+      autonomyDecision,
+      riskReasons,
+      requiresOperatorConfirmation
+    })
+    const proposal = createProposal(db, {
+      ...input,
+      proposalRiskLevel,
+      autonomyDecision: runtimePolicy.autonomyDecision,
+      riskReasons: runtimePolicy.riskReasons,
+      confidenceScore: input.confidenceScore ?? assessedRisk.confidenceScore,
+      requiresOperatorConfirmation: runtimePolicy.requiresOperatorConfirmation
+    })
     const checkpoint = buildProposalCheckpoint({
       proposal,
       nextStatus: proposal.status,
@@ -46,6 +79,8 @@ export function createObjectiveRuntimeProposalStateService(dependencies: {
       artifactRefs: checkpoint.artifactRefs,
       createdAt: checkpoint.createdAt
     })
+
+    runtimeTelemetry.recordProposalCreated(proposal)
 
     return proposal
   }
@@ -98,6 +133,7 @@ export function createObjectiveRuntimeProposalStateService(dependencies: {
     nextStatus: AgentProposalStatus
     messageId?: string
   }) {
+    const prior = getProposal(db, { proposalId: input.proposalId })
     const updated = updateProposalStatus(db, {
       proposalId: input.proposalId,
       status: input.nextStatus
@@ -107,6 +143,16 @@ export function createObjectiveRuntimeProposalStateService(dependencies: {
     }
 
     writeStatusCheckpoint(input.proposalId, input.nextStatus, input.messageId)
+
+    if (prior?.status !== updated.status) {
+      if (updated.status === 'awaiting_operator') {
+        runtimeTelemetry.recordProposalAwaitingOperator(updated)
+      } else if (updated.status === 'blocked') {
+        runtimeTelemetry.recordProposalBlocked(updated)
+      } else if (updated.status === 'vetoed') {
+        runtimeTelemetry.recordProposalVetoed(updated)
+      }
+    }
 
     return updated
   }

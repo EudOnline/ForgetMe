@@ -20,6 +20,7 @@ import { askMemoryWorkspacePersisted } from './memoryWorkspaceSessionService'
 import { listAgentPolicyVersions } from './governancePersistenceService'
 import type {
   AgentArtifactRef,
+  AgentCheckpointMetadata,
   AgentMessageKind,
   AgentProposalRecord,
   AgentRole,
@@ -86,6 +87,7 @@ export type RegisteredSubagentOutcome<TExtra extends Record<string, unknown> = R
   checkpointKind: 'tool_action_executed' | 'external_verification_completed' | 'user_facing_result_prepared'
   checkpointTitle: string
   checkpointSummary: string
+  checkpointMetadata?: AgentCheckpointMetadata
 } & TExtra
 
 export type ExecuteRegisteredSubagent = <

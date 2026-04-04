@@ -2,6 +2,37 @@ import { describe, expect, it } from 'vitest'
 import { createObjectiveThreadStateService } from '../../../src/main/services/objectiveThreadStateService'
 
 describe('objective thread state service', () => {
+  it('prefers structured verification metadata over checkpoint summary prose', () => {
+    const service = createObjectiveThreadStateService()
+
+    const result = service.classifyThreadState({
+      objective: {
+        status: 'in_progress',
+        requiresOperatorInput: false
+      },
+      thread: {
+        status: 'open',
+        proposals: [],
+        votes: [],
+        checkpoints: [
+          {
+            checkpointKind: 'external_verification_completed',
+            summary: 'Verification verdict: supported.',
+            metadata: {
+              verificationVerdict: 'mixed'
+            }
+          }
+        ],
+        messages: []
+      },
+      roundsWithoutProgress: 0,
+      hasNewArtifacts: false
+    })
+
+    expect(result.verificationVerdict).toBe('mixed')
+    expect(result.state).toBe('conflict_unresolved')
+  })
+
   it('classifies conflicting strong verification outcomes as conflict_unresolved', () => {
     const service = createObjectiveThreadStateService()
 

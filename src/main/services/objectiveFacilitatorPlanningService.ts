@@ -10,6 +10,7 @@ import type {
   ObjectiveThreadState,
   ObjectiveThreadStateResult
 } from './objectiveThreadStateService'
+import { hasOperatorGatedProposal } from './objectiveAutonomySelectorsService'
 
 export type FacilitatorPlannerAction =
   | 'continue_deliberation'
@@ -80,6 +81,17 @@ export function createObjectiveFacilitatorPlanningService() {
     planNextStep(input: FacilitatorPlanningInput): FacilitatorPlanResult {
       const artifacts = collectRecentArtifacts(input.thread)
       const activeSpawnProposal = hasActiveSpawnProposal(input.thread.proposals)
+      const hasStaleOperatorGate = hasOperatorGatedProposal(input.thread.proposals)
+
+      if (hasStaleOperatorGate) {
+        return {
+          threadState: 'awaiting_operator',
+          nextAction: 'pause_for_operator',
+          nextObjectiveStatus: 'awaiting_operator',
+          nextThreadStatus: 'waiting',
+          requiresOperatorInput: true
+        }
+      }
 
       switch (input.threadState.state) {
         case 'awaiting_operator':

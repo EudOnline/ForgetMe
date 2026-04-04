@@ -14,6 +14,10 @@ function createProposal(overrides?: Partial<AgentProposalRecord>): AgentProposal
     status: 'under_review',
     requiredApprovals: ['workspace'],
     allowVetoBy: ['governance'],
+    proposalRiskLevel: 'high',
+    autonomyDecision: 'auto_commit_with_audit',
+    riskReasons: ['external_verification_boundary'],
+    confidenceScore: 0.88,
     requiresOperatorConfirmation: false,
     toolPolicyId: 'tool-policy-web-1',
     budget: {
@@ -94,11 +98,34 @@ describe('agent proposal gate service', () => {
     expect(result.hasGovernanceVeto).toBe(true)
   })
 
-  it('moves to awaiting_operator when owner approval exists and operator confirmation is required', () => {
+  it('moves to awaiting_operator when owner approval exists and structured autonomy requires operator', () => {
     const result = evaluateProposalGate({
       proposal: createProposal({
+        proposalRiskLevel: 'critical',
+        autonomyDecision: 'await_operator',
+        riskReasons: ['critical_boundary_public_distribution'],
+        confidenceScore: 0.94,
         requiresOperatorConfirmation: true
       }),
+      messages: [],
+      votes: [createVote()]
+    })
+
+    expect(result.status).toBe('awaiting_operator')
+    expect(result.ownerApproved).toBe(true)
+  })
+
+  it('moves critical proposals to awaiting_operator even when the legacy confirmation flag is false', () => {
+    const result = evaluateProposalGate({
+      proposal: {
+        ...createProposal({
+          requiresOperatorConfirmation: false
+        }),
+        proposalRiskLevel: 'critical',
+        autonomyDecision: 'await_operator',
+        riskReasons: ['public_distribution_boundary'],
+        confidenceScore: 0.94
+      } as any,
       messages: [],
       votes: [createVote()]
     })
