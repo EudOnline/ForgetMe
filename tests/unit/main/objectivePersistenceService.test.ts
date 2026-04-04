@@ -272,9 +272,12 @@ describe('objective persistence service', () => {
     expect(threadDetail?.proposals[0]?.riskReasons).toContain('external_verification_boundary')
     expect(threadDetail?.proposals[0]?.confidenceScore).toBe(0.88)
     expect(threadDetail?.votes[0]?.vote).toBe('challenge')
-    expect(threadDetail?.checkpoints[0]?.checkpointKind).toBe('proposal_raised')
-    expect(threadDetail?.checkpoints[0]?.metadata?.verificationVerdict).toBe('supported')
-    expect(threadDetail?.checkpoints[0]?.metadata?.supportCount).toBe(2)
+    const raisedCheckpoint = threadDetail?.checkpoints.find((entry) => (
+      entry.checkpointKind === 'proposal_raised'
+      && entry.relatedProposalId === proposal.proposalId
+    ))
+    expect(raisedCheckpoint?.metadata?.verificationVerdict).toBe('supported')
+    expect(raisedCheckpoint?.metadata?.supportCount).toBe(2)
     expect(objectives[0]?.awaitingOperatorCount).toBe(1)
     expect(objectives[0]?.blockedCount).toBe(1)
     expect(objectives[0]?.vetoedCount).toBe(1)
