@@ -25,7 +25,7 @@ describe('message-native objective runtime cleanup', () => {
 
     expect(packageJson.scripts?.['test:e2e:agent']).toBeUndefined()
     expect(packageJson.scripts?.['test:e2e:objective']).toBe(
-      'npm run test:e2e -- tests/e2e/objective-workbench-deliberation-flow.spec.ts tests/e2e/objective-workbench-external-verification-flow.spec.ts tests/e2e/objective-workbench-operator-confirmation-flow.spec.ts'
+      'npm run test:e2e -- tests/e2e/objective-workbench-deliberation-flow.spec.ts tests/e2e/objective-workbench-external-verification-flow.spec.ts tests/e2e/objective-workbench-operator-confirmation-flow.spec.ts tests/e2e/objective-workbench-runtime-ops-flow.spec.ts tests/e2e/objective-workbench-runtime-alerts-flow.spec.ts tests/e2e/objective-workbench-nested-subagent-budget-flow.spec.ts'
     )
     expect(packageJson.scripts?.['verify:release']).toContain('npm run test:unit')
     expect(packageJson.scripts?.['verify:release']).toContain('npm run test:e2e:objective')

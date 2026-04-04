@@ -30,13 +30,27 @@ This playbook is for running the objective runtime after the high-threshold auto
 Open Objective Workbench and use the runtime ops sections in this order:
 
 1. `Runtime health`
-   Check auto-commits, operator-gated proposals, stalled objectives, and operator backlog before diving into any single objective.
+   Check auto-commits, operator-gated proposals, stalled objectives, operator backlog, exhausted budgets, and timeout pressure before diving into any single objective.
+   `Backlog delta (24h)`, `Stalled delta (24h)`, and `Blocked delta (24h)` should trend toward zero or negative values during a healthy shift.
 2. `Recent incidents`
-   Select the newest blocked, vetoed, or awaiting-operator event and inspect its structured payload before taking action.
+   Select the newest blocked, vetoed, timeout, budget, or recovery event and inspect its structured payload before taking action.
 3. `Runtime controls`
    Use the persisted kill switches only when the scorecard or incident feed shows drift, instability, or debugging pressure.
 
 The runtime ops controls are now persisted and auditable. A setting change should survive refresh and appear in the incident / settings audit trail rather than existing only as an environment-variable override.
+
+## What Alert Severity Means
+
+- `warning`
+  A single blocked proposal, timeout, budget exhaustion, or stalled objective. Treat it as a bounded instability signal, not an automatic stop-the-world event.
+- `critical`
+  Repeated instability on the same fingerprint or any governance veto. Treat it as evidence that the runtime is no longer converging cleanly on its own.
+
+## When To Acknowledge Versus Tighten A Runtime Control
+
+- Acknowledge an alert when the cause is understood, the boundary still looks correct, and you mainly need the alert to stop reading as "unseen".
+- Flip a runtime control when the same class of incident is still growing, when multiple objectives show the same drift pattern, or when you need a temporary rollback to stabilize investigation.
+- Do not use acknowledgement as a substitute for a kill switch. If the runtime is still producing the same failure mode, tighten the boundary first and acknowledge second.
 
 ## When To Use The Kill Switches
 
@@ -60,6 +74,24 @@ After enabling a kill switch:
 3. inspect `Runtime health` and `Recent incidents` for the new runtime behavior
 4. remove the switch once the incident is understood or fixed
 
+## What Bounded Self-Recovery May Do
+
+Phase two allows exactly one bounded automatic recovery attempt only when all of these are true:
+
+- the failure is transient and local
+- the proposal is not `critical`
+- the proposal is not `blocked`, `vetoed`, or `awaiting_operator`
+- the work is not public, destructive, or externally sensitive
+- the retry stays inside the existing bounded workflow
+
+In practice this means:
+
+- local compare, draft, policy, or evidence subagents may retry once after a transient local timeout
+- governance vetoes, operator gates, public publication, external disclosure, and externally sensitive web-verifier paths never auto-retry
+- every retry attempt and every stop decision should leave runtime events plus checkpoint evidence in the objective timeline
+
+If you see `recovery_attempted`, confirm whether it later converged into `objective_recovered` or stopped at `recovery_exhausted`. Repeated `recovery_exhausted` events are a signal to tighten autonomy, not to widen it.
+
 ## How To Validate Healthy Autonomy After Deploy
 
 Run these checks:
@@ -70,11 +102,12 @@ Run these checks:
 4. Verify runtime health metrics render in Objective Workbench.
 5. Verify recent incidents surface blocked or awaiting-operator events with structured payload detail.
 6. Verify runtime control changes persist across refresh.
-7. Verify objective runtime events are being written for starts, proposal creation, auto-commits, stalls, and completions.
+7. Verify objective runtime events are being written for starts, proposal creation, auto-commits, stalls, budget/timeout pressure, recovery attempts, and completions.
 
 Recommended commands:
 
 ```bash
+npm run lint
 npm run test:unit
 npm run test:typecheck
 npm run test:e2e:objective

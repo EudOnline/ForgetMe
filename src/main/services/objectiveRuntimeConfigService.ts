@@ -45,6 +45,22 @@ export function isExternalActionProposalKind(proposalKind: AgentProposalKind) {
   ].includes(proposalKind)
 }
 
+function isExternallySensitiveSpawnSubagent(payload: Record<string, unknown>) {
+  return payload.specialization === 'web-verifier'
+}
+
+export function isExternallySensitiveProposal(input: {
+  proposalKind: AgentProposalKind
+  payload: Record<string, unknown>
+}) {
+  if (isExternalActionProposalKind(input.proposalKind)) {
+    return true
+  }
+
+  return input.proposalKind === 'spawn_subagent'
+    && isExternallySensitiveSpawnSubagent(input.payload)
+}
+
 export function createObjectiveRuntimeConfigService(input?: {
   env?: NodeJS.ProcessEnv
   persistedSettings?: Partial<ObjectiveRuntimeConfig>
@@ -62,6 +78,10 @@ export function createObjectiveRuntimeConfigService(input?: {
 
   function getConfig() {
     return { ...config }
+  }
+
+  function isBoundedRecoveryDisabled() {
+    return parseBooleanFlag(env.FORGETME_AGENT_DISABLE_BOUNDED_RECOVERY)
   }
 
   function shouldRequireOperatorForProposal(input: Pick<ObjectiveRuntimeProposalPolicyInput, 'proposalKind'>) {
@@ -101,8 +121,29 @@ export function createObjectiveRuntimeConfigService(input?: {
     }
   }
 
+  function canUseBoundedRecovery(input: {
+    proposalKind: AgentProposalKind
+    payload: Record<string, unknown>
+    proposalRiskLevel: AgentProposalRiskLevel
+  }) {
+    if (isBoundedRecoveryDisabled()) {
+      return false
+    }
+
+    if (input.proposalRiskLevel === 'critical') {
+      return false
+    }
+
+    return !isExternallySensitiveProposal({
+      proposalKind: input.proposalKind,
+      payload: input.payload
+    })
+  }
+
   return {
     getConfig,
+    isBoundedRecoveryDisabled,
+    canUseBoundedRecovery,
     shouldRequireOperatorForProposal,
     applyProposalPolicy
   }

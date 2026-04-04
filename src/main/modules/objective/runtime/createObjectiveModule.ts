@@ -13,6 +13,7 @@ import { createRoleAgentRegistryService } from '../../../services/agents/roleAge
 import { createExternalVerificationBrokerService } from '../../../services/externalVerificationBrokerService'
 import { createExternalWebSearchService } from '../../../services/externalWebSearchService'
 import { createObjectiveRuntimeConfigService } from '../../../services/objectiveRuntimeConfigService'
+import { createObjectiveRuntimeAlertService } from '../../../services/objectiveRuntimeAlertService'
 import { createObjectiveRuntimeOpsReadService } from '../../../services/objectiveRuntimeOpsReadService'
 import { createObjectiveRuntimeSettingsService } from '../../../services/objectiveRuntimeSettingsService'
 import { createObjectiveRuntimeTelemetryService } from '../../../services/objectiveRuntimeTelemetryService'
@@ -187,6 +188,32 @@ export function createObjectiveModule(appPaths: AppPaths) {
     }) {
       return this.withArchiveDatabase((db) => (
         createObjectiveRuntimeOpsReadService({ db }).listRecentIncidents(input)
+      ))
+    },
+    async listRuntimeAlerts(input: {
+      objectiveId?: string
+      proposalId?: string
+      status?: 'open' | 'acknowledged' | 'resolved'
+      limit?: number
+    }) {
+      return this.withArchiveDatabase((db) => (
+        createObjectiveRuntimeOpsReadService({ db }).listRuntimeAlerts(input)
+      ))
+    },
+    async acknowledgeRuntimeAlert(input: {
+      alertId: string
+      actor?: string
+    }) {
+      return this.withArchiveDatabase((db) => (
+        createObjectiveRuntimeAlertService({ db }).acknowledgeObjectiveRuntimeAlert(input)
+      ))
+    },
+    async resolveRuntimeAlert(input: {
+      alertId: string
+      actor?: string
+    }) {
+      return this.withArchiveDatabase((db) => (
+        createObjectiveRuntimeAlertService({ db }).resolveObjectiveRuntimeAlert(input)
       ))
     }
   }

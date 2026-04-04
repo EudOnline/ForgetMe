@@ -2205,6 +2205,225 @@ describe('objective runtime service', () => {
     db.close()
   })
 
+  it('records one bounded recovery and retries a local compare-analyst timeout once', async () => {
+    const db = setupDatabase()
+    let compareCalls = 0
+    const runMemoryWorkspaceCompare = async () => {
+      compareCalls += 1
+      if (compareCalls === 1) {
+        await new Promise((resolve) => setTimeout(resolve, 25))
+      }
+
+      return {
+        compareSessionId: 'compare-session-recovery-1',
+        scope: { kind: 'global' as const },
+        title: 'Memory Workspace Compare',
+        question: 'Compare grounded answer candidates for this request.',
+        expressionMode: 'grounded' as const,
+        workflowKind: 'default' as const,
+        runCount: 1,
+        metadata: {
+          completedRunCount: 1,
+          failedRunCount: 0,
+          judgeStatus: 'ready' as const
+        },
+        recommendation: {
+          status: 'ready' as const,
+          recommendedCompareRunId: 'compare-run-local',
+          reason: 'The baseline answer stayed the most grounded.'
+        },
+        createdAt: '2026-03-30T00:00:00.000Z',
+        updatedAt: '2026-03-30T00:00:10.000Z',
+        runs: [
+          {
+            compareRunId: 'compare-run-local',
+            compareSessionId: 'compare-session-recovery-1',
+            ordinal: 1,
+            targetId: 'local-baseline',
+            targetLabel: 'Local baseline',
+            executionMode: 'local_baseline' as const,
+            provider: null,
+            model: null,
+            status: 'completed' as const,
+            errorMessage: null,
+            response: null,
+            evaluation: null,
+            judgeVerdict: null,
+            promptHash: 'prompt-hash-1',
+            contextHash: 'context-hash-1',
+            createdAt: '2026-03-30T00:00:00.000Z'
+          }
+        ]
+      }
+    }
+    const runtime = createObjectiveRuntimeService({
+      db,
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => [],
+        openSourcePage: async ({ url }) => ({
+          url,
+          title: null,
+          publishedAt: null,
+          excerpt: ''
+        })
+      }),
+      subagentRegistry: createSubagentRegistryService(),
+      runMemoryWorkspaceCompare
+    } as any)
+
+    const started = await runtime.startObjective({
+      title: 'Recover one local compare timeout',
+      objectiveKind: 'user_response',
+      prompt: 'Retry a transient local timeout once and record why it happened.',
+      initiatedBy: 'operator'
+    })
+    const compareSpec = createSubagentRegistryService().buildSpawnSubagentSpec({
+      specialization: 'compare-analyst',
+      payload: {
+        question: 'Compare grounded answer candidates for this request.'
+      }
+    })
+
+    const proposal = runtime.createProposal({
+      objectiveId: started.objective.objectiveId,
+      threadId: started.mainThread.threadId,
+      proposedByParticipantId: 'workspace',
+      proposalKind: 'spawn_subagent',
+      payload: compareSpec.payload,
+      ownerRole: 'workspace',
+      requiresOperatorConfirmation: false,
+      toolPolicyId: compareSpec.toolPolicyId,
+      budget: {
+        ...compareSpec.budget,
+        timeoutMs: 5
+      }
+    })
+
+    const approved = await runtime.respondToAgentProposal({
+      proposalId: proposal.proposalId,
+      responderRole: 'workspace',
+      response: 'approve',
+      comment: 'Owner approved bounded compare recovery.'
+    })
+
+    const detail = runtime.getObjectiveDetail({
+      objectiveId: started.objective.objectiveId
+    })
+    const telemetry = createObjectiveRuntimeTelemetryService({ db })
+    const events = telemetry.listEvents({
+      objectiveId: started.objective.objectiveId,
+      proposalId: proposal.proposalId
+    })
+    const compareSubagents = detail?.subagents.filter((candidate) => candidate.specialization === 'compare-analyst') ?? []
+
+    expect(approved?.status).toBe('committed')
+    expect(compareCalls).toBe(2)
+    expect(compareSubagents).toHaveLength(2)
+    expect(compareSubagents.some((candidate) => candidate.status === 'failed')).toBe(true)
+    expect(compareSubagents.some((candidate) => candidate.status === 'completed')).toBe(true)
+    expect(events.map((event) => event.eventType)).toEqual(expect.arrayContaining([
+      'tool_timeout',
+      'recovery_attempted',
+      'objective_recovered'
+    ]))
+    expect(events.filter((event) => event.eventType === 'recovery_attempted')).toHaveLength(1)
+    expect(events.find((event) => event.eventType === 'recovery_attempted')?.payload).toEqual(expect.objectContaining({
+      decision: 'cooldown_then_retry',
+      reason: 'transient_tool_timeout',
+      attemptNumber: 1
+    }))
+    expect(detail?.checkpoints).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        checkpointKind: 'runtime_recovery_attempted'
+      })
+    ]))
+
+    db.close()
+  })
+
+  it('surfaces externally sensitive timeout failures without auto-retrying them', async () => {
+    const db = setupDatabase()
+    let searchCalls = 0
+    const runtime = createObjectiveRuntimeService({
+      db,
+      facilitator: createFacilitatorAgentService(),
+      externalVerificationBroker: createExternalVerificationBrokerService({
+        searchWeb: async () => {
+          searchCalls += 1
+          await new Promise((resolve) => setTimeout(resolve, 25))
+          return []
+        },
+        openSourcePage: async ({ url }) => ({
+          url,
+          title: null,
+          publishedAt: null,
+          excerpt: ''
+        })
+      }),
+      subagentRegistry: createSubagentRegistryService()
+    })
+
+    const started = await runtime.startObjective({
+      title: 'Do not retry external timeout failures',
+      objectiveKind: 'evidence_investigation',
+      prompt: 'Surface external timeout failures to the operator.',
+      initiatedBy: 'operator'
+    })
+
+    const proposal = runtime.createProposal({
+      objectiveId: started.objective.objectiveId,
+      threadId: started.mainThread.threadId,
+      proposedByParticipantId: 'workspace',
+      proposalKind: 'spawn_subagent',
+      payload: {
+        specialization: 'web-verifier',
+        skillPackIds: ['web-verifier'],
+        expectedOutputSchema: 'webVerificationResultSchema',
+        claim: 'The source confirms the announcement date.',
+        query: 'official announcement date'
+      },
+      ownerRole: 'workspace',
+      requiresOperatorConfirmation: false,
+      toolPolicyId: 'external-verification-policy',
+      budget: {
+        maxRounds: 2,
+        maxToolCalls: 3,
+        timeoutMs: 5
+      }
+    })
+
+    await expect(runtime.respondToAgentProposal({
+      proposalId: proposal.proposalId,
+      responderRole: 'workspace',
+      response: 'approve',
+      comment: 'Owner approved bounded subagent execution.'
+    })).rejects.toThrow(/timeout budget/i)
+
+    const detail = runtime.getObjectiveDetail({
+      objectiveId: started.objective.objectiveId
+    })
+    const telemetry = createObjectiveRuntimeTelemetryService({ db })
+    const events = telemetry.listEvents({
+      objectiveId: started.objective.objectiveId,
+      proposalId: proposal.proposalId
+    })
+
+    expect(searchCalls).toBe(1)
+    expect(detail?.subagents.filter((candidate) => candidate.specialization === 'web-verifier')).toHaveLength(1)
+    expect(events.map((event) => event.eventType)).toEqual(expect.arrayContaining([
+      'tool_timeout',
+      'recovery_exhausted'
+    ]))
+    expect(events.some((event) => event.eventType === 'recovery_attempted')).toBe(false)
+    expect(events.find((event) => event.eventType === 'recovery_exhausted')?.payload).toEqual(expect.objectContaining({
+      decision: 'surface_to_operator',
+      reason: 'external_or_public_boundary'
+    }))
+
+    db.close()
+  })
+
   it('includes the requesting subagent in nested child subthreads and records the goal as agent-to-agent', async () => {
     const db = setupDatabase()
     const createdAt = '2026-03-30T00:00:00.000Z'

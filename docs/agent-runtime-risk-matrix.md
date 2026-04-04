@@ -58,6 +58,7 @@ Default autonomy:
 Important:
 
 - `high` alone does not force operator confirmation in this release line.
+- `high` also does not permit public, destructive, or externally sensitive recovery paths. Recovery policy remains narrower than the proposal risk label.
 
 ### `critical`
 
@@ -100,6 +101,33 @@ Important:
 - these controls do not lower the `critical` threshold
 - these controls tighten autonomy temporarily; they do not broaden it
 - any control change should remain auditable through the runtime settings event trail
+
+## Runtime Alert Severity
+
+Phase two separates runtime alert severity from proposal risk:
+
+- `warning` means isolated instability such as one blocked proposal, one stalled objective, one bounded budget exhaustion, or one bounded timeout
+- `critical` means repeated instability on the same runtime fingerprint or a governance veto
+
+This keeps the `critical` operator-stop line high while still making repeated runtime drift visible.
+
+## Bounded Recovery Policy
+
+Phase two adds bounded self-recovery without broadening autonomy.
+
+Allowed:
+
+- one retry for transient local failures inside low-risk, medium-risk, or high-risk local workflows
+- explicit runtime evidence through `recovery_attempted`, `objective_recovered`, and `recovery_exhausted`
+
+Not allowed:
+
+- retries for `critical` proposals
+- retries after governance vetoes or operator blocks
+- retries for publication or sensitive external egress
+- repeated retry loops or background daemons
+
+The runtime may recover once. After that it must surface back to the operator.
 
 ## Non-Goals For This Release Line
 

@@ -1,13 +1,16 @@
 import { ipcMain } from 'electron'
 import {
+  acknowledgeObjectiveRuntimeAlertInputSchema,
   confirmAgentProposalInputSchema,
   createAgentObjectiveInputSchema,
   getAgentObjectiveInputSchema,
   getAgentThreadInputSchema,
   listAgentMemoriesInputSchema,
   listAgentObjectivesInputSchema,
+  listObjectiveRuntimeAlertsInputSchema,
   listObjectiveRuntimeEventsInputSchema,
   listAgentPolicyVersionsInputSchema,
+  resolveObjectiveRuntimeAlertInputSchema,
   updateObjectiveRuntimeSettingsInputSchema,
   respondToAgentProposalInputSchema
 } from '../../../../shared/schemas/objective'
@@ -28,6 +31,9 @@ export function registerObjectiveHandlers(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:listAgentPolicyVersions')
   ipcMain.removeHandler('archive:getObjectiveRuntimeScorecard')
   ipcMain.removeHandler('archive:listObjectiveRuntimeEvents')
+  ipcMain.removeHandler('archive:listObjectiveRuntimeAlerts')
+  ipcMain.removeHandler('archive:acknowledgeObjectiveRuntimeAlert')
+  ipcMain.removeHandler('archive:resolveObjectiveRuntimeAlert')
   ipcMain.removeHandler('archive:getObjectiveRuntimeSettings')
   ipcMain.removeHandler('archive:updateObjectiveRuntimeSettings')
 
@@ -82,6 +88,21 @@ export function registerObjectiveHandlers(appPaths: AppPaths) {
   ipcMain.handle('archive:listObjectiveRuntimeEvents', async (_event, payload) => {
     const input = listObjectiveRuntimeEventsInputSchema.parse(payload)
     return objectiveModule.listRuntimeEvents(input)
+  })
+
+  ipcMain.handle('archive:listObjectiveRuntimeAlerts', async (_event, payload) => {
+    const input = listObjectiveRuntimeAlertsInputSchema.parse(payload)
+    return objectiveModule.listRuntimeAlerts(input)
+  })
+
+  ipcMain.handle('archive:acknowledgeObjectiveRuntimeAlert', async (_event, payload) => {
+    const input = acknowledgeObjectiveRuntimeAlertInputSchema.parse(payload)
+    return objectiveModule.acknowledgeRuntimeAlert(input)
+  })
+
+  ipcMain.handle('archive:resolveObjectiveRuntimeAlert', async (_event, payload) => {
+    const input = resolveObjectiveRuntimeAlertInputSchema.parse(payload)
+    return objectiveModule.resolveRuntimeAlert(input)
   })
 
   ipcMain.handle('archive:getObjectiveRuntimeSettings', async () => {

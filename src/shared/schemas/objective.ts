@@ -39,6 +39,27 @@ export const listObjectiveRuntimeEventsInputSchema = z.object({
   limit: z.number().int().positive().max(200).optional()
 }).optional().default({})
 
+export const listObjectiveRuntimeAlertsInputSchema = z.object({
+  objectiveId: z.string().min(1).optional(),
+  proposalId: z.string().min(1).optional(),
+  status: z.enum([
+    'open',
+    'acknowledged',
+    'resolved'
+  ]).optional(),
+  limit: z.number().int().positive().max(200).optional()
+}).optional().default({})
+
+export const acknowledgeObjectiveRuntimeAlertInputSchema = z.object({
+  alertId: z.string().min(1),
+  actor: z.string().min(1).optional()
+})
+
+export const resolveObjectiveRuntimeAlertInputSchema = z.object({
+  alertId: z.string().min(1),
+  actor: z.string().min(1).optional()
+})
+
 export const updateObjectiveRuntimeSettingsInputSchema = z.object({
   patch: z.object({
     disableAutoCommit: z.boolean().optional(),
@@ -111,6 +132,22 @@ export const agentProposalAutonomyDecisionSchema = z.enum([
   'auto_commit',
   'auto_commit_with_audit',
   'await_operator'
+])
+
+export const objectiveRuntimeEventTypeSchema = z.enum([
+  'objective_started',
+  'proposal_created',
+  'proposal_auto_committed',
+  'proposal_awaiting_operator',
+  'proposal_blocked',
+  'proposal_vetoed',
+  'objective_stalled',
+  'subagent_budget_exhausted',
+  'tool_timeout',
+  'recovery_attempted',
+  'recovery_exhausted',
+  'objective_recovered',
+  'objective_completed'
 ])
 
 export const verificationVerdictSchema = z.enum([

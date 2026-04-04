@@ -399,6 +399,13 @@ function buildRuntimeScorecard() {
     stalledObjectiveRate: 0.5,
     meanRoundsToCompletion: 3.5,
     operatorBacklogSize: 1,
+    budgetExhaustedCount: 1,
+    toolTimeoutCount: 1,
+    warningAlertCount: 1,
+    criticalAlertCount: 1,
+    backlogDelta24h: 1,
+    stalledDelta24h: 1,
+    blockedDelta24h: 1,
     autoCommitRateByRiskLevel: {
       low: { total: 0, autoCommitted: 0, rate: null },
       medium: { total: 2, autoCommitted: 2, rate: 1 },
@@ -435,6 +442,29 @@ function buildRuntimeEvents() {
         blocker: 'Governance requested stronger evidence.'
       },
       createdAt: '2026-03-30T00:06:00.000Z'
+    }
+  ]
+}
+
+function buildRuntimeAlerts() {
+  return [
+    {
+      alertId: 'runtime-alert-1',
+      fingerprint: 'objective_stalled:objective-1',
+      severity: 'critical',
+      status: 'open',
+      objectiveId: 'objective-1',
+      proposalId: null,
+      firstEventId: 'runtime-event-1',
+      latestEventId: 'runtime-event-2',
+      eventCount: 2,
+      title: 'Repeated stalled objective',
+      detail: 'The same objective stalled twice within the active lookback window.',
+      openedAt: '2026-04-04T03:00:00.000Z',
+      lastSeenAt: '2026-04-04T03:05:00.000Z',
+      acknowledgedAt: null,
+      acknowledgedBy: null,
+      resolvedAt: null
     }
   ]
 }
@@ -587,6 +617,13 @@ describe('ObjectiveWorkbenchPage', () => {
   it('shows runtime health, recent incidents, and persisted kill switches', async () => {
     const getObjectiveRuntimeScorecard = vi.fn().mockResolvedValue(buildRuntimeScorecard())
     const listObjectiveRuntimeEvents = vi.fn().mockResolvedValue(buildRuntimeEvents())
+    const listObjectiveRuntimeAlerts = vi.fn().mockResolvedValue(buildRuntimeAlerts())
+    const acknowledgeObjectiveRuntimeAlert = vi.fn().mockResolvedValue({
+      ...buildRuntimeAlerts()[0],
+      status: 'acknowledged',
+      acknowledgedAt: '2026-04-04T03:06:00.000Z',
+      acknowledgedBy: 'operator:test'
+    })
     const getObjectiveRuntimeSettings = vi.fn().mockResolvedValue(buildRuntimeSettings())
     let resolveRuntimeSettingsUpdate!: (value: {
       disableAutoCommit: boolean
@@ -606,6 +643,8 @@ describe('ObjectiveWorkbenchPage', () => {
       getAgentThread: vi.fn().mockResolvedValue(buildThreadDetail()),
       getObjectiveRuntimeScorecard,
       listObjectiveRuntimeEvents,
+      listObjectiveRuntimeAlerts,
+      acknowledgeObjectiveRuntimeAlert,
       getObjectiveRuntimeSettings,
       updateObjectiveRuntimeSettings
     })
@@ -619,10 +658,23 @@ describe('ObjectiveWorkbenchPage', () => {
     expect(screen.getByRole('heading', { name: 'Recent incidents' })).toBeInTheDocument()
     expect(screen.getByText('proposal_blocked')).toBeInTheDocument()
     expect(screen.getByText('Governance requested stronger evidence.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Open alerts' })).toBeInTheDocument()
+    expect(screen.getByText('Repeated stalled objective')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Budget pressure' })).toBeInTheDocument()
+    expect(screen.getByText('Exhausted budgets')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Trend window' })).toBeInTheDocument()
+    expect(screen.getByText('Backlog delta (24h)')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Runtime controls' })).toBeInTheDocument()
     expect(screen.getByLabelText('Disable auto commit')).toBeInTheDocument()
     expect(screen.getByLabelText('Force operator for external actions')).toBeInTheDocument()
     expect(screen.getByLabelText('Disable nested delegation')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Acknowledge alert' }))
+    await waitFor(() => {
+      expect(acknowledgeObjectiveRuntimeAlert).toHaveBeenCalledWith({
+        alertId: 'runtime-alert-1'
+      })
+    })
 
     fireEvent.click(screen.getByLabelText('Disable auto commit'))
     expect(screen.getByLabelText('Disable auto commit')).toBeChecked()
@@ -645,6 +697,7 @@ describe('ObjectiveWorkbenchPage', () => {
     })
     expect(getObjectiveRuntimeScorecard).toHaveBeenCalledWith()
     expect(listObjectiveRuntimeEvents).toHaveBeenCalledWith()
+    expect(listObjectiveRuntimeAlerts).toHaveBeenCalledWith()
     expect(getObjectiveRuntimeSettings).toHaveBeenCalledWith()
   })
 

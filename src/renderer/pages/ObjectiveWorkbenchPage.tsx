@@ -7,6 +7,7 @@ import type {
   AgentRole,
   AgentThreadDetail,
   CreateAgentObjectiveInput,
+  ObjectiveRuntimeAlertRecord,
   ObjectiveRuntimeEventRecord,
   ObjectiveRuntimeScorecard,
   ObjectiveRuntimeSettingsRecord,
@@ -151,9 +152,11 @@ export function ObjectiveWorkbenchPage() {
   const [pendingActionId, setPendingActionId] = useState<string | null>(null)
   const [runtimeScorecard, setRuntimeScorecard] = useState<ObjectiveRuntimeScorecard | null>(null)
   const [runtimeEvents, setRuntimeEvents] = useState<ObjectiveRuntimeEventRecord[]>([])
+  const [runtimeAlerts, setRuntimeAlerts] = useState<ObjectiveRuntimeAlertRecord[]>([])
   const [selectedRuntimeEventId, setSelectedRuntimeEventId] = useState<string | null>(null)
   const [runtimeSettings, setRuntimeSettings] = useState<ObjectiveRuntimeSettingsRecord | null>(null)
   const [pendingRuntimeSettingKey, setPendingRuntimeSettingKey] = useState<RuntimeSettingKey | null>(null)
+  const [pendingRuntimeAlertId, setPendingRuntimeAlertId] = useState<string | null>(null)
 
   const runtimeSettingOptions = useMemo(() => ([
     {
@@ -171,15 +174,18 @@ export function ObjectiveWorkbenchPage() {
   ]), [t])
 
   const loadRuntimeOps = useCallback(async () => {
-    const [scorecard, events, settings] = await Promise.all([
+    const [scorecard, events, alerts, settings] = await Promise.all([
       objectiveClient.getObjectiveRuntimeScorecard(),
       objectiveClient.listObjectiveRuntimeEvents(),
+      objectiveClient.listObjectiveRuntimeAlerts(),
       objectiveClient.getObjectiveRuntimeSettings()
     ])
     const nextEvents = [...events].sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    const nextAlerts = [...alerts].sort((left, right) => right.lastSeenAt.localeCompare(left.lastSeenAt))
 
     setRuntimeScorecard(scorecard)
     setRuntimeEvents(nextEvents)
+    setRuntimeAlerts(nextAlerts)
     setRuntimeSettings(settings)
     setSelectedRuntimeEventId((current) => (
       current && nextEvents.some((event) => event.eventId === current)
@@ -669,6 +675,24 @@ export function ObjectiveWorkbenchPage() {
     }
   }
 
+  const handleAcknowledgeRuntimeAlert = async (alertId: string) => {
+    setPendingRuntimeAlertId(alertId)
+    setErrorMessage(null)
+    setStatusMessage(null)
+
+    try {
+      await objectiveClient.acknowledgeObjectiveRuntimeAlert({ alertId })
+      setStatusMessage(t('objectiveWorkbench.runtimeAlertAcknowledged'))
+      await loadRuntimeOps()
+    } catch (error) {
+      setErrorMessage(t('objectiveWorkbench.runtimeAlertAcknowledgeFailed', {
+        message: asErrorMessage(error)
+      }))
+    } finally {
+      setPendingRuntimeAlertId(null)
+    }
+  }
+
   return (
     <section className="fmObjectiveWorkbench">
       <header className="fmObjectiveWorkbenchHeader">
@@ -837,6 +861,54 @@ export function ObjectiveWorkbenchPage() {
                   <span>{t('objectiveWorkbench.runtimeHealthStalledLabel')}</span>
                   {` ${runtimeScorecard.stalledObjectiveCount}`}
                 </p>
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeHealthWarningAlertsLabel')}</span>
+                  {` ${runtimeScorecard.warningAlertCount}`}
+                </p>
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeHealthCriticalAlertsLabel')}</span>
+                  {` ${runtimeScorecard.criticalAlertCount}`}
+                </p>
+              </>
+            ) : (
+              <p>{t('objectiveWorkbench.runtimeHealthEmpty')}</p>
+            )}
+          </section>
+
+          <section aria-label={t('objectiveWorkbench.runtimeBudgetPressureTitle')}>
+            <h2>{t('objectiveWorkbench.runtimeBudgetPressureTitle')}</h2>
+            {runtimeScorecard ? (
+              <>
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeBudgetExhaustedLabel')}</span>
+                  {` ${runtimeScorecard.budgetExhaustedCount}`}
+                </p>
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeToolTimeoutLabel')}</span>
+                  {` ${runtimeScorecard.toolTimeoutCount}`}
+                </p>
+              </>
+            ) : (
+              <p>{t('objectiveWorkbench.runtimeHealthEmpty')}</p>
+            )}
+          </section>
+
+          <section aria-label={t('objectiveWorkbench.runtimeTrendWindowTitle')}>
+            <h2>{t('objectiveWorkbench.runtimeTrendWindowTitle')}</h2>
+            {runtimeScorecard ? (
+              <>
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeBacklogDeltaLabel')}</span>
+                  {` ${runtimeScorecard.backlogDelta24h}`}
+                </p>
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeStalledDeltaLabel')}</span>
+                  {` ${runtimeScorecard.stalledDelta24h}`}
+                </p>
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeBlockedDeltaLabel')}</span>
+                  {` ${runtimeScorecard.blockedDelta24h}`}
+                </p>
               </>
             ) : (
               <p>{t('objectiveWorkbench.runtimeHealthEmpty')}</p>
@@ -875,6 +947,32 @@ export function ObjectiveWorkbenchPage() {
         </div>
 
         <div className="fmObjectiveWorkbenchColumn">
+          <section aria-label={t('objectiveWorkbench.runtimeAlertsTitle')}>
+            <h2>{t('objectiveWorkbench.runtimeAlertsTitle')}</h2>
+            {runtimeAlerts.length === 0 ? (
+              <p>{t('objectiveWorkbench.runtimeAlertsEmpty')}</p>
+            ) : (
+              <div className="fmObjectiveWorkbenchProposalList">
+                {runtimeAlerts.map((alert) => (
+                  <article key={alert.alertId} className="fmObjectiveWorkbenchProposalCard">
+                    <strong>{alert.title}</strong>
+                    <p>{alert.detail ?? t('objectiveWorkbench.none')}</p>
+                    <p>{`${humanize(alert.severity)} · ${humanize(alert.status)}`}</p>
+                    {alert.status === 'open' ? (
+                      <button
+                        type="button"
+                        disabled={pendingRuntimeAlertId === alert.alertId}
+                        onClick={() => void handleAcknowledgeRuntimeAlert(alert.alertId)}
+                      >
+                        {t('objectiveWorkbench.acknowledgeAlert')}
+                      </button>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
           <section aria-label={t('objectiveWorkbench.runtimeIncidentsTitle')}>
             <h2>{t('objectiveWorkbench.runtimeIncidentsTitle')}</h2>
             {runtimeEvents.length === 0 ? (

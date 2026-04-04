@@ -3,11 +3,13 @@ import type {
   AgentPolicyVersionRecord,
   AgentProposalRecord,
   AgentRole,
+  ObjectiveRuntimeAlertRecord,
   ObjectiveRuntimeEventRecord,
   ObjectiveRuntimeScorecard,
   ObjectiveRuntimeSettingsRecord
 } from '../../shared/archiveContracts'
 import type {
+  AcknowledgeObjectiveRuntimeAlertInput,
   AgentObjectiveDetail,
   AgentObjectiveRecord,
   AgentThreadDetail,
@@ -15,9 +17,11 @@ import type {
   CreateAgentObjectiveInput,
   GetAgentObjectiveInput,
   GetAgentThreadInput,
+  ListObjectiveRuntimeAlertsInput,
   ListObjectiveRuntimeEventsInput,
   ListAgentObjectivesInput,
   RespondToAgentProposalInput,
+  ResolveObjectiveRuntimeAlertInput,
   UpdateObjectiveRuntimeSettingsInput
 } from '../../shared/objectiveRuntimeContracts'
 import type { ArchiveApi } from '../../shared/archiveContracts'
@@ -34,6 +38,9 @@ type ObjectiveClient = Pick<
   | 'confirmAgentProposal'
   | 'getObjectiveRuntimeScorecard'
   | 'listObjectiveRuntimeEvents'
+  | 'listObjectiveRuntimeAlerts'
+  | 'acknowledgeObjectiveRuntimeAlert'
+  | 'resolveObjectiveRuntimeAlert'
   | 'getObjectiveRuntimeSettings'
   | 'updateObjectiveRuntimeSettings'
   | 'listAgentMemories'
@@ -108,6 +115,13 @@ export function getObjectiveClient(): ObjectiveClient {
       stalledObjectiveRate: null,
       meanRoundsToCompletion: null,
       operatorBacklogSize: 0,
+      budgetExhaustedCount: 0,
+      toolTimeoutCount: 0,
+      warningAlertCount: 0,
+      criticalAlertCount: 0,
+      backlogDelta24h: 0,
+      stalledDelta24h: 0,
+      blockedDelta24h: 0,
       autoCommitRateByRiskLevel: {
         low: { total: 0, autoCommitted: 0, rate: null },
         medium: { total: 0, autoCommitted: 0, rate: null },
@@ -116,6 +130,43 @@ export function getObjectiveClient(): ObjectiveClient {
       }
     } satisfies ObjectiveRuntimeScorecard)),
     listObjectiveRuntimeEvents: bridgeMethod('listObjectiveRuntimeEvents', async (_input?: ListObjectiveRuntimeEventsInput) => [] as ObjectiveRuntimeEventRecord[]),
+    listObjectiveRuntimeAlerts: bridgeMethod('listObjectiveRuntimeAlerts', async (_input?: ListObjectiveRuntimeAlertsInput) => [] as ObjectiveRuntimeAlertRecord[]),
+    acknowledgeObjectiveRuntimeAlert: bridgeMethod('acknowledgeObjectiveRuntimeAlert', async (input: AcknowledgeObjectiveRuntimeAlertInput) => ({
+      alertId: input.alertId,
+      fingerprint: input.alertId,
+      severity: 'warning',
+      status: 'acknowledged',
+      objectiveId: '',
+      proposalId: null,
+      firstEventId: '',
+      latestEventId: '',
+      eventCount: 1,
+      title: 'Runtime alert',
+      detail: null,
+      openedAt: '',
+      lastSeenAt: '',
+      acknowledgedAt: '',
+      acknowledgedBy: input.actor ?? 'operator',
+      resolvedAt: null
+    } satisfies ObjectiveRuntimeAlertRecord)),
+    resolveObjectiveRuntimeAlert: bridgeMethod('resolveObjectiveRuntimeAlert', async (input: ResolveObjectiveRuntimeAlertInput) => ({
+      alertId: input.alertId,
+      fingerprint: input.alertId,
+      severity: 'warning',
+      status: 'resolved',
+      objectiveId: '',
+      proposalId: null,
+      firstEventId: '',
+      latestEventId: '',
+      eventCount: 1,
+      title: 'Runtime alert',
+      detail: null,
+      openedAt: '',
+      lastSeenAt: '',
+      acknowledgedAt: null,
+      acknowledgedBy: null,
+      resolvedAt: ''
+    } satisfies ObjectiveRuntimeAlertRecord)),
     getObjectiveRuntimeSettings: bridgeMethod('getObjectiveRuntimeSettings', async () => ({
       disableAutoCommit: false,
       forceOperatorForExternalActions: false,

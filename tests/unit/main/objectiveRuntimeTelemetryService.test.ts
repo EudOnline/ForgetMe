@@ -102,6 +102,36 @@ describe('objective runtime telemetry service', () => {
       threadId: gatedThread.threadId,
       roundCount: 2
     })
+    telemetry.recordEvent({
+      objectiveId: gatedObjective.objectiveId,
+      threadId: gatedThread.threadId,
+      proposalId: gatedProposal.proposalId,
+      eventType: 'subagent_budget_exhausted',
+      payload: {
+        specialization: 'compare-analyst'
+      },
+      createdAt: '2026-04-04T13:00:00.000Z'
+    })
+    telemetry.recordEvent({
+      objectiveId: gatedObjective.objectiveId,
+      threadId: gatedThread.threadId,
+      proposalId: gatedProposal.proposalId,
+      eventType: 'tool_timeout',
+      payload: {
+        toolName: 'search_web'
+      },
+      createdAt: '2026-04-04T13:05:00.000Z'
+    })
+    telemetry.recordEvent({
+      objectiveId: gatedObjective.objectiveId,
+      threadId: gatedThread.threadId,
+      proposalId: gatedProposal.proposalId,
+      eventType: 'proposal_blocked',
+      payload: {
+        blocker: 'Operator requested a narrower publication scope.'
+      },
+      createdAt: '2026-04-04T13:10:00.000Z'
+    })
 
     const events = telemetry.listEvents()
     const scorecard = telemetry.getScorecard()
@@ -113,7 +143,10 @@ describe('objective runtime telemetry service', () => {
       'objective_completed',
       'proposal_created',
       'proposal_awaiting_operator',
-      'objective_stalled'
+      'objective_stalled',
+      'subagent_budget_exhausted',
+      'tool_timeout',
+      'proposal_blocked'
     ])
     expect(scorecard.totalProposalCount).toBe(2)
     expect(scorecard.autoCommitCount).toBe(1)
@@ -126,6 +159,10 @@ describe('objective runtime telemetry service', () => {
     expect(scorecard.operatorBacklogSize).toBe(1)
     expect(scorecard.autoCommitRateByRiskLevel.medium.rate).toBe(1)
     expect(scorecard.autoCommitRateByRiskLevel.critical.rate).toBe(0)
+    expect(scorecard.budgetExhaustedCount).toBe(1)
+    expect(scorecard.toolTimeoutCount).toBe(1)
+    expect(scorecard.blockedDelta24h).toBe(1)
+    expect(scorecard.stalledDelta24h).toBe(1)
 
     db.close()
   })

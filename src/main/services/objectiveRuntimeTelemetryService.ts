@@ -37,6 +37,28 @@ function roundRate(numerator: number, denominator: number) {
   return Number((numerator / denominator).toFixed(4))
 }
 
+function countWindowDelta(events: ObjectiveRuntimeEventRecord[], eventType: ObjectiveRuntimeEventType) {
+  const matchingEvents = events.filter((event) => event.eventType === eventType)
+  if (matchingEvents.length === 0) {
+    return 0
+  }
+
+  const latestTimestamp = Math.max(...events.map((event) => Date.parse(event.createdAt)))
+  const currentWindowStart = latestTimestamp - (24 * 60 * 60 * 1000)
+  const previousWindowStart = currentWindowStart - (24 * 60 * 60 * 1000)
+
+  const currentCount = matchingEvents.filter((event) => {
+    const timestamp = Date.parse(event.createdAt)
+    return timestamp >= currentWindowStart && timestamp <= latestTimestamp
+  }).length
+  const previousCount = matchingEvents.filter((event) => {
+    const timestamp = Date.parse(event.createdAt)
+    return timestamp >= previousWindowStart && timestamp < currentWindowStart
+  }).length
+
+  return currentCount - previousCount
+}
+
 function buildProposalPayload(proposal: AgentProposalRecord) {
   return {
     proposalKind: proposal.proposalKind,
@@ -138,6 +160,8 @@ export function createObjectiveRuntimeTelemetryService(dependencies: {
     const stalledObjectiveIds = new Set<string>()
     const completedObjectiveIds = new Set<string>()
     const completedRoundCounts = new Map<string, number>()
+    const budgetExhaustedProposalIds = new Set<string>()
+    const toolTimeoutProposalIds = new Set<string>()
     const perRisk: Record<AgentProposalRiskLevel, { total: number; autoCommitted: number }> = {
       low: { total: 0, autoCommitted: 0 },
       medium: { total: 0, autoCommitted: 0 },
@@ -191,6 +215,16 @@ export function createObjectiveRuntimeTelemetryService(dependencies: {
         case 'objective_stalled':
           stalledObjectiveIds.add(event.objectiveId)
           break
+        case 'subagent_budget_exhausted':
+          if (event.proposalId) {
+            budgetExhaustedProposalIds.add(event.proposalId)
+          }
+          break
+        case 'tool_timeout':
+          if (event.proposalId) {
+            toolTimeoutProposalIds.add(event.proposalId)
+          }
+          break
         case 'objective_completed':
           completedObjectiveIds.add(event.objectiveId)
           if (typeof event.payload.roundCount === 'number') {
@@ -238,6 +272,13 @@ export function createObjectiveRuntimeTelemetryService(dependencies: {
       stalledObjectiveRate: roundRate(stalledObjectiveIds.size, totalObjectivesRow.count),
       meanRoundsToCompletion,
       operatorBacklogSize: backlogObjectiveIds.size,
+      budgetExhaustedCount: budgetExhaustedProposalIds.size,
+      toolTimeoutCount: toolTimeoutProposalIds.size,
+      warningAlertCount: 0,
+      criticalAlertCount: 0,
+      backlogDelta24h: countWindowDelta(events, 'proposal_awaiting_operator'),
+      stalledDelta24h: countWindowDelta(events, 'objective_stalled'),
+      blockedDelta24h: countWindowDelta(events, 'proposal_blocked'),
       autoCommitRateByRiskLevel: {
         low: {
           total: perRisk.low.total,

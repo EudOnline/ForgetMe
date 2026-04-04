@@ -18,7 +18,7 @@
     "preview": "electron-vite preview",
     "test:unit": "node ./scripts/run-vitest.mjs",
     "test:e2e": "npm run build && node ./scripts/run-playwright.mjs",
-    "test:e2e:objective": "npm run test:e2e -- tests/e2e/objective-workbench-deliberation-flow.spec.ts tests/e2e/objective-workbench-external-verification-flow.spec.ts tests/e2e/objective-workbench-operator-confirmation-flow.spec.ts",
+    "test:e2e:objective": "npm run test:e2e -- tests/e2e/objective-workbench-deliberation-flow.spec.ts tests/e2e/objective-workbench-external-verification-flow.spec.ts tests/e2e/objective-workbench-operator-confirmation-flow.spec.ts tests/e2e/objective-workbench-runtime-ops-flow.spec.ts tests/e2e/objective-workbench-runtime-alerts-flow.spec.ts tests/e2e/objective-workbench-nested-subagent-budget-flow.spec.ts",
     "test:smoke:release": "npm run test:e2e -- tests/e2e/import-batch.spec.ts tests/e2e/person-review-flow.spec.ts tests/e2e/memory-workspace-flow.spec.ts tests/e2e/memory-workspace-approved-draft-hosted-share-link-flow.spec.ts",
     "verify:release": "npm run lint && npm run test:typecheck && npm run test:unit && npm run test:e2e:objective && npm run test:smoke:release && npm run pack",
     "typecheck:app": "tsc -p tsconfig.app.json --noEmit",

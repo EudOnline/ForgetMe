@@ -13,6 +13,9 @@ type ObjectivePreloadModule = Pick<
   | 'confirmAgentProposal'
   | 'getObjectiveRuntimeScorecard'
   | 'listObjectiveRuntimeEvents'
+  | 'listObjectiveRuntimeAlerts'
+  | 'acknowledgeObjectiveRuntimeAlert'
+  | 'resolveObjectiveRuntimeAlert'
   | 'getObjectiveRuntimeSettings'
   | 'updateObjectiveRuntimeSettings'
   | 'listAgentMemories'
@@ -30,6 +33,9 @@ export function createObjectivePreloadModule(ipcRenderer: IpcRenderer): Objectiv
     confirmAgentProposal: invokeWith(ipcRenderer, 'archive:confirmAgentProposal'),
     getObjectiveRuntimeScorecard: invokeWithout(ipcRenderer, 'archive:getObjectiveRuntimeScorecard'),
     listObjectiveRuntimeEvents: invokeWith(ipcRenderer, 'archive:listObjectiveRuntimeEvents'),
+    listObjectiveRuntimeAlerts: invokeWith(ipcRenderer, 'archive:listObjectiveRuntimeAlerts'),
+    acknowledgeObjectiveRuntimeAlert: invokeWith(ipcRenderer, 'archive:acknowledgeObjectiveRuntimeAlert'),
+    resolveObjectiveRuntimeAlert: invokeWith(ipcRenderer, 'archive:resolveObjectiveRuntimeAlert'),
     getObjectiveRuntimeSettings: invokeWithout(ipcRenderer, 'archive:getObjectiveRuntimeSettings'),
     updateObjectiveRuntimeSettings: invokeWith(ipcRenderer, 'archive:updateObjectiveRuntimeSettings'),
     listAgentMemories: invokeWith(ipcRenderer, 'archive:listAgentMemories'),

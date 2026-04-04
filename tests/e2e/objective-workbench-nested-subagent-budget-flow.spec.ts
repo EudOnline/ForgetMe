@@ -131,8 +131,8 @@ test('objective workbench shows blocked runtime visibility when subagent budget 
   await page.getByRole('button', { name: 'Objective Workbench' }).click()
   await expect(page.getByRole('heading', { name: 'Objective Workbench' })).toBeVisible()
   await expect(page.getByText('Surface bounded compare budget failures').first()).toBeVisible()
-  await expect(page.getByText(/compare analyst failed/i)).toBeVisible()
-  await expect(page.getByText(/remaining budget is exhausted/i)).toBeVisible()
+  await expect(page.getByText(/compare analyst failed/i).first()).toBeVisible()
+  await expect(page.getByText(/remaining budget is exhausted/i).first()).toBeVisible()
 
   await electronApp.close()
 })

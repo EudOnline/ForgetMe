@@ -19,10 +19,14 @@ import type {
   AgentProposalRiskLevel,
   AgentProposalStatus,
   AgentSkillPackId,
+  AcknowledgeObjectiveRuntimeAlertInput,
   ListObjectiveRuntimeEventsInput,
+  ListObjectiveRuntimeAlertsInput,
   ObjectiveRuntimeEventRecord,
   ObjectiveRuntimeScorecard,
+  ObjectiveRuntimeAlertRecord,
   ObjectiveRuntimeSettingsRecord,
+  ResolveObjectiveRuntimeAlertInput,
   AgentSubagentRecord,
   AgentSubagentStatus,
   AgentThreadDetail,
@@ -1551,10 +1555,14 @@ export type {
   AgentProposalRiskLevel,
   AgentProposalStatus,
   AgentSkillPackId,
+  AcknowledgeObjectiveRuntimeAlertInput,
   ListObjectiveRuntimeEventsInput,
+  ListObjectiveRuntimeAlertsInput,
+  ObjectiveRuntimeAlertRecord,
   ObjectiveRuntimeEventRecord,
   ObjectiveRuntimeScorecard,
   ObjectiveRuntimeSettingsRecord,
+  ResolveObjectiveRuntimeAlertInput,
   AgentSubagentRecord,
   AgentSubagentStatus,
   AgentThreadDetail,
@@ -1605,6 +1613,9 @@ export interface ArchiveApi {
   confirmAgentProposal: (input: ConfirmAgentProposalInput) => Promise<AgentProposalRecord | null>
   getObjectiveRuntimeScorecard: () => Promise<ObjectiveRuntimeScorecard>
   listObjectiveRuntimeEvents: (input?: ListObjectiveRuntimeEventsInput) => Promise<ObjectiveRuntimeEventRecord[]>
+  listObjectiveRuntimeAlerts: (input?: ListObjectiveRuntimeAlertsInput) => Promise<ObjectiveRuntimeAlertRecord[]>
+  acknowledgeObjectiveRuntimeAlert: (input: AcknowledgeObjectiveRuntimeAlertInput) => Promise<ObjectiveRuntimeAlertRecord | null>
+  resolveObjectiveRuntimeAlert: (input: ResolveObjectiveRuntimeAlertInput) => Promise<ObjectiveRuntimeAlertRecord | null>
   getObjectiveRuntimeSettings: () => Promise<ObjectiveRuntimeSettingsRecord>
   updateObjectiveRuntimeSettings: (input: UpdateObjectiveRuntimeSettingsInput) => Promise<ObjectiveRuntimeSettingsRecord>
   listAgentMemories: (input?: ListAgentMemoriesInput) => Promise<AgentMemoryRecord[]>

@@ -107,7 +107,21 @@ export type ObjectiveRuntimeEventType =
   | 'proposal_blocked'
   | 'proposal_vetoed'
   | 'objective_stalled'
+  | 'subagent_budget_exhausted'
+  | 'tool_timeout'
+  | 'recovery_attempted'
+  | 'recovery_exhausted'
+  | 'objective_recovered'
   | 'objective_completed'
+
+export type ObjectiveRuntimeAlertSeverity =
+  | 'warning'
+  | 'critical'
+
+export type ObjectiveRuntimeAlertStatus =
+  | 'open'
+  | 'acknowledged'
+  | 'resolved'
 
 export type ObjectiveRuntimeScorecard = {
   totalProposalCount: number
@@ -124,6 +138,13 @@ export type ObjectiveRuntimeScorecard = {
   stalledObjectiveRate: number | null
   meanRoundsToCompletion: number | null
   operatorBacklogSize: number
+  budgetExhaustedCount: number
+  toolTimeoutCount: number
+  warningAlertCount: number
+  criticalAlertCount: number
+  backlogDelta24h: number
+  stalledDelta24h: number
+  blockedDelta24h: number
   autoCommitRateByRiskLevel: Record<AgentProposalRiskLevel, {
     total: number
     autoCommitted: number
@@ -141,6 +162,25 @@ export type ObjectiveRuntimeEventRecord = {
   createdAt: string
 }
 
+export type ObjectiveRuntimeAlertRecord = {
+  alertId: string
+  fingerprint: string
+  severity: ObjectiveRuntimeAlertSeverity
+  status: ObjectiveRuntimeAlertStatus
+  objectiveId: string
+  proposalId: string | null
+  firstEventId: string
+  latestEventId: string
+  eventCount: number
+  title: string
+  detail: string | null
+  openedAt: string
+  lastSeenAt: string
+  acknowledgedAt: string | null
+  acknowledgedBy: string | null
+  resolvedAt: string | null
+}
+
 export type ObjectiveRuntimeSettingsRecord = {
   disableAutoCommit: boolean
   forceOperatorForExternalActions: boolean
@@ -153,6 +193,23 @@ export type ListObjectiveRuntimeEventsInput = {
   objectiveId?: string
   proposalId?: string
   limit?: number
+}
+
+export type ListObjectiveRuntimeAlertsInput = {
+  objectiveId?: string
+  proposalId?: string
+  status?: ObjectiveRuntimeAlertStatus
+  limit?: number
+}
+
+export type AcknowledgeObjectiveRuntimeAlertInput = {
+  alertId: string
+  actor?: string
+}
+
+export type ResolveObjectiveRuntimeAlertInput = {
+  alertId: string
+  actor?: string
 }
 
 export type UpdateObjectiveRuntimeSettingsInput = {
@@ -175,6 +232,8 @@ export type AgentCheckpointKind =
   | 'participants_invited'
   | 'evidence_gap_detected'
   | 'stalled'
+  | 'runtime_recovery_attempted'
+  | 'runtime_recovery_exhausted'
   | 'subagent_spawned'
   | 'subagent_plan_recorded'
   | 'tool_action_executed'

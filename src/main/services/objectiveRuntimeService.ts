@@ -6,6 +6,7 @@ import { createObjectiveRuntimeConfigService } from './objectiveRuntimeConfigSer
 import { createObjectiveRuntimeDeliberationService } from './objectiveRuntimeDeliberationService'
 import { createObjectiveRuntimeProposalDecisionService } from './objectiveRuntimeProposalDecisionService'
 import { createObjectiveRuntimeProposalStateService } from './objectiveRuntimeProposalStateService'
+import { createObjectiveRuntimeRecoveryService } from './objectiveRuntimeRecoveryService'
 import { createObjectiveRuntimeTelemetryService } from './objectiveRuntimeTelemetryService'
 import { createObjectiveTriggerService } from './objectiveTriggerService'
 import { createObjectiveSubagentExecutionService } from './objectiveSubagentExecutionService'
@@ -14,6 +15,7 @@ import type {
   AgentArtifactRef,
   AgentMessageKind,
   AgentObjectiveDetail,
+  AgentProposalRecord,
   AgentThreadDetail,
   ConfirmAgentProposalInput,
   ListAgentObjectivesInput,
@@ -49,6 +51,7 @@ export type ObjectiveRuntimeDependencies = {
   subagentRegistry: SubagentRegistryService
   runtimeTelemetry?: ReturnType<typeof createObjectiveRuntimeTelemetryService>
   runtimeConfig?: ReturnType<typeof createObjectiveRuntimeConfigService>
+  runtimeRecovery?: ReturnType<typeof createObjectiveRuntimeRecoveryService>
   roleAgentRegistry?: RoleAgentRegistryService | null
   runMemoryWorkspaceCompare?: RunMemoryWorkspaceCompareService
   askMemoryWorkspacePersisted?: AskMemoryWorkspacePersistedService
@@ -61,6 +64,23 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
   const runtimeConfig = dependencies.runtimeConfig ?? createObjectiveRuntimeConfigService({
     env: {}
   })
+  const runtimeRecovery = dependencies.runtimeRecovery ?? createObjectiveRuntimeRecoveryService({
+    runtimeConfig
+  })
+
+  function asErrorMessage(error: unknown) {
+    if (error instanceof Error) {
+      return error.message
+    }
+
+    return String(error)
+  }
+
+  function sleep(ms: number) {
+    return new Promise((resolve) => {
+      setTimeout(resolve, ms)
+    })
+  }
 
   function nextRound(threadId: string) {
     const detail = getThreadDetail(db, { threadId })
@@ -90,6 +110,43 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
       round: nextRound(input.threadId),
       blocking: input.blocking,
       confidence: input.confidence
+    })
+  }
+
+  function countRecoveryAttempts(proposalId: string) {
+    return runtimeTelemetry.listEvents({ proposalId })
+      .filter((event) => event.eventType === 'recovery_attempted')
+      .length
+  }
+
+  function buildFailurePayload(proposal: AgentProposalRecord, error: unknown) {
+    const payload: Record<string, unknown> = {
+      message: asErrorMessage(error)
+    }
+    const specialization = typeof proposal.payload.specialization === 'string'
+      ? proposal.payload.specialization
+      : null
+
+    if (specialization) {
+      payload.specialization = specialization
+    }
+
+    return payload
+  }
+
+  function recordRecoveryCheckpoint(input: {
+    proposal: AgentProposalRecord
+    checkpointKind: 'runtime_recovery_attempted' | 'runtime_recovery_exhausted'
+    title: string
+    summary: string
+  }) {
+    createCheckpoint(db, {
+      objectiveId: input.proposal.objectiveId,
+      threadId: input.proposal.threadId,
+      checkpointKind: input.checkpointKind,
+      title: input.title,
+      summary: input.summary,
+      relatedProposalId: input.proposal.proposalId
     })
   }
 
@@ -257,6 +314,126 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
     }
   })
 
+  async function executeCommittedSpawnProposalWithRecovery(proposal: AgentProposalRecord) {
+    try {
+      return await subagentExecutionService.executeCommittedSpawnSubagentProposal(proposal)
+    } catch (error) {
+      const priorAttemptCount = countRecoveryAttempts(proposal.proposalId)
+      const recoveryPlan = runtimeRecovery.decideRecovery({
+        proposal,
+        failure: error,
+        priorAttemptCount
+      })
+
+      if (recoveryPlan.failureEventType) {
+        runtimeTelemetry.recordEvent({
+          objectiveId: proposal.objectiveId,
+          threadId: proposal.threadId,
+          proposalId: proposal.proposalId,
+          eventType: recoveryPlan.failureEventType,
+          payload: buildFailurePayload(proposal, error)
+        })
+      }
+
+      if (!recoveryPlan.shouldRetry) {
+        runtimeTelemetry.recordEvent({
+          objectiveId: proposal.objectiveId,
+          threadId: proposal.threadId,
+          proposalId: proposal.proposalId,
+          eventType: 'recovery_exhausted',
+          payload: {
+            decision: recoveryPlan.decision,
+            reason: recoveryPlan.reason,
+            failureType: recoveryPlan.failureType,
+            attemptNumber: priorAttemptCount
+          }
+        })
+        recordRecoveryCheckpoint({
+          proposal,
+          checkpointKind: 'runtime_recovery_exhausted',
+          title: 'Runtime recovery surfaced to operator',
+          summary: `Runtime surfaced ${recoveryPlan.failureType} after deciding ${recoveryPlan.decision} (${recoveryPlan.reason}).`
+        })
+        throw error
+      }
+
+      runtimeTelemetry.recordEvent({
+        objectiveId: proposal.objectiveId,
+        threadId: proposal.threadId,
+        proposalId: proposal.proposalId,
+        eventType: 'recovery_attempted',
+        payload: {
+          decision: recoveryPlan.decision,
+          reason: recoveryPlan.reason,
+          failureType: recoveryPlan.failureType,
+          attemptNumber: priorAttemptCount + 1
+        }
+      })
+      recordRecoveryCheckpoint({
+        proposal,
+        checkpointKind: 'runtime_recovery_attempted',
+        title: 'Runtime recovery attempted',
+        summary: `Runtime retried ${recoveryPlan.failureType} via ${recoveryPlan.decision} (${recoveryPlan.reason}).`
+      })
+
+      if (recoveryPlan.decision === 'cooldown_then_retry') {
+        await sleep(25)
+      }
+
+      try {
+        const result = await subagentExecutionService.executeCommittedSpawnSubagentProposal(proposal)
+        runtimeTelemetry.recordEvent({
+          objectiveId: proposal.objectiveId,
+          threadId: proposal.threadId,
+          proposalId: proposal.proposalId,
+          eventType: 'objective_recovered',
+          payload: {
+            recoveredFrom: recoveryPlan.failureType,
+            decision: recoveryPlan.decision,
+            attemptNumber: priorAttemptCount + 1
+          }
+        })
+        return result
+      } catch (retryError) {
+        const retryPlan = runtimeRecovery.decideRecovery({
+          proposal,
+          failure: retryError,
+          priorAttemptCount: priorAttemptCount + 1
+        })
+
+        if (retryPlan.failureEventType) {
+          runtimeTelemetry.recordEvent({
+            objectiveId: proposal.objectiveId,
+            threadId: proposal.threadId,
+            proposalId: proposal.proposalId,
+            eventType: retryPlan.failureEventType,
+            payload: buildFailurePayload(proposal, retryError)
+          })
+        }
+
+        runtimeTelemetry.recordEvent({
+          objectiveId: proposal.objectiveId,
+          threadId: proposal.threadId,
+          proposalId: proposal.proposalId,
+          eventType: 'recovery_exhausted',
+          payload: {
+            decision: 'surface_to_operator',
+            reason: retryPlan.reason,
+            failureType: retryPlan.failureType,
+            attemptNumber: priorAttemptCount + 1
+          }
+        })
+        recordRecoveryCheckpoint({
+          proposal,
+          checkpointKind: 'runtime_recovery_exhausted',
+          title: 'Runtime recovery exhausted',
+          summary: `Runtime stopped after one bounded retry because ${retryPlan.failureType} persisted (${retryPlan.reason}).`
+        })
+        throw retryError
+      }
+    }
+  }
+
   async function startObjective(input: {
     title: string
     objectiveKind: Parameters<FacilitatorService['acceptObjective']>[0]['objectiveKind']
@@ -384,7 +561,7 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
 
       if (autoCommitted.proposalKind === 'spawn_subagent') {
         if (autoCommitted.status === 'committed') {
-          await subagentExecutionService.executeCommittedSpawnSubagentProposal(autoCommitted)
+          await executeCommittedSpawnProposalWithRecovery(autoCommitted)
         } else {
           settled = await subagentExecutionService.autoCommitEligibleSpawnSubagentProposal(autoCommitted)
         }
@@ -409,7 +586,7 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
         && updated.status === 'committed'
         && priorProposal?.status !== 'committed'
       ) {
-        await subagentExecutionService.executeCommittedSpawnSubagentProposal(updated)
+        await executeCommittedSpawnProposalWithRecovery(updated)
       }
 
       await deliberateThread({

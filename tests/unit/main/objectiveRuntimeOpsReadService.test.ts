@@ -235,4 +235,54 @@ describe('objective runtime ops read service', () => {
 
     db.close()
   })
+
+  it('lists persisted runtime alerts with deterministic fingerprints and lifecycle state', () => {
+    const db = setupDatabase()
+    const telemetry = createObjectiveRuntimeTelemetryService({ db })
+    const readService = createObjectiveRuntimeOpsReadService({ db })
+
+    const objective = createObjective(db, {
+      title: 'Escalate repeated stalls into an alert',
+      objectiveKind: 'evidence_investigation',
+      prompt: 'Collapse repeated stalls into one runtime alert row.',
+      initiatedBy: 'operator',
+      ownerRole: 'workspace'
+    })
+    const thread = createMainThread(db, {
+      objectiveId: objective.objectiveId,
+      ownerRole: 'workspace',
+      title: 'Stalled thread'
+    })
+
+    telemetry.recordEvent({
+      objectiveId: objective.objectiveId,
+      threadId: thread.threadId,
+      eventType: 'objective_stalled',
+      payload: {
+        roundCount: 2
+      },
+      createdAt: '2026-04-04T03:00:00.000Z'
+    })
+    telemetry.recordEvent({
+      objectiveId: objective.objectiveId,
+      threadId: thread.threadId,
+      eventType: 'objective_stalled',
+      payload: {
+        roundCount: 3
+      },
+      createdAt: '2026-04-04T03:05:00.000Z'
+    })
+
+    expect(readService.listRuntimeAlerts()).toEqual([
+      expect.objectContaining({
+        fingerprint: `objective_stalled:${objective.objectiveId}`,
+        severity: 'critical',
+        status: 'open',
+        objectiveId: objective.objectiveId,
+        proposalId: null
+      })
+    ])
+
+    db.close()
+  })
 })

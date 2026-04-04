@@ -345,7 +345,7 @@ Reference docs:
 
 ```bash
 npm run test:typecheck
-npm run test:unit -- tests/unit/main/objectiveAutonomySelectorsService.test.ts tests/unit/main/agentProposalGateService.test.ts tests/unit/main/objectiveRuntimeTelemetryService.test.ts tests/unit/main/objectiveRuntimeService.test.ts tests/unit/main/agentIpc.test.ts tests/unit/renderer/objectiveWorkbenchPage.test.tsx tests/unit/repo/objectiveRuntimeCleanup.test.ts
+npm run test:unit -- tests/unit/main/objectiveAutonomySelectorsService.test.ts tests/unit/main/agentProposalGateService.test.ts tests/unit/main/objectiveRuntimeAlertService.test.ts tests/unit/main/objectiveRuntimeTelemetryService.test.ts tests/unit/main/objectiveRuntimeOpsReadService.test.ts tests/unit/main/objectiveRuntimeRecoveryService.test.ts tests/unit/main/objectiveRuntimeService.test.ts tests/unit/main/agentIpc.test.ts tests/unit/renderer/objectiveWorkbenchPage.test.tsx tests/unit/repo/objectiveRuntimeCleanup.test.ts
 npm run test:e2e:objective
 npm run build
 ```

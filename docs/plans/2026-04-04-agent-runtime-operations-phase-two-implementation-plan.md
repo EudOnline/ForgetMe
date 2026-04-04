@@ -1,5 +1,16 @@
 # Agent Runtime Operations Phase Two Implementation Plan
 
+## Status
+
+Implemented on `2026-04-04` in `codex/agent-runtime-ops-phase-two`.
+
+Phase two now includes:
+
+- persisted runtime alert lifecycle with acknowledgement and resolution
+- budget pressure, timeout pressure, and short-window trend visibility in Objective Workbench
+- bounded one-time self-recovery for transient local failures with explicit runtime events and checkpoint evidence
+- release verification that includes runtime ops, runtime alerts, and bounded subagent budget e2e coverage
+
 ## Goal
 
 Increase effective autonomy by improving runtime triage, budget visibility, and bounded self-recovery without lowering the `critical` threshold.
@@ -347,7 +358,6 @@ Require verification for:
 npm run lint
 npm run test:typecheck
 npm run test:unit
-npm run test:e2e -- tests/e2e/objective-workbench-runtime-alerts-flow.spec.ts tests/e2e/objective-workbench-runtime-ops-flow.spec.ts tests/e2e/objective-workbench-nested-subagent-budget-flow.spec.ts
 npm run test:e2e:objective
 ```
 
