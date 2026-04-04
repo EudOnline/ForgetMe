@@ -9,6 +9,7 @@ const {
   runMigrations,
   listAgentMemories,
   listAgentPolicyVersions,
+  createObjectiveRuntimeSettingsService,
   createObjectiveRuntimeService,
   createFacilitatorAgentService,
   createRoleAgentRegistryService,
@@ -21,6 +22,7 @@ const {
   runMigrations: vi.fn(),
   listAgentMemories: vi.fn(),
   listAgentPolicyVersions: vi.fn(),
+  createObjectiveRuntimeSettingsService: vi.fn(),
   createObjectiveRuntimeService: vi.fn(),
   createFacilitatorAgentService: vi.fn(),
   createRoleAgentRegistryService: vi.fn(),
@@ -48,6 +50,10 @@ vi.mock('../../../src/main/services/db', () => ({
 vi.mock('../../../src/main/services/governancePersistenceService', () => ({
   listAgentMemories,
   listAgentPolicyVersions
+}))
+
+vi.mock('../../../src/main/services/objectiveRuntimeSettingsService', () => ({
+  createObjectiveRuntimeSettingsService
 }))
 
 vi.mock('../../../src/main/services/objectiveRuntimeService', () => ({
@@ -94,12 +100,20 @@ describe('registerObjectiveIpc', () => {
     runMigrations.mockReset()
     listAgentMemories.mockReset()
     listAgentPolicyVersions.mockReset()
+    createObjectiveRuntimeSettingsService.mockReset()
     createObjectiveRuntimeService.mockReset()
     createFacilitatorAgentService.mockReset()
     createRoleAgentRegistryService.mockReset()
     createExternalVerificationBrokerService.mockReset()
     createExternalWebSearchService.mockReset()
     createSubagentRegistryService.mockReset()
+    createObjectiveRuntimeSettingsService.mockReturnValue({
+      getRuntimeSettings: vi.fn().mockReturnValue({
+        disableAutoCommit: false,
+        forceOperatorForExternalActions: false,
+        disableNestedDelegation: false
+      })
+    })
   })
 
   it('does not keep legacy run-centric handler names in the ipc source', () => {

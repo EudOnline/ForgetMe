@@ -18,7 +18,7 @@ export type ObjectiveRuntimeProposalPolicyInput = {
   requiresOperatorConfirmation: boolean
 }
 
-const DEFAULT_RUNTIME_CONFIG: ObjectiveRuntimeConfig = {
+export const DEFAULT_RUNTIME_CONFIG: ObjectiveRuntimeConfig = {
   disableAutoCommit: false,
   forceOperatorForExternalActions: false,
   disableNestedDelegation: false
@@ -47,6 +47,7 @@ export function isExternalActionProposalKind(proposalKind: AgentProposalKind) {
 
 export function createObjectiveRuntimeConfigService(input?: {
   env?: NodeJS.ProcessEnv
+  persistedSettings?: Partial<ObjectiveRuntimeConfig>
   overrides?: Partial<ObjectiveRuntimeConfig>
 }) {
   const env = input?.env ?? process.env
@@ -55,6 +56,7 @@ export function createObjectiveRuntimeConfigService(input?: {
     disableAutoCommit: parseBooleanFlag(env.FORGETME_AGENT_DISABLE_AUTO_COMMIT),
     forceOperatorForExternalActions: parseBooleanFlag(env.FORGETME_AGENT_FORCE_OPERATOR_FOR_EXTERNAL_ACTIONS),
     disableNestedDelegation: parseBooleanFlag(env.FORGETME_AGENT_DISABLE_NESTED_DELEGATION),
+    ...(input?.persistedSettings ?? {}),
     ...(input?.overrides ?? {})
   }
 

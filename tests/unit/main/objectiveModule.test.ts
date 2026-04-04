@@ -6,6 +6,7 @@ const {
   runMigrations,
   listAgentMemories,
   listAgentPolicyVersions,
+  createObjectiveRuntimeSettingsService,
   createObjectiveRuntimeService,
   createFacilitatorAgentService,
   createRoleAgentRegistryService,
@@ -17,6 +18,7 @@ const {
   runMigrations: vi.fn(),
   listAgentMemories: vi.fn(),
   listAgentPolicyVersions: vi.fn(),
+  createObjectiveRuntimeSettingsService: vi.fn(),
   createObjectiveRuntimeService: vi.fn(),
   createFacilitatorAgentService: vi.fn(),
   createRoleAgentRegistryService: vi.fn(),
@@ -33,6 +35,10 @@ vi.mock('../../../src/main/services/db', () => ({
 vi.mock('../../../src/main/services/governancePersistenceService', () => ({
   listAgentMemories,
   listAgentPolicyVersions
+}))
+
+vi.mock('../../../src/main/services/objectiveRuntimeSettingsService', () => ({
+  createObjectiveRuntimeSettingsService
 }))
 
 vi.mock('../../../src/main/services/objectiveRuntimeService', () => ({
@@ -78,6 +84,7 @@ describe('createObjectiveModule', () => {
     runMigrations.mockReset()
     listAgentMemories.mockReset()
     listAgentPolicyVersions.mockReset()
+    createObjectiveRuntimeSettingsService.mockReset()
     createObjectiveRuntimeService.mockReset()
     createFacilitatorAgentService.mockReset()
     createRoleAgentRegistryService.mockReset()
@@ -111,6 +118,13 @@ describe('createObjectiveModule', () => {
     })
     createExternalVerificationBrokerService.mockReturnValue({ role: 'broker' })
     createSubagentRegistryService.mockReturnValue({ role: 'subagents' })
+    createObjectiveRuntimeSettingsService.mockReturnValue({
+      getRuntimeSettings: vi.fn().mockReturnValue({
+        disableAutoCommit: false,
+        forceOperatorForExternalActions: false,
+        disableNestedDelegation: false
+      })
+    })
     createObjectiveRuntimeService.mockReturnValue(runtime)
 
     const objectiveModule = createObjectiveModule(appPathsFixture())

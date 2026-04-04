@@ -13,6 +13,7 @@ import { createRoleAgentRegistryService } from '../../../services/agents/roleAge
 import { createExternalVerificationBrokerService } from '../../../services/externalVerificationBrokerService'
 import { createExternalWebSearchService } from '../../../services/externalWebSearchService'
 import { createObjectiveRuntimeConfigService } from '../../../services/objectiveRuntimeConfigService'
+import { createObjectiveRuntimeSettingsService } from '../../../services/objectiveRuntimeSettingsService'
 import { createObjectiveRuntimeTelemetryService } from '../../../services/objectiveRuntimeTelemetryService'
 import { createSubagentRegistryService } from '../../../services/subagentRegistryService'
 import { openDatabase, runMigrations } from '../../../services/db'
@@ -54,10 +55,13 @@ function createObjectiveRuntimeSession(
   overrides: Partial<Omit<ObjectiveRuntimeDependencies, 'db'>> = {}
 ) {
   const db = openArchiveDatabase(appPaths)
+  const runtimeSettings = createObjectiveRuntimeSettingsService({ db }).getRuntimeSettings()
   const runtime = createObjectiveRuntimeService({
     db,
     runtimeTelemetry: createObjectiveRuntimeTelemetryService({ db }),
-    runtimeConfig: createObjectiveRuntimeConfigService(),
+    runtimeConfig: createObjectiveRuntimeConfigService({
+      persistedSettings: runtimeSettings
+    }),
     ...createObjectiveRuntimeDefaults(),
     ...overrides
   })
@@ -146,6 +150,29 @@ export function createObjectiveModule(appPaths: AppPaths) {
     },
     async listPolicyVersions(input: Parameters<typeof listAgentPolicyVersions>[1]) {
       return this.withArchiveDatabase((db) => listAgentPolicyVersions(db, input))
+    },
+    async getRuntimeSettings() {
+      return this.withArchiveDatabase((db) => (
+        createObjectiveRuntimeSettingsService({ db }).getRuntimeSettings()
+      ))
+    },
+    async updateRuntimeSettings(input: {
+      patch: Partial<ReturnType<typeof createObjectiveRuntimeConfigService>['getConfig']>
+      actor?: string
+    }) {
+      return this.withArchiveDatabase((db) => (
+        createObjectiveRuntimeSettingsService({ db }).updateRuntimeSettings(
+          input.patch,
+          {
+            actor: input.actor ?? 'operator'
+          }
+        )
+      ))
+    },
+    async listRuntimeSettingEvents() {
+      return this.withArchiveDatabase((db) => (
+        createObjectiveRuntimeSettingsService({ db }).listRuntimeSettingEvents()
+      ))
     }
   }
 }
