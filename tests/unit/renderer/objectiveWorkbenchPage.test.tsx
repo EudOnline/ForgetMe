@@ -588,11 +588,16 @@ describe('ObjectiveWorkbenchPage', () => {
     const getObjectiveRuntimeScorecard = vi.fn().mockResolvedValue(buildRuntimeScorecard())
     const listObjectiveRuntimeEvents = vi.fn().mockResolvedValue(buildRuntimeEvents())
     const getObjectiveRuntimeSettings = vi.fn().mockResolvedValue(buildRuntimeSettings())
-    const updateObjectiveRuntimeSettings = vi.fn().mockResolvedValue({
-      ...buildRuntimeSettings(),
-      disableAutoCommit: true,
-      updatedAt: '2026-03-30T00:07:00.000Z'
-    })
+    let resolveRuntimeSettingsUpdate!: (value: {
+      disableAutoCommit: boolean
+      forceOperatorForExternalActions: boolean
+      disableNestedDelegation: boolean
+      updatedAt: string
+      updatedBy: string
+    }) => void
+    const updateObjectiveRuntimeSettings = vi.fn().mockImplementation(() => new Promise((resolve) => {
+      resolveRuntimeSettingsUpdate = resolve
+    }))
 
     installArchiveApi({
       refreshObjectiveTriggers: vi.fn().mockResolvedValue([]),
@@ -620,13 +625,23 @@ describe('ObjectiveWorkbenchPage', () => {
     expect(screen.getByLabelText('Disable nested delegation')).toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Disable auto commit'))
+    expect(screen.getByLabelText('Disable auto commit')).toBeChecked()
+
+    expect(updateObjectiveRuntimeSettings).toHaveBeenCalledWith({
+      patch: {
+        disableAutoCommit: true
+      }
+    })
+
+    resolveRuntimeSettingsUpdate({
+      ...buildRuntimeSettings(),
+      disableAutoCommit: true,
+      updatedAt: '2026-03-30T00:07:00.000Z',
+      updatedBy: 'operator:test'
+    })
 
     await waitFor(() => {
-      expect(updateObjectiveRuntimeSettings).toHaveBeenCalledWith({
-        patch: {
-          disableAutoCommit: true
-        }
-      })
+      expect(screen.getByText('Updated runtime controls.')).toBeInTheDocument()
     })
     expect(getObjectiveRuntimeScorecard).toHaveBeenCalledWith()
     expect(listObjectiveRuntimeEvents).toHaveBeenCalledWith()

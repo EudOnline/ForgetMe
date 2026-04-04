@@ -87,11 +87,19 @@ These should remain operator-gated unless the product boundary is explicitly red
 
 The runtime supports explicit overrides for rollback and incident response:
 
-- `FORGETME_AGENT_DISABLE_AUTO_COMMIT`
-- `FORGETME_AGENT_FORCE_OPERATOR_FOR_EXTERNAL_ACTIONS`
-- `FORGETME_AGENT_DISABLE_NESTED_DELEGATION`
+- `Disable auto commit`
+- `Force operator for external actions`
+- `Disable nested delegation`
 
 These switches are emergency controls, not the normal operating mode.
+
+In this release line, the preferred operator path is the persisted runtime controls in Objective Workbench. Environment variables remain as engineering fallbacks, but they are not the primary workflow for daily operations.
+
+Important:
+
+- these controls do not lower the `critical` threshold
+- these controls tighten autonomy temporarily; they do not broaden it
+- any control change should remain auditable through the runtime settings event trail
 
 ## Non-Goals For This Release Line
 

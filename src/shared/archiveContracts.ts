@@ -1551,6 +1551,10 @@ export type {
   AgentProposalRiskLevel,
   AgentProposalStatus,
   AgentSkillPackId,
+  ListObjectiveRuntimeEventsInput,
+  ObjectiveRuntimeEventRecord,
+  ObjectiveRuntimeScorecard,
+  ObjectiveRuntimeSettingsRecord,
   AgentSubagentRecord,
   AgentSubagentStatus,
   AgentThreadDetail,
@@ -1569,6 +1573,7 @@ export type {
   GetAgentThreadInput,
   ListAgentObjectivesInput,
   RespondToAgentProposalInput,
+  UpdateObjectiveRuntimeSettingsInput,
 } from './objectiveRuntimeContracts'
 
 export type ListAgentMemoriesInput = {

@@ -47,6 +47,11 @@ function formatRuntimeSettingValue(value: unknown) {
   return String(value)
 }
 
+type RuntimeSettingKey =
+  | 'disableAutoCommit'
+  | 'forceOperatorForExternalActions'
+  | 'disableNestedDelegation'
+
 function objectiveRiskPillLabel(
   riskLevel: AgentObjectiveRecord['riskLevel'],
   t: ReturnType<typeof useI18n>['t']
@@ -148,7 +153,7 @@ export function ObjectiveWorkbenchPage() {
   const [runtimeEvents, setRuntimeEvents] = useState<ObjectiveRuntimeEventRecord[]>([])
   const [selectedRuntimeEventId, setSelectedRuntimeEventId] = useState<string | null>(null)
   const [runtimeSettings, setRuntimeSettings] = useState<ObjectiveRuntimeSettingsRecord | null>(null)
-  const [pendingRuntimeSettingKey, setPendingRuntimeSettingKey] = useState<string | null>(null)
+  const [pendingRuntimeSettingKey, setPendingRuntimeSettingKey] = useState<RuntimeSettingKey | null>(null)
 
   const runtimeSettingOptions = useMemo(() => ([
     {
@@ -628,19 +633,26 @@ export function ObjectiveWorkbenchPage() {
   }
 
   const handleRuntimeSettingToggle = async (
-    settingKey: keyof UpdateObjectiveRuntimeSettingsInput['patch']
+    settingKey: RuntimeSettingKey
   ) => {
     if (!runtimeSettings) {
       return
     }
 
+    const previousSettings = runtimeSettings
+    const nextSettings = {
+      ...runtimeSettings,
+      [settingKey]: !runtimeSettings[settingKey]
+    } satisfies ObjectiveRuntimeSettingsRecord
+
     setPendingRuntimeSettingKey(settingKey)
     setErrorMessage(null)
     setStatusMessage(null)
+    setRuntimeSettings(nextSettings)
 
     try {
       const patch = {
-        [settingKey]: !runtimeSettings[settingKey]
+        [settingKey]: nextSettings[settingKey]
       } as UpdateObjectiveRuntimeSettingsInput['patch']
       const updated = await objectiveClient.updateObjectiveRuntimeSettings({ patch })
 
@@ -648,6 +660,7 @@ export function ObjectiveWorkbenchPage() {
       setStatusMessage(t('objectiveWorkbench.runtimeControlUpdated'))
       await loadRuntimeOps()
     } catch (error) {
+      setRuntimeSettings(previousSettings)
       setErrorMessage(t('objectiveWorkbench.runtimeControlUpdateFailed', {
         message: asErrorMessage(error)
       }))
