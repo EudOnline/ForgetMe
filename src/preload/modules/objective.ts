@@ -11,6 +11,10 @@ type ObjectivePreloadModule = Pick<
   | 'getAgentThread'
   | 'respondToAgentProposal'
   | 'confirmAgentProposal'
+  | 'getObjectiveRuntimeScorecard'
+  | 'listObjectiveRuntimeEvents'
+  | 'getObjectiveRuntimeSettings'
+  | 'updateObjectiveRuntimeSettings'
   | 'listAgentMemories'
   | 'listAgentPolicyVersions'
 >
@@ -24,6 +28,10 @@ export function createObjectivePreloadModule(ipcRenderer: IpcRenderer): Objectiv
     getAgentThread: invokeWith(ipcRenderer, 'archive:getAgentThread'),
     respondToAgentProposal: invokeWith(ipcRenderer, 'archive:respondToAgentProposal'),
     confirmAgentProposal: invokeWith(ipcRenderer, 'archive:confirmAgentProposal'),
+    getObjectiveRuntimeScorecard: invokeWithout(ipcRenderer, 'archive:getObjectiveRuntimeScorecard'),
+    listObjectiveRuntimeEvents: invokeWith(ipcRenderer, 'archive:listObjectiveRuntimeEvents'),
+    getObjectiveRuntimeSettings: invokeWithout(ipcRenderer, 'archive:getObjectiveRuntimeSettings'),
+    updateObjectiveRuntimeSettings: invokeWith(ipcRenderer, 'archive:updateObjectiveRuntimeSettings'),
     listAgentMemories: invokeWith(ipcRenderer, 'archive:listAgentMemories'),
     listAgentPolicyVersions: invokeWith(ipcRenderer, 'archive:listAgentPolicyVersions')
   }

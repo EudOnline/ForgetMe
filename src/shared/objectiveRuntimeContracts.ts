@@ -99,6 +99,71 @@ export type AgentProposalAutonomyDecision =
   | 'auto_commit_with_audit'
   | 'await_operator'
 
+export type ObjectiveRuntimeEventType =
+  | 'objective_started'
+  | 'proposal_created'
+  | 'proposal_auto_committed'
+  | 'proposal_awaiting_operator'
+  | 'proposal_blocked'
+  | 'proposal_vetoed'
+  | 'objective_stalled'
+  | 'objective_completed'
+
+export type ObjectiveRuntimeScorecard = {
+  totalProposalCount: number
+  autoCommitCount: number
+  operatorGatedCount: number
+  vetoCount: number
+  blockedCount: number
+  totalObjectiveCount: number
+  stalledObjectiveCount: number
+  completedObjectiveCount: number
+  criticalGateRate: number | null
+  vetoRate: number | null
+  blockedRate: number | null
+  stalledObjectiveRate: number | null
+  meanRoundsToCompletion: number | null
+  operatorBacklogSize: number
+  autoCommitRateByRiskLevel: Record<AgentProposalRiskLevel, {
+    total: number
+    autoCommitted: number
+    rate: number | null
+  }>
+}
+
+export type ObjectiveRuntimeEventRecord = {
+  eventId: string
+  objectiveId: string
+  threadId: string | null
+  proposalId: string | null
+  eventType: ObjectiveRuntimeEventType
+  payload: Record<string, unknown>
+  createdAt: string
+}
+
+export type ObjectiveRuntimeSettingsRecord = {
+  disableAutoCommit: boolean
+  forceOperatorForExternalActions: boolean
+  disableNestedDelegation: boolean
+  updatedAt: string | null
+  updatedBy: string | null
+}
+
+export type ListObjectiveRuntimeEventsInput = {
+  objectiveId?: string
+  proposalId?: string
+  limit?: number
+}
+
+export type UpdateObjectiveRuntimeSettingsInput = {
+  patch: Partial<Pick<
+    ObjectiveRuntimeSettingsRecord,
+    | 'disableAutoCommit'
+    | 'forceOperatorForExternalActions'
+    | 'disableNestedDelegation'
+  >>
+}
+
 export type AgentVoteValue =
   | 'approve'
   | 'challenge'

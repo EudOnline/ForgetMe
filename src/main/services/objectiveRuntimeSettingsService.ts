@@ -1,5 +1,8 @@
 import crypto from 'node:crypto'
 import type { ArchiveDatabase } from './db'
+import type {
+  ObjectiveRuntimeSettingsRecord
+} from '../../shared/objectiveRuntimeContracts'
 import {
   DEFAULT_RUNTIME_CONFIG,
   type ObjectiveRuntimeConfig
@@ -13,11 +16,6 @@ type RuntimeSettingsRow = {
   disableNestedDelegation: number
   updatedAt: string
   updatedBy: string
-}
-
-export type ObjectiveRuntimeSettingsRecord = ObjectiveRuntimeConfig & {
-  updatedAt: string | null
-  updatedBy: string | null
 }
 
 export type ObjectiveRuntimeSettingsPatch = Partial<ObjectiveRuntimeConfig>

@@ -3,51 +3,12 @@ import type {
   AgentObjectiveInitiator,
   AgentObjectiveKind,
   AgentProposalRecord,
-  AgentProposalRiskLevel
+  AgentProposalRiskLevel,
+  ObjectiveRuntimeEventRecord,
+  ObjectiveRuntimeEventType,
+  ObjectiveRuntimeScorecard
 } from '../../shared/objectiveRuntimeContracts'
 import type { ArchiveDatabase } from './db'
-
-export type ObjectiveRuntimeEventType =
-  | 'objective_started'
-  | 'proposal_created'
-  | 'proposal_auto_committed'
-  | 'proposal_awaiting_operator'
-  | 'proposal_blocked'
-  | 'proposal_vetoed'
-  | 'objective_stalled'
-  | 'objective_completed'
-
-export type ObjectiveRuntimeEventRecord = {
-  eventId: string
-  objectiveId: string
-  threadId: string | null
-  proposalId: string | null
-  eventType: ObjectiveRuntimeEventType
-  payload: Record<string, unknown>
-  createdAt: string
-}
-
-export type ObjectiveRuntimeTelemetryScorecard = {
-  totalProposalCount: number
-  autoCommitCount: number
-  operatorGatedCount: number
-  vetoCount: number
-  blockedCount: number
-  totalObjectiveCount: number
-  stalledObjectiveCount: number
-  completedObjectiveCount: number
-  criticalGateRate: number | null
-  vetoRate: number | null
-  blockedRate: number | null
-  stalledObjectiveRate: number | null
-  meanRoundsToCompletion: number | null
-  operatorBacklogSize: number
-  autoCommitRateByRiskLevel: Record<AgentProposalRiskLevel, {
-    total: number
-    autoCommitted: number
-    rate: number | null
-  }>
-}
 
 function nowIso() {
   return new Date().toISOString()
@@ -167,7 +128,7 @@ export function createObjectiveRuntimeTelemetryService(dependencies: {
     })) as ObjectiveRuntimeEventRecord[]
   }
 
-  function getScorecard(): ObjectiveRuntimeTelemetryScorecard {
+  function getScorecard(): ObjectiveRuntimeScorecard {
     const events = listEvents()
     const createdProposalIds = new Set<string>()
     const autoCommittedProposalIds = new Set<string>()

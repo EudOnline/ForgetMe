@@ -33,6 +33,26 @@ export const listAgentPolicyVersionsInputSchema = z.object({
   policyKey: z.string().min(1).optional()
 }).optional().default({})
 
+export const listObjectiveRuntimeEventsInputSchema = z.object({
+  objectiveId: z.string().min(1).optional(),
+  proposalId: z.string().min(1).optional(),
+  limit: z.number().int().positive().max(200).optional()
+}).optional().default({})
+
+export const updateObjectiveRuntimeSettingsInputSchema = z.object({
+  patch: z.object({
+    disableAutoCommit: z.boolean().optional(),
+    forceOperatorForExternalActions: z.boolean().optional(),
+    disableNestedDelegation: z.boolean().optional()
+  }).refine((value) => (
+    value.disableAutoCommit !== undefined
+      || value.forceOperatorForExternalActions !== undefined
+      || value.disableNestedDelegation !== undefined
+  ), {
+    message: 'At least one runtime setting must be provided.'
+  })
+})
+
 export const agentObjectiveKindSchema = z.enum([
   'review_decision',
   'evidence_investigation',

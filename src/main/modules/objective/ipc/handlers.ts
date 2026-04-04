@@ -6,7 +6,9 @@ import {
   getAgentThreadInputSchema,
   listAgentMemoriesInputSchema,
   listAgentObjectivesInputSchema,
+  listObjectiveRuntimeEventsInputSchema,
   listAgentPolicyVersionsInputSchema,
+  updateObjectiveRuntimeSettingsInputSchema,
   respondToAgentProposalInputSchema
 } from '../../../../shared/schemas/objective'
 import type { AppPaths } from '../../../services/appPaths'
@@ -24,6 +26,10 @@ export function registerObjectiveHandlers(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:confirmAgentProposal')
   ipcMain.removeHandler('archive:listAgentMemories')
   ipcMain.removeHandler('archive:listAgentPolicyVersions')
+  ipcMain.removeHandler('archive:getObjectiveRuntimeScorecard')
+  ipcMain.removeHandler('archive:listObjectiveRuntimeEvents')
+  ipcMain.removeHandler('archive:getObjectiveRuntimeSettings')
+  ipcMain.removeHandler('archive:updateObjectiveRuntimeSettings')
 
   ipcMain.handle('archive:createAgentObjective', async (_event, payload) => {
     const input = createAgentObjectiveInputSchema.parse(payload)
@@ -67,5 +73,23 @@ export function registerObjectiveHandlers(appPaths: AppPaths) {
   ipcMain.handle('archive:listAgentPolicyVersions', async (_event, payload) => {
     const input = listAgentPolicyVersionsInputSchema.parse(payload)
     return objectiveModule.listPolicyVersions(input)
+  })
+
+  ipcMain.handle('archive:getObjectiveRuntimeScorecard', async () => {
+    return objectiveModule.getRuntimeScorecard()
+  })
+
+  ipcMain.handle('archive:listObjectiveRuntimeEvents', async (_event, payload) => {
+    const input = listObjectiveRuntimeEventsInputSchema.parse(payload)
+    return objectiveModule.listRuntimeEvents(input)
+  })
+
+  ipcMain.handle('archive:getObjectiveRuntimeSettings', async () => {
+    return objectiveModule.getRuntimeSettings()
+  })
+
+  ipcMain.handle('archive:updateObjectiveRuntimeSettings', async (_event, payload) => {
+    const input = updateObjectiveRuntimeSettingsInputSchema.parse(payload)
+    return objectiveModule.updateRuntimeSettings(input)
   })
 }

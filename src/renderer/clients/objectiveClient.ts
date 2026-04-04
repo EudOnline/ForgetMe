@@ -2,7 +2,10 @@ import type {
   AgentMemoryRecord,
   AgentPolicyVersionRecord,
   AgentProposalRecord,
-  AgentRole
+  AgentRole,
+  ObjectiveRuntimeEventRecord,
+  ObjectiveRuntimeScorecard,
+  ObjectiveRuntimeSettingsRecord
 } from '../../shared/archiveContracts'
 import type {
   AgentObjectiveDetail,
@@ -12,8 +15,10 @@ import type {
   CreateAgentObjectiveInput,
   GetAgentObjectiveInput,
   GetAgentThreadInput,
+  ListObjectiveRuntimeEventsInput,
   ListAgentObjectivesInput,
-  RespondToAgentProposalInput
+  RespondToAgentProposalInput,
+  UpdateObjectiveRuntimeSettingsInput
 } from '../../shared/objectiveRuntimeContracts'
 import type { ArchiveApi } from '../../shared/archiveContracts'
 import { bridgeMethod } from './clientHelpers'
@@ -27,6 +32,10 @@ type ObjectiveClient = Pick<
   | 'getAgentThread'
   | 'respondToAgentProposal'
   | 'confirmAgentProposal'
+  | 'getObjectiveRuntimeScorecard'
+  | 'listObjectiveRuntimeEvents'
+  | 'getObjectiveRuntimeSettings'
+  | 'updateObjectiveRuntimeSettings'
   | 'listAgentMemories'
   | 'listAgentPolicyVersions'
 >
@@ -84,6 +93,43 @@ export function getObjectiveClient(): ObjectiveClient {
     getAgentThread: bridgeMethod('getAgentThread', async (_input: GetAgentThreadInput) => null as AgentThreadDetail | null),
     respondToAgentProposal: bridgeMethod('respondToAgentProposal', async (_input: RespondToAgentProposalInput) => null as AgentProposalRecord | null),
     confirmAgentProposal: bridgeMethod('confirmAgentProposal', async (_input: ConfirmAgentProposalInput) => null as AgentProposalRecord | null),
+    getObjectiveRuntimeScorecard: bridgeMethod('getObjectiveRuntimeScorecard', async () => ({
+      totalProposalCount: 0,
+      autoCommitCount: 0,
+      operatorGatedCount: 0,
+      vetoCount: 0,
+      blockedCount: 0,
+      totalObjectiveCount: 0,
+      stalledObjectiveCount: 0,
+      completedObjectiveCount: 0,
+      criticalGateRate: null,
+      vetoRate: null,
+      blockedRate: null,
+      stalledObjectiveRate: null,
+      meanRoundsToCompletion: null,
+      operatorBacklogSize: 0,
+      autoCommitRateByRiskLevel: {
+        low: { total: 0, autoCommitted: 0, rate: null },
+        medium: { total: 0, autoCommitted: 0, rate: null },
+        high: { total: 0, autoCommitted: 0, rate: null },
+        critical: { total: 0, autoCommitted: 0, rate: null }
+      }
+    } satisfies ObjectiveRuntimeScorecard)),
+    listObjectiveRuntimeEvents: bridgeMethod('listObjectiveRuntimeEvents', async (_input?: ListObjectiveRuntimeEventsInput) => [] as ObjectiveRuntimeEventRecord[]),
+    getObjectiveRuntimeSettings: bridgeMethod('getObjectiveRuntimeSettings', async () => ({
+      disableAutoCommit: false,
+      forceOperatorForExternalActions: false,
+      disableNestedDelegation: false,
+      updatedAt: null,
+      updatedBy: null
+    } satisfies ObjectiveRuntimeSettingsRecord)),
+    updateObjectiveRuntimeSettings: bridgeMethod('updateObjectiveRuntimeSettings', async (input: UpdateObjectiveRuntimeSettingsInput) => ({
+      disableAutoCommit: input.patch.disableAutoCommit ?? false,
+      forceOperatorForExternalActions: input.patch.forceOperatorForExternalActions ?? false,
+      disableNestedDelegation: input.patch.disableNestedDelegation ?? false,
+      updatedAt: null,
+      updatedBy: null
+    } satisfies ObjectiveRuntimeSettingsRecord)),
     listAgentMemories: bridgeMethod('listAgentMemories', async () => [] as AgentMemoryRecord[]),
     listAgentPolicyVersions: bridgeMethod('listAgentPolicyVersions', async () => [] as AgentPolicyVersionRecord[])
   }

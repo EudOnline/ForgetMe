@@ -13,6 +13,7 @@ import { createRoleAgentRegistryService } from '../../../services/agents/roleAge
 import { createExternalVerificationBrokerService } from '../../../services/externalVerificationBrokerService'
 import { createExternalWebSearchService } from '../../../services/externalWebSearchService'
 import { createObjectiveRuntimeConfigService } from '../../../services/objectiveRuntimeConfigService'
+import { createObjectiveRuntimeOpsReadService } from '../../../services/objectiveRuntimeOpsReadService'
 import { createObjectiveRuntimeSettingsService } from '../../../services/objectiveRuntimeSettingsService'
 import { createObjectiveRuntimeTelemetryService } from '../../../services/objectiveRuntimeTelemetryService'
 import { createSubagentRegistryService } from '../../../services/subagentRegistryService'
@@ -172,6 +173,20 @@ export function createObjectiveModule(appPaths: AppPaths) {
     async listRuntimeSettingEvents() {
       return this.withArchiveDatabase((db) => (
         createObjectiveRuntimeSettingsService({ db }).listRuntimeSettingEvents()
+      ))
+    },
+    async getRuntimeScorecard() {
+      return this.withArchiveDatabase((db) => (
+        createObjectiveRuntimeOpsReadService({ db }).getRuntimeScorecard()
+      ))
+    },
+    async listRuntimeEvents(input: {
+      objectiveId?: string
+      proposalId?: string
+      limit?: number
+    }) {
+      return this.withArchiveDatabase((db) => (
+        createObjectiveRuntimeOpsReadService({ db }).listRecentIncidents(input)
       ))
     }
   }

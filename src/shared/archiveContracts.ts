@@ -19,6 +19,10 @@ import type {
   AgentProposalRiskLevel,
   AgentProposalStatus,
   AgentSkillPackId,
+  ListObjectiveRuntimeEventsInput,
+  ObjectiveRuntimeEventRecord,
+  ObjectiveRuntimeScorecard,
+  ObjectiveRuntimeSettingsRecord,
   AgentSubagentRecord,
   AgentSubagentStatus,
   AgentThreadDetail,
@@ -37,6 +41,7 @@ import type {
   GetAgentThreadInput,
   ListAgentObjectivesInput,
   RespondToAgentProposalInput,
+  UpdateObjectiveRuntimeSettingsInput,
 } from './objectiveRuntimeContracts'
 
 export type ImportBatchSummary = {
@@ -1593,6 +1598,10 @@ export interface ArchiveApi {
   getAgentThread: (input: GetAgentThreadInput) => Promise<AgentThreadDetail | null>
   respondToAgentProposal: (input: RespondToAgentProposalInput) => Promise<AgentProposalRecord | null>
   confirmAgentProposal: (input: ConfirmAgentProposalInput) => Promise<AgentProposalRecord | null>
+  getObjectiveRuntimeScorecard: () => Promise<ObjectiveRuntimeScorecard>
+  listObjectiveRuntimeEvents: (input?: ListObjectiveRuntimeEventsInput) => Promise<ObjectiveRuntimeEventRecord[]>
+  getObjectiveRuntimeSettings: () => Promise<ObjectiveRuntimeSettingsRecord>
+  updateObjectiveRuntimeSettings: (input: UpdateObjectiveRuntimeSettingsInput) => Promise<ObjectiveRuntimeSettingsRecord>
   listAgentMemories: (input?: ListAgentMemoriesInput) => Promise<AgentMemoryRecord[]>
   listAgentPolicyVersions: (input?: ListAgentPolicyVersionsInput) => Promise<AgentPolicyVersionRecord[]>
   listImportBatches: () => Promise<ImportBatchSummary[]>
