@@ -14,6 +14,10 @@ function createProposal(payload: Record<string, unknown>): AgentProposalRecord {
     status: 'committed',
     requiredApprovals: ['workspace'],
     allowVetoBy: ['governance'],
+    proposalRiskLevel: 'low',
+    autonomyDecision: 'auto_commit',
+    riskReasons: ['local_reversible_workflow'],
+    confidenceScore: 0.9,
     requiresOperatorConfirmation: false,
     toolPolicyId: 'external-verification-policy',
     budget: {

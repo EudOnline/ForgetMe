@@ -54,4 +54,17 @@ describe('objective-only runtime contracts', () => {
     expect(source).not.toMatch('getAgentRuntimeSettingsInputSchema')
     expect(source).not.toMatch('updateAgentRuntimeSettingsInputSchema')
   })
+
+  it('defines proposal autonomy metadata in objective runtime contracts', () => {
+    const source = readSharedSource('src/shared/objectiveRuntimeContracts.ts')
+
+    expect(source).toMatch('proposalRiskLevel')
+    expect(source).toMatch('autonomyDecision')
+    expect(source).toMatch('riskReasons')
+    expect(source).toMatch('confidenceScore')
+    expect(source).toMatch("'auto_commit'")
+    expect(source).toMatch("'auto_commit_with_audit'")
+    expect(source).toMatch("'await_operator'")
+    expect(source).toMatch("'critical'")
+  })
 })

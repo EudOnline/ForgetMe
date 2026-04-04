@@ -30,6 +30,31 @@ function buildObjectiveSummary() {
   }
 }
 
+function buildOperatorAttentionObjectiveSummary() {
+  return {
+    ...buildObjectiveSummary(),
+    objectiveId: 'objective-2',
+    title: 'Review a public publication gate',
+    objectiveKind: 'publication',
+    status: 'awaiting_operator',
+    ownerRole: 'workspace',
+    riskLevel: 'high',
+    requiresOperatorInput: true
+  }
+}
+
+function buildConvergedInboxSummaryWithCounts() {
+  return {
+    ...buildOperatorAttentionObjectiveSummary(),
+    requiresOperatorInput: false,
+    awaitingOperatorCount: 1,
+    blockedCount: 1,
+    vetoedCount: 1,
+    criticalProposalCount: 1,
+    latestBlocker: 'Blocked by governance: Governance veto pending policy alignment.'
+  }
+}
+
 function buildObjectiveDetail() {
   return {
     ...buildObjectiveSummary(),
@@ -99,6 +124,10 @@ function buildObjectiveDetail() {
         status: 'under_review',
         requiredApprovals: ['workspace'],
         allowVetoBy: ['governance'],
+        proposalRiskLevel: 'critical',
+        autonomyDecision: 'await_operator',
+        riskReasons: ['public_distribution_boundary'],
+        confidenceScore: 0.94,
         requiresOperatorConfirmation: true,
         toolPolicyId: 'tool-policy-web-1',
         budget: {
@@ -125,6 +154,10 @@ function buildObjectiveDetail() {
         status: 'awaiting_operator',
         requiredApprovals: ['review'],
         allowVetoBy: ['governance'],
+        proposalRiskLevel: 'high',
+        autonomyDecision: 'auto_commit_with_audit',
+        riskReasons: ['reversible_local_state_change'],
+        confidenceScore: 0.81,
         requiresOperatorConfirmation: true,
         toolPolicyId: null,
         budget: null,
@@ -374,7 +407,10 @@ describe('ObjectiveWorkbenchPage', () => {
   })
 
   it('renders the objective inbox, checkpoint timeline, and collapsed full thread detail', async () => {
-    const listAgentObjectives = vi.fn().mockResolvedValue([buildObjectiveSummary()])
+    const listAgentObjectives = vi.fn().mockResolvedValue([
+      buildObjectiveSummary(),
+      buildOperatorAttentionObjectiveSummary()
+    ])
     const getAgentObjective = vi.fn().mockResolvedValue(buildObjectiveDetail())
     const getAgentThread = vi.fn().mockResolvedValue(buildThreadDetail())
 
@@ -389,8 +425,15 @@ describe('ObjectiveWorkbenchPage', () => {
 
     expect(await screen.findByRole('heading', { name: 'Objective Workbench' })).toBeInTheDocument()
     expect(await screen.findByText('Verify an external claim before responding')).toBeInTheDocument()
+    expect(screen.getByText('Medium risk')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /Review a public publication gate/ })
+    ).toHaveTextContent('High risk')
+    expect(
+      screen.getByRole('button', { name: /Review a public publication gate/ })
+    ).toHaveTextContent('Needs operator')
     expect(screen.getByText('Key checkpoints')).toBeInTheDocument()
-    expect(await screen.findByText('Governance requested a bounded verification policy.')).toBeInTheDocument()
+    expect((await screen.findAllByText('Governance requested a bounded verification policy.')).length).toBeGreaterThan(0)
     expect(screen.getByText('Agent stances')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Show full thread detail' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Hide full thread detail' })).not.toBeInTheDocument()
@@ -405,6 +448,30 @@ describe('ObjectiveWorkbenchPage', () => {
     expect(getAgentThread).toHaveBeenCalledWith({
       threadId: 'thread-main-1'
     })
+  })
+
+  it('shows row-level inbox status pills from summary diagnostics and derived operator gating', async () => {
+    installArchiveApi({
+      refreshObjectiveTriggers: vi.fn().mockResolvedValue([]),
+      listAgentObjectives: vi.fn().mockResolvedValue([
+        buildObjectiveSummary(),
+        buildConvergedInboxSummaryWithCounts()
+      ]),
+      getAgentObjective: vi.fn().mockResolvedValue(buildObjectiveDetail()),
+      getAgentThread: vi.fn().mockResolvedValue(buildThreadDetail())
+    })
+
+    render(<ObjectiveWorkbenchPage />)
+
+    await screen.findByRole('heading', { name: 'Objective Workbench' })
+
+    const inboxRow = screen.getByRole('button', { name: /Review a public publication gate/ })
+
+    expect(inboxRow).toHaveTextContent('Needs operator')
+    expect(inboxRow).toHaveTextContent('Awaiting operator: 1')
+    expect(inboxRow).toHaveTextContent('Blocked: 1')
+    expect(inboxRow).toHaveTextContent('Vetoed: 1')
+    expect(inboxRow).toHaveTextContent('Latest blocker: Blocked by governance: Governance veto pending policy alignment.')
   })
 
   it('exposes proposal actions for challenge and operator confirmation', async () => {
@@ -464,7 +531,7 @@ describe('ObjectiveWorkbenchPage', () => {
     await screen.findByRole('heading', { name: 'Objective Workbench' })
 
     expect(screen.getByText('Agent source: workspace')).toBeInTheDocument()
-    expect(screen.getByText('Blocked by governance: Need stronger evidence before this can proceed.')).toBeInTheDocument()
+    expect(screen.getAllByText('Blocked by governance: Need stronger evidence before this can proceed.').length).toBeGreaterThan(0)
     expect(screen.getByText('Tool executions')).toBeInTheDocument()
     expect(screen.getByText('search_web')).toBeInTheDocument()
     expect(screen.getByText('external-verification-policy')).toBeInTheDocument()

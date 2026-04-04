@@ -2,9 +2,11 @@ import { listAgentPolicyVersions } from './governancePersistenceService'
 import type { createExternalVerificationBrokerService } from './externalVerificationBrokerService'
 import { runMemoryWorkspaceCompare } from './memoryWorkspaceCompareService'
 import { askMemoryWorkspacePersisted } from './memoryWorkspaceSessionService'
+import { createObjectiveRuntimeConfigService } from './objectiveRuntimeConfigService'
 import { createObjectiveRuntimeDeliberationService } from './objectiveRuntimeDeliberationService'
 import { createObjectiveRuntimeProposalDecisionService } from './objectiveRuntimeProposalDecisionService'
 import { createObjectiveRuntimeProposalStateService } from './objectiveRuntimeProposalStateService'
+import { createObjectiveRuntimeTelemetryService } from './objectiveRuntimeTelemetryService'
 import { createObjectiveTriggerService } from './objectiveTriggerService'
 import { createObjectiveSubagentExecutionService } from './objectiveSubagentExecutionService'
 import type { createSubagentRegistryService } from './subagentRegistryService'
@@ -20,6 +22,7 @@ import type {
 import {
   appendAgentMessageV2,
   createCheckpoint,
+  getProposal,
   listObjectives,
   getObjectiveDetail,
   getThreadDetail,
@@ -44,6 +47,8 @@ export type ObjectiveRuntimeDependencies = {
   facilitator: FacilitatorService
   externalVerificationBroker: ExternalVerificationBrokerService
   subagentRegistry: SubagentRegistryService
+  runtimeTelemetry?: ReturnType<typeof createObjectiveRuntimeTelemetryService>
+  runtimeConfig?: ReturnType<typeof createObjectiveRuntimeConfigService>
   roleAgentRegistry?: RoleAgentRegistryService | null
   runMemoryWorkspaceCompare?: RunMemoryWorkspaceCompareService
   askMemoryWorkspacePersisted?: AskMemoryWorkspacePersistedService
@@ -52,6 +57,10 @@ export type ObjectiveRuntimeDependencies = {
 
 export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDependencies) {
   const { db } = dependencies
+  const runtimeTelemetry = dependencies.runtimeTelemetry ?? createObjectiveRuntimeTelemetryService({ db })
+  const runtimeConfig = dependencies.runtimeConfig ?? createObjectiveRuntimeConfigService({
+    env: {}
+  })
 
   function nextRound(threadId: string) {
     const detail = getThreadDetail(db, { threadId })
@@ -85,7 +94,9 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
   }
 
   const proposalStateService = createObjectiveRuntimeProposalStateService({
-    db
+    db,
+    runtimeTelemetry,
+    runtimeConfig
   })
 
   const deliberationService = createObjectiveRuntimeDeliberationService({
@@ -127,6 +138,23 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
             checkpointKind: plan.checkpoint.checkpointKind,
             title: plan.checkpoint.title,
             summary: plan.checkpoint.summary
+          })
+        }
+      }
+
+      const roundCount = getThreadDetail(db, { threadId })?.messages.at(-1)?.round ?? 0
+      if (currentObjective && currentObjective.status !== plan.nextObjectiveStatus) {
+        if (plan.nextObjectiveStatus === 'stalled') {
+          runtimeTelemetry.recordObjectiveStalled({
+            objectiveId,
+            threadId,
+            roundCount
+          })
+        } else if (plan.nextObjectiveStatus === 'completed') {
+          runtimeTelemetry.recordObjectiveCompleted({
+            objectiveId,
+            threadId,
+            roundCount
           })
         }
       }
@@ -208,13 +236,16 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
 
   const proposalDecisionService = createObjectiveRuntimeProposalDecisionService({
     db,
-    proposalStateService
+    proposalStateService,
+    runtimeTelemetry,
+    runtimeConfig
   })
 
   const subagentExecutionService = createObjectiveSubagentExecutionService({
     db,
     externalVerificationBroker: dependencies.externalVerificationBroker,
     subagentRegistry: dependencies.subagentRegistry,
+    runtimeConfig,
     runMemoryWorkspaceCompare: dependencies.runMemoryWorkspaceCompare,
     askMemoryWorkspacePersisted: dependencies.askMemoryWorkspacePersisted,
     listAgentPolicyVersions: dependencies.listAgentPolicyVersions,
@@ -238,6 +269,12 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
       objectiveKind: input.objectiveKind,
       prompt: input.prompt,
       initiatedBy: input.initiatedBy
+    })
+    runtimeTelemetry.recordObjectiveStarted({
+      objectiveId: started.objective.objectiveId,
+      threadId: started.mainThread.threadId,
+      objectiveKind: started.objective.objectiveKind,
+      initiatedBy: started.objective.initiatedBy
     })
 
     await deliberateThread({
@@ -342,7 +379,17 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
         return null
       }
 
-      const settled = await subagentExecutionService.autoCommitEligibleSpawnSubagentProposal(updated)
+      const autoCommitted = proposalDecisionService.autoCommitProposalIfEligible(updated)
+      let settled = autoCommitted
+
+      if (autoCommitted.proposalKind === 'spawn_subagent') {
+        if (autoCommitted.status === 'committed') {
+          await subagentExecutionService.executeCommittedSpawnSubagentProposal(autoCommitted)
+        } else {
+          settled = await subagentExecutionService.autoCommitEligibleSpawnSubagentProposal(autoCommitted)
+        }
+      }
+
       await deliberateThread({
         threadId: settled.threadId
       })
@@ -351,12 +398,17 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
     },
 
     async confirmAgentProposal(input: ConfirmAgentProposalInput) {
+      const priorProposal = getProposal(db, { proposalId: input.proposalId })
       const updated = await proposalDecisionService.confirmAgentProposal(input)
       if (!updated) {
         return null
       }
 
-      if (updated.status === 'committed') {
+      if (
+        updated.proposalKind === 'spawn_subagent'
+        && updated.status === 'committed'
+        && priorProposal?.status !== 'committed'
+      ) {
         await subagentExecutionService.executeCommittedSpawnSubagentProposal(updated)
       }
 

@@ -16,6 +16,10 @@ function createProposal(overrides?: Partial<AgentProposalRecord>): AgentProposal
     status: 'under_review',
     requiredApprovals: ['workspace'],
     allowVetoBy: ['governance'],
+    proposalRiskLevel: 'high',
+    autonomyDecision: 'auto_commit_with_audit',
+    riskReasons: ['external_verification_boundary'],
+    confidenceScore: 0.88,
     requiresOperatorConfirmation: false,
     toolPolicyId: 'tool-policy-web-1',
     budget: {

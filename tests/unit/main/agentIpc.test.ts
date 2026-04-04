@@ -382,13 +382,13 @@ describe('registerObjectiveIpc', () => {
       openSourcePage: externalWebSearch.openSourcePage
     })
     expect(createSubagentRegistryService).toHaveBeenCalledTimes(7)
-    expect(createObjectiveRuntimeService).toHaveBeenCalledWith({
+    expect(createObjectiveRuntimeService).toHaveBeenCalledWith(expect.objectContaining({
       db,
       facilitator,
       externalVerificationBroker,
       subagentRegistry,
       roleAgentRegistry
-    })
+    }))
     expect(objectiveRuntime.startObjective).toHaveBeenCalledWith({
       title: 'Verify an external claim before responding',
       objectiveKind: 'evidence_investigation',

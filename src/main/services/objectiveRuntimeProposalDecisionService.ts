@@ -1,4 +1,6 @@
 import { evaluateProposalGate } from './agentProposalGateService'
+import { createObjectiveRuntimeConfigService } from './objectiveRuntimeConfigService'
+import { createObjectiveRuntimeTelemetryService } from './objectiveRuntimeTelemetryService'
 import type { createObjectiveRuntimeProposalStateService } from './objectiveRuntimeProposalStateService'
 import {
   appendAgentMessageV2,
@@ -11,14 +13,49 @@ import type {
   RespondToAgentProposalInput
 } from '../../shared/objectiveRuntimeContracts'
 import type { ArchiveDatabase } from './db'
+import {
+  proposalIsAutoCommittable,
+  proposalNeedsOperator
+} from './objectiveAutonomySelectorsService'
 
 type ProposalStateService = ReturnType<typeof createObjectiveRuntimeProposalStateService>
 
 export function createObjectiveRuntimeProposalDecisionService(dependencies: {
   db: ArchiveDatabase
   proposalStateService: ProposalStateService
+  runtimeTelemetry?: ReturnType<typeof createObjectiveRuntimeTelemetryService>
+  runtimeConfig?: ReturnType<typeof createObjectiveRuntimeConfigService>
 }) {
   const { db } = dependencies
+  const runtimeTelemetry = dependencies.runtimeTelemetry ?? createObjectiveRuntimeTelemetryService({ db })
+  const runtimeConfig = dependencies.runtimeConfig ?? createObjectiveRuntimeConfigService({
+    env: {}
+  })
+
+  function proposalNeedsOperatorNow(
+    proposal: Pick<AgentProposalRecord, 'proposalKind' | 'autonomyDecision' | 'proposalRiskLevel' | 'requiresOperatorConfirmation'>
+  ) {
+    return proposalNeedsOperator(proposal)
+      || runtimeConfig.shouldRequireOperatorForProposal({
+        proposalKind: proposal.proposalKind
+      })
+  }
+
+  function applyRuntimePolicyToNextStatus(
+    proposal: Pick<AgentProposalRecord, 'proposalKind'>,
+    nextStatus: AgentProposalRecord['status']
+  ) {
+    if (
+      nextStatus === 'committable'
+      && runtimeConfig.shouldRequireOperatorForProposal({
+        proposalKind: proposal.proposalKind
+      })
+    ) {
+      return 'awaiting_operator' as const
+    }
+
+    return nextStatus
+  }
 
   function raiseBlockingChallenge(input: {
     objectiveId: string
@@ -108,7 +145,7 @@ export function createObjectiveRuntimeProposalDecisionService(dependencies: {
 
     return dependencies.proposalStateService.updateProposalFromGate({
       proposalId: input.proposalId,
-      nextStatus: gate.status
+      nextStatus: applyRuntimePolicyToNextStatus(runtimeState.proposal, gate.status)
     })
   }
 
@@ -146,7 +183,7 @@ export function createObjectiveRuntimeProposalDecisionService(dependencies: {
     })
     const nextStatus = input.response === 'reject'
       ? 'blocked'
-      : gate.status
+      : applyRuntimePolicyToNextStatus(runtimeState.proposal, gate.status)
 
     return dependencies.proposalStateService.updateProposalFromGate({
       proposalId: proposal.proposalId,
@@ -154,10 +191,46 @@ export function createObjectiveRuntimeProposalDecisionService(dependencies: {
     })
   }
 
+  function autoCommitProposalIfEligible(proposal: AgentProposalRecord) {
+    if (
+      proposal.status === 'committable'
+      && runtimeConfig.shouldRequireOperatorForProposal({
+        proposalKind: proposal.proposalKind
+      })
+    ) {
+      return dependencies.proposalStateService.updateProposalFromGate({
+        proposalId: proposal.proposalId,
+        nextStatus: 'awaiting_operator'
+      })
+    }
+
+    if (!proposalIsAutoCommittable(proposal)) {
+      return proposal
+    }
+
+    const committed = dependencies.proposalStateService.updateProposalFromGate({
+      proposalId: proposal.proposalId,
+      nextStatus: 'committed'
+    })
+    runtimeTelemetry.recordProposalAutoCommitted(committed)
+
+    return committed
+  }
+
   async function confirmAgentProposal(input: ConfirmAgentProposalInput): Promise<AgentProposalRecord | null> {
     const proposal = getProposal(db, { proposalId: input.proposalId })
     if (!proposal) {
       return null
+    }
+
+    if (
+      input.decision === 'confirm'
+      && (
+        proposal.status === 'committed'
+        || !proposalNeedsOperatorNow(proposal)
+      )
+    ) {
+      return proposal
     }
 
     const runtimeState = dependencies.proposalStateService.loadProposalRuntimeState(proposal.proposalId)
@@ -174,12 +247,14 @@ export function createObjectiveRuntimeProposalDecisionService(dependencies: {
       : null
     const nextStatus = input.decision === 'block'
       ? 'blocked'
-      : evaluateProposalGate({
-        proposal: runtimeState.proposal,
-        votes: runtimeState.votes,
-        messages: runtimeState.messages,
-        operatorConfirmed: true
-      }).status
+      : proposalNeedsOperatorNow(runtimeState.proposal)
+        ? 'committed'
+        : evaluateProposalGate({
+          proposal: runtimeState.proposal,
+          votes: runtimeState.votes,
+          messages: runtimeState.messages,
+          operatorConfirmed: true
+        }).status
 
     return dependencies.proposalStateService.updateProposalFromGate({
       proposalId: proposal.proposalId,
@@ -192,6 +267,7 @@ export function createObjectiveRuntimeProposalDecisionService(dependencies: {
     raiseBlockingChallenge,
     vetoProposal,
     approveProposalAsOwner,
+    autoCommitProposalIfEligible,
     respondToAgentProposal,
     confirmAgentProposal
   }

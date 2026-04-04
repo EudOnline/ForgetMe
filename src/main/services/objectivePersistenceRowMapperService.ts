@@ -1,6 +1,7 @@
 import type {
   AgentArtifactRef,
   AgentCheckpointKind,
+  AgentCheckpointMetadata,
   AgentCheckpointRecord,
   AgentExecutionBudget,
   AgentMessageKind,
@@ -12,7 +13,9 @@ import type {
   AgentObjectiveStatus,
   AgentParticipantKind,
   AgentProposalKind,
+  AgentProposalAutonomyDecision,
   AgentProposalRecord,
+  AgentProposalRiskLevel,
   AgentProposalStatus,
   AgentSubagentRecord,
   AgentSubagentStatus,
@@ -38,6 +41,11 @@ export type AgentObjectiveRow = {
   riskLevel: AgentObjectiveRiskLevel
   budgetJson: string | null
   requiresOperatorInput: number
+  awaitingOperatorCount?: number
+  blockedCount?: number
+  vetoedCount?: number
+  criticalProposalCount?: number
+  latestBlocker?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -95,6 +103,10 @@ export type AgentProposalRow = {
   status: AgentProposalStatus
   requiredApprovalsJson: string
   allowVetoByJson: string
+  proposalRiskLevel: AgentProposalRiskLevel
+  autonomyDecision: AgentProposalAutonomyDecision
+  riskReasonsJson: string
+  confidenceScore: number | null
   requiresOperatorConfirmation: number
   toolPolicyId: string | null
   budgetJson: string | null
@@ -127,6 +139,7 @@ export type AgentCheckpointRow = {
   relatedMessageId: string | null
   relatedProposalId: string | null
   artifactRefsJson: string
+  metadataJson: string
   createdAt: string
 }
 
@@ -201,6 +214,11 @@ export function mapObjectiveRow(row: AgentObjectiveRow): AgentObjectiveRecord {
     riskLevel: row.riskLevel,
     budget: parseJsonObject<AgentExecutionBudget>(row.budgetJson),
     requiresOperatorInput: row.requiresOperatorInput === 1,
+    awaitingOperatorCount: row.awaitingOperatorCount ?? 0,
+    blockedCount: row.blockedCount ?? 0,
+    vetoedCount: row.vetoedCount ?? 0,
+    criticalProposalCount: row.criticalProposalCount ?? 0,
+    latestBlocker: row.latestBlocker ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt
   }
@@ -266,6 +284,10 @@ export function mapProposalRow(row: AgentProposalRow): AgentProposalRecord {
     status: row.status,
     requiredApprovals: parseJsonArray<AgentRole>(row.requiredApprovalsJson),
     allowVetoBy: parseJsonArray<AgentRole>(row.allowVetoByJson),
+    proposalRiskLevel: row.proposalRiskLevel,
+    autonomyDecision: row.autonomyDecision,
+    riskReasons: parseJsonArray<string>(row.riskReasonsJson),
+    confidenceScore: row.confidenceScore,
     requiresOperatorConfirmation: row.requiresOperatorConfirmation === 1,
     toolPolicyId: row.toolPolicyId,
     budget: parseJsonObject<AgentExecutionBudget>(row.budgetJson),
@@ -301,6 +323,7 @@ export function mapCheckpointRow(row: AgentCheckpointRow): AgentCheckpointRecord
     relatedMessageId: row.relatedMessageId,
     relatedProposalId: row.relatedProposalId,
     artifactRefs: parseJsonArray<AgentArtifactRef>(row.artifactRefsJson),
+    metadata: parseJsonObject<AgentCheckpointMetadata>(row.metadataJson) ?? {},
     createdAt: row.createdAt
   }
 }

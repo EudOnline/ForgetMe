@@ -1,4 +1,5 @@
 import type { AgentRole } from './archiveContracts'
+import type { VerificationVerdict } from './contracts/verification'
 
 export type AgentObjectiveKind =
   | 'review_decision'
@@ -87,6 +88,17 @@ export type AgentProposalStatus =
   | 'blocked'
   | 'superseded'
 
+export type AgentProposalRiskLevel =
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'critical'
+
+export type AgentProposalAutonomyDecision =
+  | 'auto_commit'
+  | 'auto_commit_with_audit'
+  | 'await_operator'
+
 export type AgentVoteValue =
   | 'approve'
   | 'challenge'
@@ -164,6 +176,11 @@ export type AgentObjectiveRecord = {
   riskLevel: AgentObjectiveRiskLevel
   budget: AgentExecutionBudget | null
   requiresOperatorInput: boolean
+  awaitingOperatorCount?: number
+  blockedCount?: number
+  vetoedCount?: number
+  criticalProposalCount?: number
+  latestBlocker?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -221,6 +238,10 @@ export type AgentProposalRecord = {
   status: AgentProposalStatus
   requiredApprovals: AgentRole[]
   allowVetoBy: AgentRole[]
+  proposalRiskLevel: AgentProposalRiskLevel
+  autonomyDecision: AgentProposalAutonomyDecision
+  riskReasons: string[]
+  confidenceScore: number | null
   requiresOperatorConfirmation: boolean
   toolPolicyId: string | null
   budget: AgentExecutionBudget | null
@@ -252,7 +273,16 @@ export type AgentCheckpointRecord = {
   relatedMessageId: string | null
   relatedProposalId: string | null
   artifactRefs: AgentArtifactRef[]
+  metadata?: AgentCheckpointMetadata
   createdAt: string
+}
+
+export type AgentCheckpointMetadata = {
+  verificationVerdict?: VerificationVerdict
+  supportCount?: number
+  contradictionCount?: number
+  highReliabilitySupportCount?: number
+  highReliabilityContradictionCount?: number
 }
 
 export type AgentSubagentRecord = {
@@ -340,6 +370,10 @@ export type CreateAgentProposalInput = {
   payload: Record<string, unknown>
   requiredApprovals?: AgentRole[]
   allowVetoBy?: AgentRole[]
+  proposalRiskLevel?: AgentProposalRiskLevel
+  autonomyDecision?: AgentProposalAutonomyDecision
+  riskReasons?: string[]
+  confidenceScore?: number | null
   requiresOperatorConfirmation?: boolean
   toolPolicyId?: string
   budget?: AgentExecutionBudget

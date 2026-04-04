@@ -27,6 +27,21 @@ function humanize(value: string) {
   return value.replaceAll('_', ' ')
 }
 
+function objectiveRiskPillLabel(
+  riskLevel: AgentObjectiveRecord['riskLevel'],
+  t: ReturnType<typeof useI18n>['t']
+) {
+  switch (riskLevel) {
+    case 'high':
+      return t('objectiveWorkbench.inboxRiskHigh')
+    case 'medium':
+      return t('objectiveWorkbench.inboxRiskMedium')
+    case 'low':
+    default:
+      return t('objectiveWorkbench.inboxRiskLow')
+  }
+}
+
 function formatBudgetSummary(budget: AgentProposalRecord['budget']) {
   if (!budget) {
     return 'none'
@@ -314,6 +329,49 @@ export function ObjectiveWorkbenchPage() {
     return participant?.displayLabel ?? participantId
   }, [objectiveDetail?.participants, threadDetail?.participants])
 
+  const selectedProposalAuditEntries = useMemo(() => {
+    if (!selectedProposal) {
+      return []
+    }
+
+    const checkpointEntries = (objectiveDetail?.checkpoints ?? [])
+      .filter((checkpoint) => checkpoint.relatedProposalId === selectedProposal.proposalId)
+      .map((checkpoint) => ({
+        entryId: checkpoint.checkpointId,
+        entryKind: 'checkpoint' as const,
+        createdAt: checkpoint.createdAt,
+        title: checkpoint.title,
+        body: checkpoint.summary
+      }))
+
+    const voteEntries = (threadDetail?.votes ?? [])
+      .filter((vote) => vote.proposalId === selectedProposal.proposalId)
+      .map((vote) => ({
+        entryId: vote.voteId,
+        entryKind: 'vote' as const,
+        createdAt: vote.createdAt,
+        title: t('objectiveWorkbench.proposalAuditVoteLine', {
+          actor: participantLabel(vote.voterRole),
+          vote: humanize(vote.vote)
+        }),
+        body: vote.comment ?? t('objectiveWorkbench.none')
+      }))
+
+    return [...checkpointEntries, ...voteEntries]
+      .sort((left, right) => {
+        const createdAtCompare = left.createdAt.localeCompare(right.createdAt)
+        if (createdAtCompare !== 0) {
+          return createdAtCompare
+        }
+
+        if (left.entryKind === right.entryKind) {
+          return left.entryId.localeCompare(right.entryId)
+        }
+
+        return left.entryKind === 'checkpoint' ? -1 : 1
+      })
+  }, [objectiveDetail?.checkpoints, participantLabel, selectedProposal, t, threadDetail?.votes])
+
   const proposalSourceLabel = (proposal: AgentProposalRecord) => {
     if (proposal.proposedByParticipantId === 'operator') {
       return t('objectiveWorkbench.proposalSourceOperator')
@@ -363,8 +421,23 @@ export function ObjectiveWorkbenchPage() {
       })
     }
 
+    const blockingVote = [...(threadDetail?.votes ?? [])]
+      .reverse()
+      .find((vote) => (
+        vote.proposalId === selectedProposal?.proposalId
+        && (vote.vote === 'veto' || vote.vote === 'reject')
+        && typeof vote.comment === 'string'
+        && vote.comment.length > 0
+      ))
+    if (blockingVote?.comment) {
+      return t('objectiveWorkbench.blockedByLine', {
+        actor: participantLabel(blockingVote.voterRole),
+        reason: blockingVote.comment
+      })
+    }
+
     return null
-  }, [objectiveDetail, participantLabel, t, threadDetail, visibleToolExecutions])
+  }, [objectiveDetail, participantLabel, selectedProposal?.proposalId, t, threadDetail, visibleToolExecutions])
 
   const subagentLineage = useMemo(() => {
     return (objectiveDetail?.subagents ?? [])
@@ -377,6 +450,17 @@ export function ObjectiveWorkbenchPage() {
         budget: formatBudgetSummary(subagent.budget)
       }))
   }, [objectiveDetail, selectedThreadId])
+
+  const inboxDiagnostics = useMemo(() => {
+    const proposals = objectiveDetail?.proposals ?? []
+
+    return {
+      awaitingOperatorCount: proposals.filter((proposal) => proposal.status === 'awaiting_operator').length,
+      criticalCount: proposals.filter((proposal) => proposal.proposalRiskLevel === 'critical').length,
+      blockedCount: proposals.filter((proposal) => proposal.status === 'blocked').length,
+      vetoedCount: proposals.filter((proposal) => proposal.status === 'vetoed').length
+    }
+  }, [objectiveDetail?.proposals])
 
   const handleCreateObjective = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -545,22 +629,80 @@ export function ObjectiveWorkbenchPage() {
               <p>{t('objectiveWorkbench.inboxEmpty')}</p>
             ) : (
               <ul className="fmObjectiveWorkbenchInboxList">
-                {objectives.map((objective) => (
-                  <li key={objective.objectiveId}>
-                    <button
-                      className="fmObjectiveWorkbenchInboxButton"
-                      type="button"
-                      aria-pressed={selectedObjectiveId === objective.objectiveId}
-                      onClick={() => setSelectedObjectiveId(objective.objectiveId)}
-                    >
-                      <strong>{objective.title}</strong>
-                      <span>{humanize(objective.objectiveKind)}</span>
-                      <span>{humanize(objective.status)} · {objective.ownerRole}</span>
-                    </button>
-                  </li>
-                ))}
+                {objectives.map((objective) => {
+                  const needsOperatorAttention = objective.requiresOperatorInput
+                    || (objective.awaitingOperatorCount ?? 0) > 0
+                  const rowDiagnostics: string[] = []
+                  if ((objective.awaitingOperatorCount ?? 0) > 0) {
+                    rowDiagnostics.push(`${t('objectiveWorkbench.inboxAwaitingOperatorPill')}: ${objective.awaitingOperatorCount ?? 0}`)
+                  }
+                  if ((objective.blockedCount ?? 0) > 0) {
+                    rowDiagnostics.push(`${t('objectiveWorkbench.inboxBlockedPill')}: ${objective.blockedCount ?? 0}`)
+                  }
+                  if ((objective.vetoedCount ?? 0) > 0) {
+                    rowDiagnostics.push(`${t('objectiveWorkbench.inboxVetoedPill')}: ${objective.vetoedCount ?? 0}`)
+                  }
+                  if (objective.latestBlocker) {
+                    rowDiagnostics.push(`${t('objectiveWorkbench.inboxLatestBlockerPill')}: ${objective.latestBlocker}`)
+                  }
+
+                  return (
+                    <li key={objective.objectiveId}>
+                      <button
+                        className="fmObjectiveWorkbenchInboxButton"
+                        type="button"
+                        aria-pressed={selectedObjectiveId === objective.objectiveId}
+                        onClick={() => setSelectedObjectiveId(objective.objectiveId)}
+                      >
+                        <strong>{objective.title}</strong>
+                        <span>{humanize(objective.objectiveKind)}</span>
+                        <span>
+                          {objectiveRiskPillLabel(objective.riskLevel, t)}
+                          {needsOperatorAttention
+                            ? ` · ${t('objectiveWorkbench.inboxNeedsOperatorPill')}`
+                            : ''}
+                        </span>
+                        {rowDiagnostics.length ? (
+                          <span>{rowDiagnostics.join(' · ')}</span>
+                        ) : null}
+                        <span>{humanize(objective.status)} · {objective.ownerRole}</span>
+                      </button>
+                    </li>
+                  )
+                })}
               </ul>
             )}
+            <section aria-label={t('objectiveWorkbench.inboxDiagnosticsTitle')}>
+              <div className="fmObjectiveWorkbenchSectionHeader">
+                <h3>{t('objectiveWorkbench.inboxDiagnosticsTitle')}</h3>
+              </div>
+              {objectiveDetail ? (
+                <>
+                  <p>
+                    <span>{t('objectiveWorkbench.inboxAwaitingOperatorLabel')}</span>
+                    {` ${inboxDiagnostics.awaitingOperatorCount}`}
+                  </p>
+                  <p>
+                    <span>{t('objectiveWorkbench.inboxCriticalLabel')}</span>
+                    {` ${inboxDiagnostics.criticalCount}`}
+                  </p>
+                  <p>
+                    <span>{t('objectiveWorkbench.inboxBlockedLabel')}</span>
+                    {` ${inboxDiagnostics.blockedCount}`}
+                  </p>
+                  <p>
+                    <span>{t('objectiveWorkbench.inboxVetoedLabel')}</span>
+                    {` ${inboxDiagnostics.vetoedCount}`}
+                  </p>
+                  <p>
+                    <span>{t('objectiveWorkbench.inboxLatestBlockerLabel')}</span>
+                    {blockedReason ? ` ${blockedReason}` : ` ${t('objectiveWorkbench.none')}`}
+                  </p>
+                </>
+              ) : (
+                <p>{t('objectiveWorkbench.inboxDiagnosticsEmpty')}</p>
+              )}
+            </section>
           </aside>
         </div>
 
@@ -706,6 +848,30 @@ export function ObjectiveWorkbenchPage() {
               <span>{t('objectiveWorkbench.selectedPolicyLabel')}</span>
               {selectedProposal?.toolPolicyId ? ` ${selectedProposal.toolPolicyId}` : ` ${t('objectiveWorkbench.none')}`}
             </p>
+            <p>
+              <span>{t('objectiveWorkbench.proposalRiskLabel')}</span>
+              {selectedProposal?.proposalRiskLevel
+                ? ` ${selectedProposal.proposalRiskLevel}`
+                : ` ${t('objectiveWorkbench.none')}`}
+            </p>
+            <p>
+              <span>{t('objectiveWorkbench.autonomyDecisionLabel')}</span>
+              {selectedProposal?.autonomyDecision
+                ? ` ${humanize(selectedProposal.autonomyDecision)}`
+                : ` ${t('objectiveWorkbench.none')}`}
+            </p>
+            <p>
+              <span>{t('objectiveWorkbench.riskReasonsLabel')}</span>
+              {selectedProposal?.riskReasons.length
+                ? ` ${selectedProposal.riskReasons.join(', ')}`
+                : ` ${t('objectiveWorkbench.none')}`}
+            </p>
+            <p>
+              <span>{t('objectiveWorkbench.confidenceScoreLabel')}</span>
+              {selectedProposal?.confidenceScore != null
+                ? ` ${selectedProposal.confidenceScore}`
+                : ` ${t('objectiveWorkbench.none')}`}
+            </p>
             <div className="fmObjectiveWorkbenchSectionHeader">
               <h3>{t('objectiveWorkbench.toolExecutionsTitle')}</h3>
             </div>
@@ -750,6 +916,23 @@ export function ObjectiveWorkbenchPage() {
                 })}
               </p>
             ) : null}
+            <section aria-label={t('objectiveWorkbench.proposalAuditTitle')}>
+              <div className="fmObjectiveWorkbenchSectionHeader">
+                <h3>{t('objectiveWorkbench.proposalAuditTitle')}</h3>
+              </div>
+              {selectedProposalAuditEntries.length === 0 ? (
+                <p>{t('objectiveWorkbench.proposalAuditEmpty')}</p>
+              ) : (
+                <div className="fmObjectiveWorkbenchProposalList">
+                  {selectedProposalAuditEntries.map((entry) => (
+                    <article key={entry.entryId} className="fmObjectiveWorkbenchProposalCard">
+                      <strong>{entry.title}</strong>
+                      <p>{entry.body}</p>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
             {visibleProposals.length === 0 ? (
               <p>{t('objectiveWorkbench.proposalsEmpty')}</p>
             ) : (

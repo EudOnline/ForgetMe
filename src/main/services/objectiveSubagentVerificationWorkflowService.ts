@@ -212,6 +212,13 @@ export async function runWebVerifierWorkflow(input: {
     checkpointKind: 'external_verification_completed' as const,
     checkpointTitle: 'External verification completed',
     checkpointSummary: `Verification verdict: ${citationBundle.verdict}.`,
+    checkpointMetadata: {
+      verificationVerdict: citationBundle.verdict,
+      supportCount: citationBundle.supportCount,
+      contradictionCount: citationBundle.contradictionCount,
+      highReliabilitySupportCount: citationBundle.highReliabilitySupportCount,
+      highReliabilityContradictionCount: citationBundle.highReliabilityContradictionCount
+    },
     citationBundle
   }
 }

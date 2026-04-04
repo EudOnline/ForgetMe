@@ -179,6 +179,10 @@ describe('objective persistence service', () => {
       status: 'under_review',
       requiredApprovals: ['workspace'],
       allowVetoBy: ['governance'],
+      proposalRiskLevel: 'high',
+      autonomyDecision: 'auto_commit_with_audit',
+      riskReasons: ['external_verification_boundary'],
+      confidenceScore: 0.88,
       requiresOperatorConfirmation: false,
       toolPolicyId: 'tool-policy-web-1',
       budget: {
@@ -207,6 +211,37 @@ describe('objective persistence service', () => {
       summary: 'Workspace requested bounded external verification.',
       relatedMessageId: challengeMessage.messageId,
       relatedProposalId: proposal.proposalId,
+      artifactRefs: [],
+      metadata: {
+        verificationVerdict: 'supported',
+        supportCount: 2,
+        contradictionCount: 0
+      }
+    })
+    createCheckpoint(db, {
+      objectiveId: objective.objectiveId,
+      threadId: thread.threadId,
+      checkpointKind: 'awaiting_operator_confirmation',
+      title: 'Awaiting operator confirmation',
+      summary: 'Proposal is waiting for operator confirmation.',
+      relatedProposalId: proposal.proposalId,
+      artifactRefs: []
+    })
+    recordProposalVote(db, {
+      objectiveId: objective.objectiveId,
+      threadId: thread.threadId,
+      proposalId: proposal.proposalId,
+      voterRole: 'governance',
+      vote: 'veto',
+      comment: 'Governance veto pending policy alignment.'
+    })
+    createCheckpoint(db, {
+      objectiveId: objective.objectiveId,
+      threadId: thread.threadId,
+      checkpointKind: 'veto_issued',
+      title: 'Veto issued',
+      summary: 'Governance vetoed the proposal.',
+      relatedProposalId: proposal.proposalId,
       artifactRefs: []
     })
 
@@ -228,11 +263,23 @@ describe('objective persistence service', () => {
     })
 
     const threadDetail = getThreadDetail(db, { threadId: thread.threadId })
+    const objectives = listObjectives(db)
 
     expect(threadDetail?.messages.map((message) => message.round)).toEqual([0, 1, 1, 2])
     expect(threadDetail?.proposals[0]?.proposalKind).toBe('verify_external_claim')
+    expect(threadDetail?.proposals[0]?.proposalRiskLevel).toBe('high')
+    expect(threadDetail?.proposals[0]?.autonomyDecision).toBe('auto_commit_with_audit')
+    expect(threadDetail?.proposals[0]?.riskReasons).toContain('external_verification_boundary')
+    expect(threadDetail?.proposals[0]?.confidenceScore).toBe(0.88)
     expect(threadDetail?.votes[0]?.vote).toBe('challenge')
     expect(threadDetail?.checkpoints[0]?.checkpointKind).toBe('proposal_raised')
+    expect(threadDetail?.checkpoints[0]?.metadata?.verificationVerdict).toBe('supported')
+    expect(threadDetail?.checkpoints[0]?.metadata?.supportCount).toBe(2)
+    expect(objectives[0]?.awaitingOperatorCount).toBe(1)
+    expect(objectives[0]?.blockedCount).toBe(1)
+    expect(objectives[0]?.vetoedCount).toBe(1)
+    expect(objectives[0]?.criticalProposalCount).toBe(0)
+    expect(objectives[0]?.latestBlocker).toBe('Blocked by governance: Governance veto pending policy alignment.')
     expect(threadDetail?.subagents[0]?.skillPackIds).toEqual(['web-verifier'])
     expect(vote.vote).toBe('challenge')
     expect(checkpoint.relatedProposalId).toBe(proposal.proposalId)

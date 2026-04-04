@@ -10,6 +10,7 @@ import {
 } from './objectivePersistenceService'
 import type {
   AgentArtifactRef,
+  AgentCheckpointMetadata,
   AgentMessageKind,
   AgentParticipantKind,
   AgentProposalRecord,
@@ -210,6 +211,7 @@ export function createObjectiveSubagentLifecycleService(dependencies: {
     checkpointKind: 'tool_action_executed' | 'external_verification_completed' | 'user_facing_result_prepared'
     checkpointTitle: string
     checkpointSummary: string
+    checkpointMetadata?: AgentCheckpointMetadata
   }) {
     dependencies.appendRuntimeMessage({
       objectiveId: input.proposal.objectiveId,
@@ -246,7 +248,8 @@ export function createObjectiveSubagentLifecycleService(dependencies: {
       title: input.checkpointTitle,
       summary: input.checkpointSummary,
       relatedProposalId: input.proposal.proposalId,
-      artifactRefs: input.refs
+      artifactRefs: input.refs,
+      metadata: input.checkpointMetadata
     })
 
     return {

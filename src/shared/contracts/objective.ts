@@ -1,6 +1,7 @@
 export type {
   AgentArtifactRef,
   AgentCheckpointKind,
+  AgentCheckpointMetadata,
   AgentCheckpointRecord,
   AgentExecutionBudget,
   AgentMessageKind,
@@ -13,7 +14,9 @@ export type {
   AgentObjectiveStatus,
   AgentParticipantKind,
   AgentProposalKind,
+  AgentProposalAutonomyDecision,
   AgentProposalRecord,
+  AgentProposalRiskLevel,
   AgentProposalStatus,
   AgentSkillPackId,
   AgentSubagentRecord,

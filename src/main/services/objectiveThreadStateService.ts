@@ -8,6 +8,7 @@ import type {
   AgentVoteRecord
 } from '../../shared/archiveContracts'
 import type { VerificationVerdict } from '../../shared/contracts/verification'
+import { objectiveNeedsOperator } from './objectiveAutonomySelectorsService'
 
 export type ObjectiveThreadState =
   | 'exploring'
@@ -30,7 +31,7 @@ type ThreadStateInput = {
   thread: Pick<AgentThreadRecord, 'status'> & {
     proposals: Array<Pick<AgentProposalRecord, 'proposalKind' | 'status'>>
     votes: Array<Pick<AgentVoteRecord, 'voterRole' | 'vote'>>
-    checkpoints: Array<Pick<AgentCheckpointRecord, 'checkpointKind' | 'summary'>>
+    checkpoints: Array<Pick<AgentCheckpointRecord, 'checkpointKind' | 'summary' | 'metadata'>>
     messages: Array<Pick<AgentMessageRecordV2, 'kind' | 'fromParticipantId' | 'blocking'>>
   }
   roundsWithoutProgress: number
@@ -47,10 +48,17 @@ function isActiveProposal(status: AgentProposalRecord['status']) {
   ].includes(status)
 }
 
-function extractVerificationVerdict(checkpoints: Array<Pick<AgentCheckpointRecord, 'checkpointKind' | 'summary'>>): VerificationVerdict | null {
+function extractVerificationVerdict(
+  checkpoints: Array<Pick<AgentCheckpointRecord, 'checkpointKind' | 'summary' | 'metadata'>>
+): VerificationVerdict | null {
   for (const checkpoint of [...checkpoints].reverse()) {
     if (checkpoint.checkpointKind !== 'external_verification_completed') {
       continue
+    }
+
+    const metadataVerdict = checkpoint.metadata?.verificationVerdict
+    if (metadataVerdict) {
+      return metadataVerdict
     }
 
     const verdict = checkpoint.summary.match(/\b(supported|contradicted|mixed|insufficient)\b/i)?.[1]
@@ -81,9 +89,6 @@ export function createObjectiveThreadStateService() {
         hasCheckpoint(checkpoints, 'user_facing_result_prepared')
         || messages.some((message) => message.kind === 'final_response')
       )
-      const hasAwaitingOperatorProposal = proposals.some((proposal) => (
-        proposal.status === 'awaiting_operator'
-      ))
       const hasGovernanceIntervention = (
         votes.some((vote) => (
           vote.voterRole === 'governance'
@@ -113,11 +118,7 @@ export function createObjectiveThreadStateService() {
         }
       }
 
-      if (
-        input.objective.requiresOperatorInput
-        || input.objective.status === 'awaiting_operator'
-        || hasAwaitingOperatorProposal
-      ) {
+      if (objectiveNeedsOperator(input.objective, proposals)) {
         return {
           state: 'awaiting_operator',
           verificationVerdict,

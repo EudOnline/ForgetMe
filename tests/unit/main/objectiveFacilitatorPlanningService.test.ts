@@ -2,6 +2,37 @@ import { describe, expect, it } from 'vitest'
 import { createObjectiveFacilitatorPlanningService } from '../../../src/main/services/objectiveFacilitatorPlanningService'
 
 describe('objective facilitator planning service', () => {
+  it('pauses for operator when proposals indicate an operator gate even if threadState is stale', () => {
+    const service = createObjectiveFacilitatorPlanningService()
+
+    const result = service.planNextStep({
+      threadState: {
+        state: 'exploring',
+        verificationVerdict: null,
+        hasUserFacingResult: false
+      },
+      thread: {
+        proposals: [
+          {
+            proposalKind: 'publish_draft',
+            status: 'awaiting_operator'
+          }
+        ],
+        checkpoints: [],
+        messages: []
+      },
+      roundsWithoutProgress: 0,
+      hasNewArtifacts: false
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      nextAction: 'pause_for_operator',
+      nextObjectiveStatus: 'awaiting_operator',
+      nextThreadStatus: 'waiting',
+      requiresOperatorInput: true
+    }))
+  })
+
   it('requests external verification when the thread is waiting on public evidence', () => {
     const service = createObjectiveFacilitatorPlanningService()
 
