@@ -403,9 +403,31 @@ function buildRuntimeScorecard() {
     toolTimeoutCount: 1,
     warningAlertCount: 1,
     criticalAlertCount: 1,
+    backlogNew24h: 1,
+    backlogResolved24h: 0,
+    backlogNet24h: 1,
+    stalledNew24h: 1,
+    stalledResolved24h: 0,
+    stalledNet24h: 1,
+    blockedNew24h: 1,
+    blockedResolved24h: 0,
+    blockedNet24h: 1,
     backlogDelta24h: 1,
     stalledDelta24h: 1,
     blockedDelta24h: 1,
+    runtimeAuditSummary: {
+      topFailureProposalKinds: [
+        { label: 'spawn_subagent', count: 2 }
+      ],
+      topFailureSpecializations: [
+        { label: 'compare-analyst', count: 2 }
+      ],
+      recoveryExhaustedReasons: [
+        { label: 'external_or_public_boundary', count: 1 }
+      ],
+      reopenedAlertCount: 1,
+      reopenedAlertRate: 0.5
+    },
     autoCommitRateByRiskLevel: {
       low: { total: 0, autoCommitted: 0, rate: null },
       medium: { total: 2, autoCommitted: 2, rate: 1 },
@@ -476,6 +498,45 @@ function buildRuntimeSettings() {
     disableNestedDelegation: false,
     updatedAt: '2026-03-30T00:06:00.000Z',
     updatedBy: 'operator'
+  }
+}
+
+function buildRuntimeProjectionHealth() {
+  return [
+    {
+      projectionKey: 'runtime_alerts',
+      lastProjectedEventRowId: 2,
+      currentEventRowId: 3,
+      lagEvents: 1,
+      isCurrent: false,
+      updatedAt: '2026-04-04T03:05:00.000Z'
+    },
+    {
+      projectionKey: 'runtime_audit',
+      lastProjectedEventRowId: 3,
+      currentEventRowId: 3,
+      lagEvents: 0,
+      isCurrent: true,
+      updatedAt: '2026-04-04T03:05:00.000Z'
+    },
+    {
+      projectionKey: 'runtime_scorecard',
+      lastProjectedEventRowId: 3,
+      currentEventRowId: 3,
+      lagEvents: 0,
+      isCurrent: true,
+      updatedAt: '2026-04-04T03:05:00.000Z'
+    }
+  ]
+}
+
+function buildRuntimeSnapshot() {
+  return {
+    scorecard: buildRuntimeScorecard(),
+    events: buildRuntimeEvents(),
+    alerts: buildRuntimeAlerts(),
+    settings: buildRuntimeSettings(),
+    projectionHealth: buildRuntimeProjectionHealth()
   }
 }
 
@@ -615,16 +676,13 @@ describe('ObjectiveWorkbenchPage', () => {
   })
 
   it('shows runtime health, recent incidents, and persisted kill switches', async () => {
-    const getObjectiveRuntimeScorecard = vi.fn().mockResolvedValue(buildRuntimeScorecard())
-    const listObjectiveRuntimeEvents = vi.fn().mockResolvedValue(buildRuntimeEvents())
-    const listObjectiveRuntimeAlerts = vi.fn().mockResolvedValue(buildRuntimeAlerts())
+    const getObjectiveRuntimeSnapshot = vi.fn().mockResolvedValue(buildRuntimeSnapshot())
     const acknowledgeObjectiveRuntimeAlert = vi.fn().mockResolvedValue({
       ...buildRuntimeAlerts()[0],
       status: 'acknowledged',
       acknowledgedAt: '2026-04-04T03:06:00.000Z',
       acknowledgedBy: 'operator:test'
     })
-    const getObjectiveRuntimeSettings = vi.fn().mockResolvedValue(buildRuntimeSettings())
     let resolveRuntimeSettingsUpdate!: (value: {
       disableAutoCommit: boolean
       forceOperatorForExternalActions: boolean
@@ -641,11 +699,8 @@ describe('ObjectiveWorkbenchPage', () => {
       listAgentObjectives: vi.fn().mockResolvedValue([buildObjectiveSummary()]),
       getAgentObjective: vi.fn().mockResolvedValue(buildObjectiveDetail()),
       getAgentThread: vi.fn().mockResolvedValue(buildThreadDetail()),
-      getObjectiveRuntimeScorecard,
-      listObjectiveRuntimeEvents,
-      listObjectiveRuntimeAlerts,
+      getObjectiveRuntimeSnapshot,
       acknowledgeObjectiveRuntimeAlert,
-      getObjectiveRuntimeSettings,
       updateObjectiveRuntimeSettings
     })
 
@@ -663,7 +718,20 @@ describe('ObjectiveWorkbenchPage', () => {
     expect(screen.getByRole('heading', { name: 'Budget pressure' })).toBeInTheDocument()
     expect(screen.getByText('Exhausted budgets')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Trend window' })).toBeInTheDocument()
-    expect(screen.getByText('Backlog delta (24h)')).toBeInTheDocument()
+    expect(screen.getByText('Backlog new (24h)')).toBeInTheDocument()
+    expect(screen.getByText('Backlog resolved (24h)')).toBeInTheDocument()
+    expect(screen.getByText('Backlog net (24h)')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Runtime audit' })).toBeInTheDocument()
+    expect(screen.getByText('Failure proposal kinds')).toBeInTheDocument()
+    expect(screen.getByText('spawn_subagent 2')).toBeInTheDocument()
+    expect(screen.getByText('Failure specializations')).toBeInTheDocument()
+    expect(screen.getByText('compare-analyst 2')).toBeInTheDocument()
+    expect(screen.getByText('Recovery exhausted reasons')).toBeInTheDocument()
+    expect(screen.getByText('external_or_public_boundary 1')).toBeInTheDocument()
+    expect(screen.getByText('Reopened alerts')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Projection health' })).toBeInTheDocument()
+    expect(screen.getByText('Lagging projections')).toBeInTheDocument()
+    expect(screen.getByText('runtime_alerts 1')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Runtime controls' })).toBeInTheDocument()
     expect(screen.getByLabelText('Disable auto commit')).toBeInTheDocument()
     expect(screen.getByLabelText('Force operator for external actions')).toBeInTheDocument()
@@ -695,10 +763,7 @@ describe('ObjectiveWorkbenchPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Updated runtime controls.')).toBeInTheDocument()
     })
-    expect(getObjectiveRuntimeScorecard).toHaveBeenCalledWith()
-    expect(listObjectiveRuntimeEvents).toHaveBeenCalledWith()
-    expect(listObjectiveRuntimeAlerts).toHaveBeenCalledWith()
-    expect(getObjectiveRuntimeSettings).toHaveBeenCalledWith()
+    expect(getObjectiveRuntimeSnapshot).toHaveBeenCalledWith()
   })
 
   it('shows proposal provenance, bounded tool policy details, and subagent lineage', async () => {

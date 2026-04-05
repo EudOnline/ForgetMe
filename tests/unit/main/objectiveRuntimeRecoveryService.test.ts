@@ -57,6 +57,25 @@ describe('objective runtime recovery service', () => {
     }))
   })
 
+  it('classifies local timed-out compare failures as tool timeouts for bounded retry', () => {
+    const service = createObjectiveRuntimeRecoveryService({
+      runtimeConfig: createObjectiveRuntimeConfigService()
+    })
+
+    const decision = service.decideRecovery({
+      proposal: buildProposal(),
+      failure: new Error('Local compare runner timed out after waiting for run_compare.'),
+      priorAttemptCount: 0
+    })
+
+    expect(decision).toEqual(expect.objectContaining({
+      failureType: 'tool_timeout',
+      decision: 'cooldown_then_retry',
+      shouldRetry: true,
+      reason: 'transient_tool_timeout'
+    }))
+  })
+
   it('retries immediately for a transient local failure that is not externally sensitive', () => {
     const service = createObjectiveRuntimeRecoveryService({
       runtimeConfig: createObjectiveRuntimeConfigService()
@@ -73,6 +92,35 @@ describe('objective runtime recovery service', () => {
       decision: 'retry_now',
       shouldRetry: true,
       reason: 'transient_local_failure'
+    }))
+  })
+
+  it('prefers structured runtime failure metadata over raw message parsing', () => {
+    const service = createObjectiveRuntimeRecoveryService({
+      runtimeConfig: createObjectiveRuntimeConfigService()
+    })
+
+    const decision = service.decideRecovery({
+      proposal: buildProposal(),
+      failure: {
+        kind: 'objective_runtime_failure',
+        name: 'ObjectiveRuntimeFailure',
+        message: 'opaque downstream failure',
+        proposal: buildProposal(),
+        objectiveId: 'objective-1',
+        threadId: 'thread-1',
+        proposalId: 'proposal-1',
+        failureType: 'tool_timeout',
+        failureEventType: 'tool_timeout'
+      },
+      priorAttemptCount: 0
+    })
+
+    expect(decision).toEqual(expect.objectContaining({
+      failureType: 'tool_timeout',
+      decision: 'cooldown_then_retry',
+      shouldRetry: true,
+      reason: 'transient_tool_timeout'
     }))
   })
 

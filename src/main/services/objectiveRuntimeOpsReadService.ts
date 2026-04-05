@@ -3,11 +3,15 @@ import type {
   ObjectiveRuntimeAlertRecord,
   ObjectiveRuntimeEventRecord,
   ObjectiveRuntimeEventType,
+  ObjectiveRuntimeProjectionHealthRecord,
+  ObjectiveRuntimeReadModel,
   ObjectiveRuntimeScorecard,
   ListObjectiveRuntimeEventsInput
 } from '../../shared/objectiveRuntimeContracts'
 import type { ArchiveDatabase } from './db'
 import { createObjectiveRuntimeAlertService } from './objectiveRuntimeAlertService'
+import { createObjectiveRuntimeAuditService } from './objectiveRuntimeAuditService'
+import { createObjectiveRuntimeProjectionHealthService } from './objectiveRuntimeProjectionHealthService'
 import { createObjectiveRuntimeTelemetryService } from './objectiveRuntimeTelemetryService'
 
 const INCIDENT_EVENT_TYPES = new Set<ObjectiveRuntimeEventType>([
@@ -33,22 +37,29 @@ export function createObjectiveRuntimeOpsReadService(dependencies: {
     db,
     runtimeTelemetry
   })
+  const runtimeAuditService = createObjectiveRuntimeAuditService({ db })
+  const runtimeProjectionHealthService = createObjectiveRuntimeProjectionHealthService({
+    db,
+    runtimeTelemetry,
+    runtimeAlertService,
+    runtimeAuditService
+  })
+
+  function buildRuntimeScorecard(baseScorecard: ObjectiveRuntimeScorecard): ObjectiveRuntimeScorecard {
+    const alertCounts = runtimeAlertService.readOpenAlertCounts()
+    return {
+      ...baseScorecard,
+      warningAlertCount: alertCounts.warningAlertCount,
+      criticalAlertCount: alertCounts.criticalAlertCount,
+      runtimeAuditSummary: runtimeAuditService.readRuntimeAuditSummary()
+    }
+  }
 
   function getRuntimeScorecard(): ObjectiveRuntimeScorecard {
     const baseScorecard = runtimeTelemetry.getScorecard()
-    const alerts = runtimeAlertService.listObjectiveRuntimeAlerts({
-      limit: 200
-    })
-
-    return {
-      ...baseScorecard,
-      warningAlertCount: alerts.filter((alert) => (
-        alert.severity === 'warning' && alert.status !== 'resolved'
-      )).length,
-      criticalAlertCount: alerts.filter((alert) => (
-        alert.severity === 'critical' && alert.status !== 'resolved'
-      )).length
-    }
+    runtimeAlertService.syncObjectiveRuntimeAlerts()
+    runtimeAuditService.syncRuntimeAuditProjection()
+    return buildRuntimeScorecard(baseScorecard)
   }
 
   function listRecentIncidents(input?: ListObjectiveRuntimeEventsInput): ObjectiveRuntimeEventRecord[] {
@@ -67,8 +78,26 @@ export function createObjectiveRuntimeOpsReadService(dependencies: {
     return runtimeAlertService.listObjectiveRuntimeAlerts(input)
   }
 
+  function getRuntimeProjectionHealth(): ObjectiveRuntimeProjectionHealthRecord[] {
+    return runtimeProjectionHealthService.listRuntimeProjectionHealth()
+  }
+
+  function getRuntimeSnapshot(): ObjectiveRuntimeReadModel {
+    runtimeAlertService.syncObjectiveRuntimeAlerts()
+    runtimeAuditService.syncRuntimeAuditProjection()
+
+    const baseScorecard = runtimeTelemetry.getScorecard()
+    return {
+      scorecard: buildRuntimeScorecard(baseScorecard),
+      events: listRecentIncidents(),
+      alerts: runtimeAlertService.readObjectiveRuntimeAlerts()
+    }
+  }
+
   return {
     getRuntimeScorecard,
+    getRuntimeSnapshot,
+    getRuntimeProjectionHealth,
     listRecentIncidents,
     listRuntimeAlerts
   }

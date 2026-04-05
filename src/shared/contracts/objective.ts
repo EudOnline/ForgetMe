@@ -27,6 +27,8 @@ export type {
   ObjectiveRuntimeAlertStatus,
   ObjectiveRuntimeEventRecord,
   ObjectiveRuntimeEventType,
+  ObjectiveRuntimeProjectionHealthRecord,
+  ObjectiveRuntimeSnapshot,
   ObjectiveRuntimeScorecard,
   ObjectiveRuntimeSettingsRecord,
   ResolveObjectiveRuntimeAlertInput,

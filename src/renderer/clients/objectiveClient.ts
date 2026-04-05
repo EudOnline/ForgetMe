@@ -5,7 +5,9 @@ import type {
   AgentRole,
   ObjectiveRuntimeAlertRecord,
   ObjectiveRuntimeEventRecord,
+  ObjectiveRuntimeProjectionHealthRecord,
   ObjectiveRuntimeScorecard,
+  ObjectiveRuntimeSnapshot,
   ObjectiveRuntimeSettingsRecord
 } from '../../shared/archiveContracts'
 import type {
@@ -36,7 +38,9 @@ type ObjectiveClient = Pick<
   | 'getAgentThread'
   | 'respondToAgentProposal'
   | 'confirmAgentProposal'
+  | 'getObjectiveRuntimeSnapshot'
   | 'getObjectiveRuntimeScorecard'
+  | 'getObjectiveRuntimeProjectionHealth'
   | 'listObjectiveRuntimeEvents'
   | 'listObjectiveRuntimeAlerts'
   | 'acknowledgeObjectiveRuntimeAlert'
@@ -91,6 +95,103 @@ function buildFallbackObjectiveDetail(input: CreateAgentObjectiveInput): AgentOb
   }
 }
 
+function buildFallbackRuntimeScorecard(): ObjectiveRuntimeScorecard {
+  return {
+    totalProposalCount: 0,
+    autoCommitCount: 0,
+    operatorGatedCount: 0,
+    vetoCount: 0,
+    blockedCount: 0,
+    totalObjectiveCount: 0,
+    stalledObjectiveCount: 0,
+    completedObjectiveCount: 0,
+    criticalGateRate: null,
+    vetoRate: null,
+    blockedRate: null,
+    stalledObjectiveRate: null,
+    meanRoundsToCompletion: null,
+    operatorBacklogSize: 0,
+    budgetExhaustedCount: 0,
+    toolTimeoutCount: 0,
+    warningAlertCount: 0,
+    criticalAlertCount: 0,
+    backlogNew24h: 0,
+    backlogResolved24h: 0,
+    backlogNet24h: 0,
+    stalledNew24h: 0,
+    stalledResolved24h: 0,
+    stalledNet24h: 0,
+    blockedNew24h: 0,
+    blockedResolved24h: 0,
+    blockedNet24h: 0,
+    backlogDelta24h: 0,
+    stalledDelta24h: 0,
+    blockedDelta24h: 0,
+    runtimeAuditSummary: {
+      topFailureProposalKinds: [],
+      topFailureSpecializations: [],
+      recoveryExhaustedReasons: [],
+      reopenedAlertCount: 0,
+      reopenedAlertRate: null
+    },
+    autoCommitRateByRiskLevel: {
+      low: { total: 0, autoCommitted: 0, rate: null },
+      medium: { total: 0, autoCommitted: 0, rate: null },
+      high: { total: 0, autoCommitted: 0, rate: null },
+      critical: { total: 0, autoCommitted: 0, rate: null }
+    }
+  }
+}
+
+function buildFallbackRuntimeSettings(): ObjectiveRuntimeSettingsRecord {
+  return {
+    disableAutoCommit: false,
+    forceOperatorForExternalActions: false,
+    disableNestedDelegation: false,
+    updatedAt: null,
+    updatedBy: null
+  }
+}
+
+function buildFallbackRuntimeSnapshot(): ObjectiveRuntimeSnapshot {
+  return {
+    scorecard: buildFallbackRuntimeScorecard(),
+    events: [],
+    alerts: [],
+    projectionHealth: buildFallbackRuntimeProjectionHealth(),
+    settings: buildFallbackRuntimeSettings()
+  }
+}
+
+function buildFallbackRuntimeProjectionHealth(): ObjectiveRuntimeProjectionHealthRecord[] {
+  return [
+    {
+      projectionKey: 'runtime_alerts',
+      lastProjectedEventRowId: 0,
+      currentEventRowId: 0,
+      lagEvents: 0,
+      isCurrent: true,
+      updatedAt: null
+    },
+    {
+      projectionKey: 'runtime_audit',
+      lastProjectedEventRowId: 0,
+      currentEventRowId: 0,
+      lagEvents: 0,
+      isCurrent: true,
+      updatedAt: null
+    },
+    {
+      projectionKey: 'runtime_scorecard',
+      lastProjectedEventRowId: 0,
+      currentEventRowId: 0,
+      lagEvents: 0,
+      isCurrent: true,
+      updatedAt: null
+    }
+  ]
+}
+
 export function getObjectiveClient(): ObjectiveClient {
   return {
     createAgentObjective: bridgeMethod('createAgentObjective', async (input: CreateAgentObjectiveInput) => buildFallbackObjectiveDetail(input)),
@@ -100,35 +201,15 @@ export function getObjectiveClient(): ObjectiveClient {
     getAgentThread: bridgeMethod('getAgentThread', async (_input: GetAgentThreadInput) => null as AgentThreadDetail | null),
     respondToAgentProposal: bridgeMethod('respondToAgentProposal', async (_input: RespondToAgentProposalInput) => null as AgentProposalRecord | null),
     confirmAgentProposal: bridgeMethod('confirmAgentProposal', async (_input: ConfirmAgentProposalInput) => null as AgentProposalRecord | null),
-    getObjectiveRuntimeScorecard: bridgeMethod('getObjectiveRuntimeScorecard', async () => ({
-      totalProposalCount: 0,
-      autoCommitCount: 0,
-      operatorGatedCount: 0,
-      vetoCount: 0,
-      blockedCount: 0,
-      totalObjectiveCount: 0,
-      stalledObjectiveCount: 0,
-      completedObjectiveCount: 0,
-      criticalGateRate: null,
-      vetoRate: null,
-      blockedRate: null,
-      stalledObjectiveRate: null,
-      meanRoundsToCompletion: null,
-      operatorBacklogSize: 0,
-      budgetExhaustedCount: 0,
-      toolTimeoutCount: 0,
-      warningAlertCount: 0,
-      criticalAlertCount: 0,
-      backlogDelta24h: 0,
-      stalledDelta24h: 0,
-      blockedDelta24h: 0,
-      autoCommitRateByRiskLevel: {
-        low: { total: 0, autoCommitted: 0, rate: null },
-        medium: { total: 0, autoCommitted: 0, rate: null },
-        high: { total: 0, autoCommitted: 0, rate: null },
-        critical: { total: 0, autoCommitted: 0, rate: null }
-      }
-    } satisfies ObjectiveRuntimeScorecard)),
+    getObjectiveRuntimeSnapshot: bridgeMethod('getObjectiveRuntimeSnapshot', async () => (
+      buildFallbackRuntimeSnapshot()
+    )),
+    getObjectiveRuntimeScorecard: bridgeMethod('getObjectiveRuntimeScorecard', async () => (
+      buildFallbackRuntimeScorecard()
+    )),
+    getObjectiveRuntimeProjectionHealth: bridgeMethod('getObjectiveRuntimeProjectionHealth', async () => (
+      buildFallbackRuntimeProjectionHealth()
+    )),
     listObjectiveRuntimeEvents: bridgeMethod('listObjectiveRuntimeEvents', async (_input?: ListObjectiveRuntimeEventsInput) => [] as ObjectiveRuntimeEventRecord[]),
     listObjectiveRuntimeAlerts: bridgeMethod('listObjectiveRuntimeAlerts', async (_input?: ListObjectiveRuntimeAlertsInput) => [] as ObjectiveRuntimeAlertRecord[]),
     acknowledgeObjectiveRuntimeAlert: bridgeMethod('acknowledgeObjectiveRuntimeAlert', async (input: AcknowledgeObjectiveRuntimeAlertInput) => ({
@@ -167,13 +248,9 @@ export function getObjectiveClient(): ObjectiveClient {
       acknowledgedBy: null,
       resolvedAt: ''
     } satisfies ObjectiveRuntimeAlertRecord)),
-    getObjectiveRuntimeSettings: bridgeMethod('getObjectiveRuntimeSettings', async () => ({
-      disableAutoCommit: false,
-      forceOperatorForExternalActions: false,
-      disableNestedDelegation: false,
-      updatedAt: null,
-      updatedBy: null
-    } satisfies ObjectiveRuntimeSettingsRecord)),
+    getObjectiveRuntimeSettings: bridgeMethod('getObjectiveRuntimeSettings', async () => (
+      buildFallbackRuntimeSettings()
+    )),
     updateObjectiveRuntimeSettings: bridgeMethod('updateObjectiveRuntimeSettings', async (input: UpdateObjectiveRuntimeSettingsInput) => ({
       disableAutoCommit: input.patch.disableAutoCommit ?? false,
       forceOperatorForExternalActions: input.patch.forceOperatorForExternalActions ?? false,

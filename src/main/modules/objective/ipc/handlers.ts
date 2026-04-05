@@ -29,7 +29,9 @@ export function registerObjectiveHandlers(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:confirmAgentProposal')
   ipcMain.removeHandler('archive:listAgentMemories')
   ipcMain.removeHandler('archive:listAgentPolicyVersions')
+  ipcMain.removeHandler('archive:getObjectiveRuntimeSnapshot')
   ipcMain.removeHandler('archive:getObjectiveRuntimeScorecard')
+  ipcMain.removeHandler('archive:getObjectiveRuntimeProjectionHealth')
   ipcMain.removeHandler('archive:listObjectiveRuntimeEvents')
   ipcMain.removeHandler('archive:listObjectiveRuntimeAlerts')
   ipcMain.removeHandler('archive:acknowledgeObjectiveRuntimeAlert')
@@ -81,8 +83,16 @@ export function registerObjectiveHandlers(appPaths: AppPaths) {
     return objectiveModule.listPolicyVersions(input)
   })
 
+  ipcMain.handle('archive:getObjectiveRuntimeSnapshot', async () => {
+    return objectiveModule.getRuntimeSnapshot()
+  })
+
   ipcMain.handle('archive:getObjectiveRuntimeScorecard', async () => {
     return objectiveModule.getRuntimeScorecard()
+  })
+
+  ipcMain.handle('archive:getObjectiveRuntimeProjectionHealth', async () => {
+    return objectiveModule.getRuntimeProjectionHealth()
   })
 
   ipcMain.handle('archive:listObjectiveRuntimeEvents', async (_event, payload) => {

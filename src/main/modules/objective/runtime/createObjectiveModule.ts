@@ -181,6 +181,24 @@ export function createObjectiveModule(appPaths: AppPaths) {
         createObjectiveRuntimeOpsReadService({ db }).getRuntimeScorecard()
       ))
     },
+    async getRuntimeProjectionHealth() {
+      return this.withArchiveDatabase((db) => (
+        createObjectiveRuntimeOpsReadService({ db }).getRuntimeProjectionHealth()
+      ))
+    },
+    async getRuntimeSnapshot() {
+      return this.withArchiveDatabase((db) => {
+        const runtimeOps = createObjectiveRuntimeOpsReadService({ db })
+        const snapshot = runtimeOps.getRuntimeSnapshot()
+        const settings = createObjectiveRuntimeSettingsService({ db }).getRuntimeSettings()
+
+        return {
+          ...snapshot,
+          projectionHealth: runtimeOps.getRuntimeProjectionHealth(),
+          settings
+        }
+      })
+    },
     async listRuntimeEvents(input: {
       objectiveId?: string
       proposalId?: string

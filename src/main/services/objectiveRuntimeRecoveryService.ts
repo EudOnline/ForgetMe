@@ -1,4 +1,9 @@
 import { createObjectiveRuntimeConfigService } from './objectiveRuntimeConfigService'
+import {
+  classifyObjectiveRuntimeFailureType,
+  objectiveRuntimeFailureEventTypeFor,
+  type ObjectiveRuntimeFailureType
+} from './objectiveRuntimeFailureService'
 import type {
   AgentProposalRecord,
   ObjectiveRuntimeEventType
@@ -9,11 +14,7 @@ export type ObjectiveRuntimeRecoveryDecision =
   | 'cooldown_then_retry'
   | 'surface_to_operator'
 
-export type ObjectiveRuntimeRecoveryFailureType =
-  | 'tool_timeout'
-  | 'subagent_budget_exhausted'
-  | 'transient_local_failure'
-  | 'unknown'
+export type ObjectiveRuntimeRecoveryFailureType = ObjectiveRuntimeFailureType
 
 export type ObjectiveRuntimeRecoveryResult = {
   failureType: ObjectiveRuntimeRecoveryFailureType
@@ -23,47 +24,14 @@ export type ObjectiveRuntimeRecoveryResult = {
   reason: string
 }
 
-function asErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message
-  }
-
-  return String(error)
-}
-
 function classifyFailure(error: unknown): ObjectiveRuntimeRecoveryResult['failureType'] {
-  const message = asErrorMessage(error).toLowerCase()
-
-  if (message.includes('timeout budget')) {
-    return 'tool_timeout'
-  }
-
-  if (message.includes('remaining budget is exhausted')) {
-    return 'subagent_budget_exhausted'
-  }
-
-  if (
-    message.includes('temporarily unavailable')
-    || message.includes('try again')
-    || message.includes('retry')
-  ) {
-    return 'transient_local_failure'
-  }
-
-  return 'unknown'
+  return classifyObjectiveRuntimeFailureType(error)
 }
 
 function failureEventTypeFor(
   failureType: ObjectiveRuntimeRecoveryFailureType
 ): ObjectiveRuntimeRecoveryResult['failureEventType'] {
-  switch (failureType) {
-    case 'tool_timeout':
-      return 'tool_timeout'
-    case 'subagent_budget_exhausted':
-      return 'subagent_budget_exhausted'
-    default:
-      return null
-  }
+  return objectiveRuntimeFailureEventTypeFor(failureType)
 }
 
 export function createObjectiveRuntimeRecoveryService(dependencies?: {

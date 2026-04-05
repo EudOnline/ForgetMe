@@ -1,4 +1,5 @@
 import { createSpawnSubagentRunnerRegistry } from './spawnSubagentRunnerRegistryService'
+import { createObjectiveRuntimeFailure } from './objectiveRuntimeFailureService'
 import type { createSubagentRegistryService } from './subagentRegistryService'
 import { parseCompareAnalystPayload } from './subagentRunners/compareAnalystRunner'
 import { parseDraftComposerPayload } from './subagentRunners/draftComposerRunner'
@@ -236,12 +237,20 @@ export function createObjectiveSubagentRoutingService<
       toolPolicyId: getRequiredToolPolicyId('web-verifier'),
       budget: { ...verifierProfile.defaultBudget }
     })
-    const execution = await dependencies.runWebVerifierSubagent({
-      proposal,
-      requestedByParticipantId: input.proposedByParticipantId,
-      claim: input.claim,
-      query: input.query
-    })
+    let execution: TWebVerifierExecution
+    try {
+      execution = await dependencies.runWebVerifierSubagent({
+        proposal,
+        requestedByParticipantId: input.proposedByParticipantId,
+        claim: input.claim,
+        query: input.query
+      })
+    } catch (error) {
+      throw createObjectiveRuntimeFailure({
+        proposal,
+        error
+      })
+    }
 
     return {
       proposal,

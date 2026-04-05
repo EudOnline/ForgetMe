@@ -9,6 +9,7 @@ import type {
   CreateAgentObjectiveInput,
   ObjectiveRuntimeAlertRecord,
   ObjectiveRuntimeEventRecord,
+  ObjectiveRuntimeProjectionHealthRecord,
   ObjectiveRuntimeScorecard,
   ObjectiveRuntimeSettingsRecord,
   UpdateObjectiveRuntimeSettingsInput
@@ -153,6 +154,7 @@ export function ObjectiveWorkbenchPage() {
   const [runtimeScorecard, setRuntimeScorecard] = useState<ObjectiveRuntimeScorecard | null>(null)
   const [runtimeEvents, setRuntimeEvents] = useState<ObjectiveRuntimeEventRecord[]>([])
   const [runtimeAlerts, setRuntimeAlerts] = useState<ObjectiveRuntimeAlertRecord[]>([])
+  const [runtimeProjectionHealth, setRuntimeProjectionHealth] = useState<ObjectiveRuntimeProjectionHealthRecord[]>([])
   const [selectedRuntimeEventId, setSelectedRuntimeEventId] = useState<string | null>(null)
   const [runtimeSettings, setRuntimeSettings] = useState<ObjectiveRuntimeSettingsRecord | null>(null)
   const [pendingRuntimeSettingKey, setPendingRuntimeSettingKey] = useState<RuntimeSettingKey | null>(null)
@@ -174,18 +176,21 @@ export function ObjectiveWorkbenchPage() {
   ]), [t])
 
   const loadRuntimeOps = useCallback(async () => {
-    const [scorecard, events, alerts, settings] = await Promise.all([
-      objectiveClient.getObjectiveRuntimeScorecard(),
-      objectiveClient.listObjectiveRuntimeEvents(),
-      objectiveClient.listObjectiveRuntimeAlerts(),
-      objectiveClient.getObjectiveRuntimeSettings()
-    ])
+    const snapshot = await objectiveClient.getObjectiveRuntimeSnapshot()
+    const {
+      scorecard,
+      events,
+      alerts,
+      projectionHealth,
+      settings
+    } = snapshot
     const nextEvents = [...events].sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     const nextAlerts = [...alerts].sort((left, right) => right.lastSeenAt.localeCompare(left.lastSeenAt))
 
     setRuntimeScorecard(scorecard)
     setRuntimeEvents(nextEvents)
     setRuntimeAlerts(nextAlerts)
+    setRuntimeProjectionHealth(projectionHealth)
     setRuntimeSettings(settings)
     setSelectedRuntimeEventId((current) => (
       current && nextEvents.some((event) => event.eventId === current)
@@ -390,6 +395,7 @@ export function ObjectiveWorkbenchPage() {
 
   const selectedProposal = visibleProposals.find((proposal) => proposal.proposalId === activeProposalId) ?? null
   const selectedRuntimeEvent = runtimeEvents.find((event) => event.eventId === selectedRuntimeEventId) ?? null
+  const laggingRuntimeProjectionCount = runtimeProjectionHealth.filter((projection) => !projection.isCurrent).length
 
   const participantLabel = useCallback((participantId: string) => {
     if (participantId === 'operator') {
@@ -898,20 +904,109 @@ export function ObjectiveWorkbenchPage() {
             {runtimeScorecard ? (
               <>
                 <p>
-                  <span>{t('objectiveWorkbench.runtimeBacklogDeltaLabel')}</span>
-                  {` ${runtimeScorecard.backlogDelta24h}`}
+                  <span>{t('objectiveWorkbench.runtimeBacklogNewLabel')}</span>
+                  {` ${runtimeScorecard.backlogNew24h}`}
                 </p>
                 <p>
-                  <span>{t('objectiveWorkbench.runtimeStalledDeltaLabel')}</span>
-                  {` ${runtimeScorecard.stalledDelta24h}`}
+                  <span>{t('objectiveWorkbench.runtimeBacklogResolvedLabel')}</span>
+                  {` ${runtimeScorecard.backlogResolved24h}`}
                 </p>
                 <p>
-                  <span>{t('objectiveWorkbench.runtimeBlockedDeltaLabel')}</span>
-                  {` ${runtimeScorecard.blockedDelta24h}`}
+                  <span>{t('objectiveWorkbench.runtimeBacklogNetLabel')}</span>
+                  {` ${runtimeScorecard.backlogNet24h}`}
+                </p>
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeStalledNewLabel')}</span>
+                  {` ${runtimeScorecard.stalledNew24h}`}
+                </p>
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeStalledResolvedLabel')}</span>
+                  {` ${runtimeScorecard.stalledResolved24h}`}
+                </p>
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeStalledNetLabel')}</span>
+                  {` ${runtimeScorecard.stalledNet24h}`}
+                </p>
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeBlockedNewLabel')}</span>
+                  {` ${runtimeScorecard.blockedNew24h}`}
+                </p>
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeBlockedResolvedLabel')}</span>
+                  {` ${runtimeScorecard.blockedResolved24h}`}
+                </p>
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeBlockedNetLabel')}</span>
+                  {` ${runtimeScorecard.blockedNet24h}`}
                 </p>
               </>
             ) : (
               <p>{t('objectiveWorkbench.runtimeHealthEmpty')}</p>
+            )}
+          </section>
+
+          <section aria-label={t('objectiveWorkbench.runtimeAuditTitle')}>
+            <h2>{t('objectiveWorkbench.runtimeAuditTitle')}</h2>
+            {runtimeScorecard ? (
+              <>
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeAuditProposalKindsLabel')}</span>
+                </p>
+                {runtimeScorecard.runtimeAuditSummary.topFailureProposalKinds.length > 0 ? (
+                  runtimeScorecard.runtimeAuditSummary.topFailureProposalKinds.map((bucket) => (
+                    <p key={`proposal-kind-${bucket.label}`}>{`${bucket.label} ${bucket.count}`}</p>
+                  ))
+                ) : (
+                  <p>{t('objectiveWorkbench.runtimeAuditEmpty')}</p>
+                )}
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeAuditSpecializationsLabel')}</span>
+                </p>
+                {runtimeScorecard.runtimeAuditSummary.topFailureSpecializations.length > 0 ? (
+                  runtimeScorecard.runtimeAuditSummary.topFailureSpecializations.map((bucket) => (
+                    <p key={`specialization-${bucket.label}`}>{`${bucket.label} ${bucket.count}`}</p>
+                  ))
+                ) : (
+                  <p>{t('objectiveWorkbench.runtimeAuditEmpty')}</p>
+                )}
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeAuditRecoveryReasonsLabel')}</span>
+                </p>
+                {runtimeScorecard.runtimeAuditSummary.recoveryExhaustedReasons.length > 0 ? (
+                  runtimeScorecard.runtimeAuditSummary.recoveryExhaustedReasons.map((bucket) => (
+                    <p key={`recovery-reason-${bucket.label}`}>{`${bucket.label} ${bucket.count}`}</p>
+                  ))
+                ) : (
+                  <p>{t('objectiveWorkbench.runtimeAuditEmpty')}</p>
+                )}
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeAuditReopenedAlertsLabel')}</span>
+                  {` ${runtimeScorecard.runtimeAuditSummary.reopenedAlertCount}`}
+                </p>
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeAuditReopenedAlertRateLabel')}</span>
+                  {` ${runtimeScorecard.runtimeAuditSummary.reopenedAlertRate ?? t('objectiveWorkbench.none')}`}
+                </p>
+              </>
+            ) : (
+              <p>{t('objectiveWorkbench.runtimeHealthEmpty')}</p>
+            )}
+          </section>
+
+          <section aria-label={t('objectiveWorkbench.runtimeProjectionHealthTitle')}>
+            <h2>{t('objectiveWorkbench.runtimeProjectionHealthTitle')}</h2>
+            {runtimeProjectionHealth.length > 0 ? (
+              <>
+                <p>
+                  <span>{t('objectiveWorkbench.runtimeProjectionLaggingLabel')}</span>
+                  {` ${laggingRuntimeProjectionCount}`}
+                </p>
+                {runtimeProjectionHealth.map((projection) => (
+                  <p key={projection.projectionKey}>{`${projection.projectionKey} ${projection.lagEvents}`}</p>
+                ))}
+              </>
+            ) : (
+              <p>{t('objectiveWorkbench.runtimeProjectionHealthEmpty')}</p>
             )}
           </section>
 

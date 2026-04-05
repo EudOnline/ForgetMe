@@ -43,6 +43,37 @@ type ProposalRuntimeState = {
   votes: AgentThreadDetail['votes']
   messages: AgentThreadDetail['messages']
 }
+type DelegationDepthThreadNode = Pick<AgentThreadDetail, 'threadKind' | 'parentThreadId'>
+
+export function calculateThreadDelegationDepth(input: {
+  threadId: string
+  lookupThread: (threadId: string) => DelegationDepthThreadNode | null
+}) {
+  let depth = 0
+  let currentThreadId: string | null = input.threadId
+
+  while (currentThreadId) {
+    const thread = input.lookupThread(currentThreadId)
+    if (!thread) {
+      break
+    }
+
+    if (thread.threadKind === 'subthread') {
+      depth += 1
+    }
+
+    currentThreadId = thread.parentThreadId
+  }
+
+  return depth + 1
+}
+
+export function exceedsThreadDelegationDepthLimit(input: {
+  executionDepth: number
+  maxDelegationDepth: number
+}) {
+  return input.executionDepth > input.maxDelegationDepth
+}
 
 export type ObjectiveSubagentExecutionDependencies = {
   db: ArchiveDatabase
@@ -121,23 +152,20 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
   }
 
   function getThreadDelegationDepth(threadId: string) {
-    let depth = 0
-    let currentThreadId: string | null = threadId
+    return calculateThreadDelegationDepth({
+      threadId,
+      lookupThread: (candidateThreadId) => {
+        const thread = getThreadDetail(db, { threadId: candidateThreadId })
+        if (!thread) {
+          return null
+        }
 
-    while (currentThreadId) {
-      const thread = getThreadDetail(db, { threadId: currentThreadId })
-      if (!thread) {
-        break
+        return {
+          threadKind: thread.threadKind,
+          parentThreadId: thread.parentThreadId
+        }
       }
-
-      if (thread.threadKind === 'subthread') {
-        depth += 1
-      }
-
-      currentThreadId = thread.parentThreadId
-    }
-
-    return depth + 1
+    })
   }
 
   const lifecycleService = createObjectiveSubagentLifecycleService({
@@ -158,7 +186,10 @@ export function createObjectiveSubagentExecutionService(dependencies: ObjectiveS
   }) {
     const profile = getSubagentProfile(input.specialization)
     const executionDepth = getThreadDelegationDepth(input.proposal.threadId)
-    if (executionDepth > profile.maxDelegationDepth) {
+    if (exceedsThreadDelegationDepthLimit({
+      executionDepth,
+      maxDelegationDepth: profile.maxDelegationDepth
+    })) {
       throw new Error(`Subagent delegation depth exceeds max delegation depth ${profile.maxDelegationDepth} for ${input.specialization}.`)
     }
 

@@ -24,6 +24,8 @@ import type {
   ListObjectiveRuntimeAlertsInput,
   ObjectiveRuntimeEventRecord,
   ObjectiveRuntimeScorecard,
+  ObjectiveRuntimeProjectionHealthRecord,
+  ObjectiveRuntimeSnapshot,
   ObjectiveRuntimeAlertRecord,
   ObjectiveRuntimeSettingsRecord,
   ResolveObjectiveRuntimeAlertInput,
@@ -1561,6 +1563,8 @@ export type {
   ObjectiveRuntimeAlertRecord,
   ObjectiveRuntimeEventRecord,
   ObjectiveRuntimeScorecard,
+  ObjectiveRuntimeProjectionHealthRecord,
+  ObjectiveRuntimeSnapshot,
   ObjectiveRuntimeSettingsRecord,
   ResolveObjectiveRuntimeAlertInput,
   AgentSubagentRecord,
@@ -1611,7 +1615,9 @@ export interface ArchiveApi {
   getAgentThread: (input: GetAgentThreadInput) => Promise<AgentThreadDetail | null>
   respondToAgentProposal: (input: RespondToAgentProposalInput) => Promise<AgentProposalRecord | null>
   confirmAgentProposal: (input: ConfirmAgentProposalInput) => Promise<AgentProposalRecord | null>
+  getObjectiveRuntimeSnapshot: () => Promise<ObjectiveRuntimeSnapshot>
   getObjectiveRuntimeScorecard: () => Promise<ObjectiveRuntimeScorecard>
+  getObjectiveRuntimeProjectionHealth: () => Promise<ObjectiveRuntimeProjectionHealthRecord[]>
   listObjectiveRuntimeEvents: (input?: ListObjectiveRuntimeEventsInput) => Promise<ObjectiveRuntimeEventRecord[]>
   listObjectiveRuntimeAlerts: (input?: ListObjectiveRuntimeAlertsInput) => Promise<ObjectiveRuntimeAlertRecord[]>
   acknowledgeObjectiveRuntimeAlert: (input: AcknowledgeObjectiveRuntimeAlertInput) => Promise<ObjectiveRuntimeAlertRecord | null>

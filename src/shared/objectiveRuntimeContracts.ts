@@ -123,6 +123,33 @@ export type ObjectiveRuntimeAlertStatus =
   | 'acknowledged'
   | 'resolved'
 
+export type ObjectiveRuntimeAuditBucket = {
+  label: string
+  count: number
+}
+
+export type ObjectiveRuntimeAuditSummary = {
+  topFailureProposalKinds: ObjectiveRuntimeAuditBucket[]
+  topFailureSpecializations: ObjectiveRuntimeAuditBucket[]
+  recoveryExhaustedReasons: ObjectiveRuntimeAuditBucket[]
+  reopenedAlertCount: number
+  reopenedAlertRate: number | null
+}
+
+export type ObjectiveRuntimeProjectionKey =
+  | 'runtime_alerts'
+  | 'runtime_audit'
+  | 'runtime_scorecard'
+
+export type ObjectiveRuntimeProjectionHealthRecord = {
+  projectionKey: ObjectiveRuntimeProjectionKey
+  lastProjectedEventRowId: number
+  currentEventRowId: number
+  lagEvents: number
+  isCurrent: boolean
+  updatedAt: string | null
+}
+
 export type ObjectiveRuntimeScorecard = {
   totalProposalCount: number
   autoCommitCount: number
@@ -142,9 +169,19 @@ export type ObjectiveRuntimeScorecard = {
   toolTimeoutCount: number
   warningAlertCount: number
   criticalAlertCount: number
+  backlogNew24h: number
+  backlogResolved24h: number
+  backlogNet24h: number
+  stalledNew24h: number
+  stalledResolved24h: number
+  stalledNet24h: number
+  blockedNew24h: number
+  blockedResolved24h: number
+  blockedNet24h: number
   backlogDelta24h: number
   stalledDelta24h: number
   blockedDelta24h: number
+  runtimeAuditSummary: ObjectiveRuntimeAuditSummary
   autoCommitRateByRiskLevel: Record<AgentProposalRiskLevel, {
     total: number
     autoCommitted: number
@@ -187,6 +224,17 @@ export type ObjectiveRuntimeSettingsRecord = {
   disableNestedDelegation: boolean
   updatedAt: string | null
   updatedBy: string | null
+}
+
+export type ObjectiveRuntimeReadModel = {
+  scorecard: ObjectiveRuntimeScorecard
+  events: ObjectiveRuntimeEventRecord[]
+  alerts: ObjectiveRuntimeAlertRecord[]
+}
+
+export type ObjectiveRuntimeSnapshot = ObjectiveRuntimeReadModel & {
+  projectionHealth: ObjectiveRuntimeProjectionHealthRecord[]
+  settings: ObjectiveRuntimeSettingsRecord
 }
 
 export type ListObjectiveRuntimeEventsInput = {

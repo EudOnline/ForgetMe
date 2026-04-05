@@ -2208,10 +2208,11 @@ describe('objective runtime service', () => {
   it('records one bounded recovery and retries a local compare-analyst timeout once', async () => {
     const db = setupDatabase()
     let compareCalls = 0
+    const recoveryCooldownDurations: number[] = []
     const runMemoryWorkspaceCompare = async () => {
       compareCalls += 1
       if (compareCalls === 1) {
-        await new Promise((resolve) => setTimeout(resolve, 25))
+        throw new Error('Tool run_compare exceeded timeout budget.')
       }
 
       return {
@@ -2269,7 +2270,10 @@ describe('objective runtime service', () => {
         })
       }),
       subagentRegistry: createSubagentRegistryService(),
-      runMemoryWorkspaceCompare
+      runMemoryWorkspaceCompare,
+      recoveryCooldown: async (durationMs: number) => {
+        recoveryCooldownDurations.push(durationMs)
+      }
     } as any)
 
     const started = await runtime.startObjective({
@@ -2296,7 +2300,7 @@ describe('objective runtime service', () => {
       toolPolicyId: compareSpec.toolPolicyId,
       budget: {
         ...compareSpec.budget,
-        timeoutMs: 5
+        timeoutMs: 30_000
       }
     })
 
@@ -2319,6 +2323,7 @@ describe('objective runtime service', () => {
 
     expect(approved?.status).toBe('committed')
     expect(compareCalls).toBe(2)
+    expect(recoveryCooldownDurations).toEqual([25])
     expect(compareSubagents).toHaveLength(2)
     expect(compareSubagents.some((candidate) => candidate.status === 'failed')).toBe(true)
     expect(compareSubagents.some((candidate) => candidate.status === 'completed')).toBe(true)

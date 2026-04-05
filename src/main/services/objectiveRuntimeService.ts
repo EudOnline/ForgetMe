@@ -4,6 +4,10 @@ import { runMemoryWorkspaceCompare } from './memoryWorkspaceCompareService'
 import { askMemoryWorkspacePersisted } from './memoryWorkspaceSessionService'
 import { createObjectiveRuntimeConfigService } from './objectiveRuntimeConfigService'
 import { createObjectiveRuntimeDeliberationService } from './objectiveRuntimeDeliberationService'
+import {
+  asObjectiveRuntimeFailureMessage,
+  normalizeObjectiveRuntimeFailure
+} from './objectiveRuntimeFailureService'
 import { createObjectiveRuntimeProposalDecisionService } from './objectiveRuntimeProposalDecisionService'
 import { createObjectiveRuntimeProposalStateService } from './objectiveRuntimeProposalStateService'
 import { createObjectiveRuntimeRecoveryService } from './objectiveRuntimeRecoveryService'
@@ -43,6 +47,7 @@ type RoleAgentRegistryService = ReturnType<typeof createRoleAgentRegistryService
 type RunMemoryWorkspaceCompareService = typeof runMemoryWorkspaceCompare
 type AskMemoryWorkspacePersistedService = typeof askMemoryWorkspacePersisted
 type ListAgentPolicyVersionsService = typeof listAgentPolicyVersions
+type RecoveryCooldownService = (ms: number) => Promise<void>
 
 export type ObjectiveRuntimeDependencies = {
   db: ArchiveDatabase
@@ -56,6 +61,7 @@ export type ObjectiveRuntimeDependencies = {
   runMemoryWorkspaceCompare?: RunMemoryWorkspaceCompareService
   askMemoryWorkspacePersisted?: AskMemoryWorkspacePersistedService
   listAgentPolicyVersions?: ListAgentPolicyVersionsService
+  recoveryCooldown?: RecoveryCooldownService
 }
 
 export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDependencies) {
@@ -69,18 +75,14 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
   })
 
   function asErrorMessage(error: unknown) {
-    if (error instanceof Error) {
-      return error.message
-    }
-
-    return String(error)
+    return asObjectiveRuntimeFailureMessage(error)
   }
 
-  function sleep(ms: number) {
-    return new Promise((resolve) => {
+  const recoveryCooldown = dependencies.recoveryCooldown ?? (async (ms: number) => {
+    await new Promise((resolve) => {
       setTimeout(resolve, ms)
     })
-  }
+  })
 
   function nextRound(threadId: string) {
     const detail = getThreadDetail(db, { threadId })
@@ -148,6 +150,30 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
       summary: input.summary,
       relatedProposalId: input.proposal.proposalId
     })
+  }
+
+  function decideRecoveryAfterFailure(proposal: AgentProposalRecord, error: unknown) {
+    const priorAttemptCount = countRecoveryAttempts(proposal.proposalId)
+    const recoveryPlan = runtimeRecovery.decideRecovery({
+      proposal,
+      failure: error,
+      priorAttemptCount
+    })
+
+    if (recoveryPlan.failureEventType) {
+      runtimeTelemetry.recordEvent({
+        objectiveId: proposal.objectiveId,
+        threadId: proposal.threadId,
+        proposalId: proposal.proposalId,
+        eventType: recoveryPlan.failureEventType,
+        payload: buildFailurePayload(proposal, error)
+      })
+    }
+
+    return {
+      priorAttemptCount,
+      recoveryPlan
+    }
   }
 
   const proposalStateService = createObjectiveRuntimeProposalStateService({
@@ -318,22 +344,8 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
     try {
       return await subagentExecutionService.executeCommittedSpawnSubagentProposal(proposal)
     } catch (error) {
-      const priorAttemptCount = countRecoveryAttempts(proposal.proposalId)
-      const recoveryPlan = runtimeRecovery.decideRecovery({
-        proposal,
-        failure: error,
-        priorAttemptCount
-      })
-
-      if (recoveryPlan.failureEventType) {
-        runtimeTelemetry.recordEvent({
-          objectiveId: proposal.objectiveId,
-          threadId: proposal.threadId,
-          proposalId: proposal.proposalId,
-          eventType: recoveryPlan.failureEventType,
-          payload: buildFailurePayload(proposal, error)
-        })
-      }
+      const runtimeFailure = normalizeObjectiveRuntimeFailure(error, proposal)
+      const { priorAttemptCount, recoveryPlan } = decideRecoveryAfterFailure(proposal, runtimeFailure)
 
       if (!recoveryPlan.shouldRetry) {
         runtimeTelemetry.recordEvent({
@@ -354,7 +366,7 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
           title: 'Runtime recovery surfaced to operator',
           summary: `Runtime surfaced ${recoveryPlan.failureType} after deciding ${recoveryPlan.decision} (${recoveryPlan.reason}).`
         })
-        throw error
+        throw runtimeFailure
       }
 
       runtimeTelemetry.recordEvent({
@@ -377,7 +389,7 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
       })
 
       if (recoveryPlan.decision === 'cooldown_then_retry') {
-        await sleep(25)
+        await recoveryCooldown(25)
       }
 
       try {
@@ -395,9 +407,10 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
         })
         return result
       } catch (retryError) {
+        const runtimeFailure = normalizeObjectiveRuntimeFailure(retryError, proposal)
         const retryPlan = runtimeRecovery.decideRecovery({
           proposal,
-          failure: retryError,
+          failure: runtimeFailure,
           priorAttemptCount: priorAttemptCount + 1
         })
 
@@ -407,7 +420,7 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
             threadId: proposal.threadId,
             proposalId: proposal.proposalId,
             eventType: retryPlan.failureEventType,
-            payload: buildFailurePayload(proposal, retryError)
+            payload: buildFailurePayload(proposal, runtimeFailure)
           })
         }
 
@@ -429,7 +442,7 @@ export function createObjectiveRuntimeService(dependencies: ObjectiveRuntimeDepe
           title: 'Runtime recovery exhausted',
           summary: `Runtime stopped after one bounded retry because ${retryPlan.failureType} persisted (${retryPlan.reason}).`
         })
-        throw retryError
+        throw runtimeFailure
       }
     }
   }
