@@ -14,6 +14,7 @@ import type {
   PersonAgentMemoryRef,
   PersonAgentPromotionTier,
   PersonAgentRecord,
+  PersonAgentStrategyProfile,
   PersonAgentStatus
 } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
@@ -42,6 +43,7 @@ type PersonAgentRow = {
   promotionTier: PersonAgentPromotionTier
   promotionScore: number
   promotionReasonSummary: string
+  strategyProfileJson: string | null
   factsVersion: number
   interactionVersion: number
   lastRefreshedAt: string | null
@@ -143,6 +145,33 @@ function parseJsonArray<T>(value: string): T[] {
   }
 }
 
+function parseStrategyProfile(value: string | null): PersonAgentStrategyProfile | null {
+  if (!value) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(value) as Partial<PersonAgentStrategyProfile>
+    if (
+      typeof parsed.profileVersion === 'number'
+      && (parsed.responseStyle === 'concise' || parsed.responseStyle === 'contextual')
+      && (parsed.evidencePreference === 'balanced' || parsed.evidencePreference === 'quote_first')
+      && (parsed.conflictBehavior === 'balanced' || parsed.conflictBehavior === 'conflict_forward')
+    ) {
+      return {
+        profileVersion: parsed.profileVersion,
+        responseStyle: parsed.responseStyle,
+        evidencePreference: parsed.evidencePreference,
+        conflictBehavior: parsed.conflictBehavior
+      }
+    }
+  } catch {
+    return null
+  }
+
+  return null
+}
+
 function mapPersonAgentRow(row: PersonAgentRow): PersonAgentRecord {
   return {
     personAgentId: row.id,
@@ -151,6 +180,7 @@ function mapPersonAgentRow(row: PersonAgentRow): PersonAgentRecord {
     promotionTier: row.promotionTier,
     promotionScore: row.promotionScore,
     promotionReasonSummary: row.promotionReasonSummary,
+    strategyProfile: parseStrategyProfile(row.strategyProfileJson),
     factsVersion: row.factsVersion,
     interactionVersion: row.interactionVersion,
     lastRefreshedAt: row.lastRefreshedAt,
@@ -346,6 +376,7 @@ export function upsertPersonAgent(db: ArchiveDatabase, input: {
   promotionTier: PersonAgentPromotionTier
   promotionScore: number
   promotionReasonSummary: string
+  strategyProfile?: PersonAgentStrategyProfile | null
   factsVersion: number
   interactionVersion: number
   lastRefreshedAt?: string | null
@@ -357,6 +388,9 @@ export function upsertPersonAgent(db: ArchiveDatabase, input: {
   const createdAt = input.createdAt ?? now
   const updatedAt = input.updatedAt ?? now
   const personAgentId = input.personAgentId ?? crypto.randomUUID()
+  const strategyProfileJson = input.strategyProfile
+    ? JSON.stringify(input.strategyProfile)
+    : null
 
   db.prepare(
     `insert into person_agents (
@@ -366,18 +400,23 @@ export function upsertPersonAgent(db: ArchiveDatabase, input: {
       promotion_tier,
       promotion_score,
       promotion_reason_summary,
+      strategy_profile_json,
       facts_version,
       interaction_version,
       last_refreshed_at,
       last_activated_at,
       created_at,
       updated_at
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     on conflict(canonical_person_id) do update set
       status = excluded.status,
       promotion_tier = excluded.promotion_tier,
       promotion_score = excluded.promotion_score,
       promotion_reason_summary = excluded.promotion_reason_summary,
+      strategy_profile_json = case
+        when excluded.strategy_profile_json is not null then excluded.strategy_profile_json
+        else person_agents.strategy_profile_json
+      end,
       facts_version = excluded.facts_version,
       interaction_version = excluded.interaction_version,
       last_refreshed_at = excluded.last_refreshed_at,
@@ -390,6 +429,7 @@ export function upsertPersonAgent(db: ArchiveDatabase, input: {
     input.promotionTier,
     input.promotionScore,
     input.promotionReasonSummary,
+    strategyProfileJson,
     input.factsVersion,
     input.interactionVersion,
     input.lastRefreshedAt ?? null,
@@ -414,6 +454,7 @@ export function getPersonAgentByCanonicalPersonId(db: ArchiveDatabase, input: {
       promotion_tier as promotionTier,
       promotion_score as promotionScore,
       promotion_reason_summary as promotionReasonSummary,
+      strategy_profile_json as strategyProfileJson,
       facts_version as factsVersion,
       interaction_version as interactionVersion,
       last_refreshed_at as lastRefreshedAt,
@@ -439,6 +480,7 @@ export function listPersonAgents(db: ArchiveDatabase, input: {
       promotion_tier as promotionTier,
       promotion_score as promotionScore,
       promotion_reason_summary as promotionReasonSummary,
+      strategy_profile_json as strategyProfileJson,
       facts_version as factsVersion,
       interaction_version as interactionVersion,
       last_refreshed_at as lastRefreshedAt,

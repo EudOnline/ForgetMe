@@ -635,6 +635,13 @@ export type PersonAgentPromotionScore = {
   evaluatedAt: string
 }
 
+export type PersonAgentStrategyProfile = {
+  profileVersion: number
+  responseStyle: 'concise' | 'contextual'
+  evidencePreference: 'balanced' | 'quote_first'
+  conflictBehavior: 'balanced' | 'conflict_forward'
+}
+
 export type PersonAgentRecord = {
   personAgentId: string
   canonicalPersonId: string
@@ -642,6 +649,7 @@ export type PersonAgentRecord = {
   promotionTier: PersonAgentPromotionTier
   promotionScore: number
   promotionReasonSummary: string
+  strategyProfile?: PersonAgentStrategyProfile | null
   factsVersion: number
   interactionVersion: number
   lastRefreshedAt: string | null
@@ -750,6 +758,7 @@ export type PersonAgentMemorySummary = {
 export type PersonAgentAnswerPack = {
   personAgentId: string
   canonicalPersonId: string
+  strategyProfile?: PersonAgentStrategyProfile | null
   question: string
   questionClassification:
     | 'profile_fact'
@@ -792,6 +801,7 @@ export type MemoryWorkspacePersonAgentContext = {
     canonicalPersonId: string
     reason: 'scope_person' | 'global_resolved_person'
   }>
+  strategyProfile?: PersonAgentStrategyProfile | null
   archiveRouting?: {
     strategy: 'person_agent' | 'archive_fallback'
     reason: 'agent_consulted' | 'no_active_person_agent' | 'unresolved_target_person'

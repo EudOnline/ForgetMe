@@ -9,6 +9,7 @@ import { backfillPersistedPersonAgentInteractionMemory } from './personAgentInte
 import { getPersonDossier } from './personDossierService'
 import { syncPersonAgentFactMemory } from './personAgentFactMemoryService'
 import { evaluatePersonAgentPromotion } from './personAgentPromotionService'
+import { derivePersonAgentStrategyProfile } from './personAgentStrategyService'
 
 function uniqueStrings(values: string[]) {
   return [...new Set(values)].sort((left, right) => left.localeCompare(right))
@@ -155,6 +156,31 @@ export function rebuildPersonAgentForCanonicalPerson(db: ArchiveDatabase, input:
         personAgentId: nextAgent.personAgentId,
         canonicalPersonId: input.canonicalPersonId
       })
+
+      if (dossier) {
+        const afterBackfillAgent = getPersonAgentByCanonicalPersonId(db, {
+          canonicalPersonId: input.canonicalPersonId
+        })
+
+        upsertPersonAgent(db, {
+          personAgentId: nextAgent.personAgentId,
+          canonicalPersonId: input.canonicalPersonId,
+          status: nextStatus,
+          promotionTier: promotion.promotionTier,
+          promotionScore: promotion.promotionScore.totalScore,
+          promotionReasonSummary: promotion.reasonSummary,
+          strategyProfile: derivePersonAgentStrategyProfile(db, {
+            personAgentId: nextAgent.personAgentId,
+            canonicalPersonId: input.canonicalPersonId,
+            dossier
+          }),
+          factsVersion: afterBackfillAgent?.factsVersion ?? nextAgent.factsVersion,
+          interactionVersion: afterBackfillAgent?.interactionVersion ?? nextAgent.interactionVersion,
+          lastRefreshedAt: refreshedAt,
+          lastActivatedAt: afterBackfillAgent?.lastActivatedAt ?? nextAgent.lastActivatedAt,
+          updatedAt: refreshedAt
+        })
+      }
     }
   }
 

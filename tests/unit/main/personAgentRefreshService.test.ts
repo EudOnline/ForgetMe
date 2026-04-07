@@ -4,6 +4,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
 import {
+  getPersonAgentByCanonicalPersonId,
   listPersonAgentFactMemories,
   listPersonAgentInteractionMemories,
   listPersonAgentRefreshQueue
@@ -194,6 +195,17 @@ function seedPromotionReadyPerson(db: ReturnType<typeof openDatabase>) {
       id, source_id, source_type, target_id, target_type, relation_type, confidence, created_at
     ) values (?, ?, ?, ?, ?, ?, ?, ?)`
   ).run('rel-peer', 'p-2', 'person', 'f-shared-1', 'file', 'mentioned_in_file', 1, NOW)
+
+  db.prepare(
+    `insert into communication_evidence (
+      id, file_id, ordinal, speaker_display_name, speaker_anchor_person_id, excerpt_text, created_at
+    ) values (?, ?, ?, ?, ?, ?, ?)`
+  ).run('ce-1', 'f-10', 1, 'Alice Chen', 'p-1', '先把关键记录留在归档里。', NOW)
+  db.prepare(
+    `insert into communication_evidence (
+      id, file_id, ordinal, speaker_display_name, speaker_anchor_person_id, excerpt_text, created_at
+    ) values (?, ?, ?, ?, ?, ?, ?)`
+  ).run('ce-2', 'f-11', 1, 'Alice Chen', 'p-1', '后面继续补充关键细节。', NOW)
 
   for (const [id, key, value, fileId, evidenceId] of [
     ['attr-1', 'birthday', '1997-02-03', 'f-10', 'ee-10'],
@@ -426,6 +438,9 @@ describe('personAgentRefreshService', () => {
     const memories = listPersonAgentFactMemories(db, {
       canonicalPersonId: 'cp-1'
     })
+    const refreshedAgent = getPersonAgentByCanonicalPersonId(db, {
+      canonicalPersonId: 'cp-1'
+    })
     const interactionMemories = processed?.personAgentId
       ? listPersonAgentInteractionMemories(db, {
           personAgentId: processed.personAgentId
@@ -438,6 +453,12 @@ describe('personAgentRefreshService', () => {
     })
     expect(queue[0]?.status).toBe('completed')
     expect(memories.length).toBeGreaterThan(0)
+    expect(refreshedAgent?.strategyProfile).toEqual({
+      profileVersion: 1,
+      responseStyle: 'contextual',
+      evidencePreference: 'quote_first',
+      conflictBehavior: 'balanced'
+    })
     expect(interactionMemories).toEqual([
       expect.objectContaining({
         memoryKey: 'topic.profile_facts',

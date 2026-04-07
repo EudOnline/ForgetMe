@@ -3,7 +3,8 @@ import type {
   PersonAgentAnswerPack,
   PersonAgentFactMemoryRecord,
   PersonAgentInteractionMemoryRecord,
-  PersonAgentMemoryRef
+  PersonAgentMemoryRef,
+  PersonAgentStrategyProfile
 } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
 import {
@@ -16,6 +17,7 @@ import {
   classifyPersonAgentQuestion,
   createCitation
 } from './memoryWorkspaceResponseHelperService'
+import { createDefaultPersonAgentStrategyProfile } from './personAgentStrategyService'
 
 function normalizeQuestion(question: string) {
   return question.trim().toLowerCase()
@@ -147,6 +149,7 @@ function scoreInteractionTopic(
 }
 
 function buildRecentInteractionTopics(
+  strategyProfile: PersonAgentStrategyProfile,
   classification: PersonAgentAnswerPack['questionClassification'],
   records: PersonAgentInteractionMemoryRecord[]
 ) {
@@ -156,7 +159,7 @@ function buildRecentInteractionTopics(
       || right.questionCount - left.questionCount
       || left.memoryKey.localeCompare(right.memoryKey)
     )
-    .slice(0, 3)
+    .slice(0, strategyProfile.responseStyle === 'contextual' ? 3 : 2)
     .map((record) => ({
       topicLabel: record.topicLabel,
       summary: record.summary,
@@ -186,6 +189,7 @@ export function buildPersonAgentAnswerPack(db: ArchiveDatabase, input: {
   const interactionMemories = listPersonAgentInteractionMemories(db, {
     personAgentId: personAgent.personAgentId
   })
+  const strategyProfile = personAgent.strategyProfile ?? createDefaultPersonAgentStrategyProfile()
   const conflicts = factSummary.conflicts.map((record) => ({
     fieldKey: record.memoryKey.replace(/^conflict\./, ''),
     summary: record.summaryValue
@@ -204,7 +208,7 @@ export function buildPersonAgentAnswerPack(db: ArchiveDatabase, input: {
     const excerpts = listPersonAgentCommunicationEvidence(db, {
       canonicalPersonId: input.canonicalPersonId,
       question: input.question,
-      limit: 2
+      limit: strategyProfile.evidencePreference === 'quote_first' ? 3 : 2
     })
 
     if (excerpts.length > 0) {
@@ -215,6 +219,9 @@ export function buildPersonAgentAnswerPack(db: ArchiveDatabase, input: {
         )
       )
       generationReason = 'Resolved through communication evidence for a quote request.'
+      if (strategyProfile.evidencePreference === 'quote_first') {
+        generationReason = `${generationReason} Applied quote-first strategy.`
+      }
     } else {
       candidateAnswer = `Current approved chat evidence is insufficient to answer “${input.question}” with direct excerpts.`
       supportingCitations = []
@@ -249,11 +256,21 @@ export function buildPersonAgentAnswerPack(db: ArchiveDatabase, input: {
     generationReason = supportingFacts.length > 0
       ? 'Resolved through active person-agent fact memory.'
       : 'No stable fact-memory match was available for this question.'
+
+    if (
+      strategyProfile.conflictBehavior === 'conflict_forward'
+      && conflicts.length > 0
+      && (classification === 'general' || classification === 'profile_fact')
+    ) {
+      candidateAnswer = `${candidateAnswer} Open conflicts remain on ${conflicts.slice(0, 2).map((conflict) => conflict.fieldKey).join(', ')}.`
+      generationReason = `${generationReason} Applied conflict-forward strategy.`
+    }
   }
 
   return {
     personAgentId: personAgent.personAgentId,
     canonicalPersonId: input.canonicalPersonId,
+    strategyProfile,
     question: input.question,
     questionClassification: classification,
     candidateAnswer,
@@ -261,7 +278,7 @@ export function buildPersonAgentAnswerPack(db: ArchiveDatabase, input: {
     supportingCitations,
     conflicts,
     coverageGaps,
-    recentInteractionTopics: buildRecentInteractionTopics(classification, interactionMemories),
+    recentInteractionTopics: buildRecentInteractionTopics(strategyProfile, classification, interactionMemories),
     generationReason,
     memoryVersions: {
       factsVersion: personAgent.factsVersion,

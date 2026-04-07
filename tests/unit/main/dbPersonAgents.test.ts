@@ -37,6 +37,7 @@ describe('person-agent persistence migrations', () => {
       'status',
       'promotion_tier',
       'promotion_score',
+      'strategy_profile_json',
       'facts_version',
       'interaction_version'
     ]))
@@ -120,6 +121,12 @@ describe('person-agent persistence migrations', () => {
       promotionTier: 'active',
       promotionScore: 52,
       promotionReasonSummary: 'High signal person.',
+      strategyProfile: {
+        profileVersion: 1,
+        responseStyle: 'contextual',
+        evidencePreference: 'quote_first',
+        conflictBehavior: 'conflict_forward'
+      },
       factsVersion: 1,
       interactionVersion: 2,
       lastActivatedAt: '2026-04-06T09:10:00.000Z'
@@ -129,6 +136,12 @@ describe('person-agent persistence migrations', () => {
       canonicalPersonId: 'cp-1'
     })
     expect(fetched?.personAgentId).toBe(created.personAgentId)
+    expect(fetched?.strategyProfile).toEqual({
+      profileVersion: 1,
+      responseStyle: 'contextual',
+      evidencePreference: 'quote_first',
+      conflictBehavior: 'conflict_forward'
+    })
 
     const updated = upsertPersonAgent(db, {
       canonicalPersonId: 'cp-1',
@@ -136,6 +149,12 @@ describe('person-agent persistence migrations', () => {
       promotionTier: 'high_signal',
       promotionScore: 74,
       promotionReasonSummary: 'Promotion score increased.',
+      strategyProfile: {
+        profileVersion: 1,
+        responseStyle: 'concise',
+        evidencePreference: 'balanced',
+        conflictBehavior: 'balanced'
+      },
       factsVersion: 2,
       interactionVersion: 3,
       lastActivatedAt: '2026-04-06T09:20:00.000Z'
@@ -144,6 +163,12 @@ describe('person-agent persistence migrations', () => {
     expect(updated.personAgentId).toBe(created.personAgentId)
     expect(updated.promotionTier).toBe('high_signal')
     expect(updated.factsVersion).toBe(2)
+    expect(updated.strategyProfile).toEqual({
+      profileVersion: 1,
+      responseStyle: 'concise',
+      evidencePreference: 'balanced',
+      conflictBehavior: 'balanced'
+    })
 
     const listedAgents = listPersonAgents(db, {
       status: 'active'
