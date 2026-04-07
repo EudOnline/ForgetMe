@@ -6,6 +6,9 @@ import type { ArchiveDatabase } from './db'
 
 const DEFAULT_RECENT_WINDOW_DAYS = 30
 const DETERMINISTIC_FALLBACK_EVALUATED_AT = '1970-01-01T00:00:00.000Z'
+const MIN_COMMUNICATION_PROMOTION_FILE_COUNT = 2
+const MIN_RECENT_QUESTION_COUNT_FOR_COMMUNICATION_PROMOTION = 2
+const MIN_RECENT_CITATION_COUNT_FOR_COMMUNICATION_PROMOTION = 4
 
 type PromotionThresholds = PersonAgentPromotionScore['thresholds']
 
@@ -183,6 +186,28 @@ function countRelationshipDegree(db: ArchiveDatabase, canonicalPersonId: string)
   return row?.count ?? 0
 }
 
+function countCommunicationLinkedFileCount(db: ArchiveDatabase, canonicalPersonId: string) {
+  const anchorRows = db.prepare(
+    `select anchor_person_id as anchorPersonId
+     from person_memberships
+     where canonical_person_id = ?
+       and status = 'active'`
+  ).all(canonicalPersonId) as Array<{ anchorPersonId: string }>
+
+  if (anchorRows.length === 0) {
+    return 0
+  }
+
+  const anchorPlaceholders = anchorRows.map(() => '?').join(', ')
+  const row = db.prepare(
+    `select count(distinct file_id) as count
+     from communication_evidence
+     where speaker_anchor_person_id in (${anchorPlaceholders})`
+  ).get(...anchorRows.map((row) => row.anchorPersonId)) as { count: number } | undefined
+
+  return row?.count ?? 0
+}
+
 function countRecentInteractions(db: ArchiveDatabase, input: {
   canonicalPersonId: string
   nowIso: string
@@ -212,11 +237,14 @@ function countRecentInteractions(db: ArchiveDatabase, input: {
 function scoreSignals(signals: PersonAgentPromotionSignals) {
   const approvedFactScore = Math.min(30, signals.approvedFactCount * 5)
   const evidenceScore = Math.min(20, signals.evidenceSourceCount * 4)
+  const communicationScore = signals.communicationFileCount >= MIN_COMMUNICATION_PROMOTION_FILE_COUNT
+    ? Math.min(40, signals.communicationFileCount * 20)
+    : 0
   const relationshipScore = Math.min(20, signals.relationshipDegree * 5)
   const questionScore = Math.min(20, signals.recentQuestionCount * 3)
   const citationScore = Math.min(10, signals.recentCitationCount)
 
-  return approvedFactScore + evidenceScore + relationshipScore + questionScore + citationScore
+  return approvedFactScore + evidenceScore + communicationScore + relationshipScore + questionScore + citationScore
 }
 
 function resolveTier(score: number, thresholds: PromotionThresholds): PersonAgentPromotionTier {
@@ -237,15 +265,15 @@ function resolveTier(score: number, thresholds: PromotionThresholds): PersonAgen
 
 function buildReasonSummary(input: {
   decision: PersonAgentPromotionDecision
-  hasApprovedEvidence: boolean
+  hasPromotionEvidence: boolean
   signals: PersonAgentPromotionSignals
   score: number
 }) {
-  if (!input.hasApprovedEvidence) {
-    return `No approved evidence available; promotion disabled. Signals: facts=${input.signals.approvedFactCount}, evidence=${input.signals.evidenceSourceCount}, relationships=${input.signals.relationshipDegree}, recentQuestions=${input.signals.recentQuestionCount}, recentCitations=${input.signals.recentCitationCount}, score=${input.score}.`
+  if (!input.hasPromotionEvidence) {
+    return `No approved evidence or communication breadth available; promotion disabled. Signals: facts=${input.signals.approvedFactCount}, evidence=${input.signals.evidenceSourceCount}, communicationFiles=${input.signals.communicationFileCount}, relationships=${input.signals.relationshipDegree}, recentQuestions=${input.signals.recentQuestionCount}, recentCitations=${input.signals.recentCitationCount}, score=${input.score}.`
   }
 
-  return `Promotion decision=${input.decision}; signals: facts=${input.signals.approvedFactCount}, evidence=${input.signals.evidenceSourceCount}, relationships=${input.signals.relationshipDegree}, recentQuestions=${input.signals.recentQuestionCount}, recentCitations=${input.signals.recentCitationCount}, score=${input.score}.`
+  return `Promotion decision=${input.decision}; signals: facts=${input.signals.approvedFactCount}, evidence=${input.signals.evidenceSourceCount}, communicationFiles=${input.signals.communicationFileCount}, relationships=${input.signals.relationshipDegree}, recentQuestions=${input.signals.recentQuestionCount}, recentCitations=${input.signals.recentCitationCount}, score=${input.score}.`
 }
 
 export function collectPersonAgentPromotionSignals(db: ArchiveDatabase, input: {
@@ -258,6 +286,7 @@ export function collectPersonAgentPromotionSignals(db: ArchiveDatabase, input: {
 
   const approvedFactCount = countApprovedFactSignals(db, input.canonicalPersonId)
   const evidenceSourceCount = countEvidenceSources(db, input.canonicalPersonId)
+  const communicationFileCount = countCommunicationLinkedFileCount(db, input.canonicalPersonId)
   const relationshipDegree = countRelationshipDegree(db, input.canonicalPersonId)
   const interactionCounts = countRecentInteractions(db, {
     canonicalPersonId: input.canonicalPersonId,
@@ -268,6 +297,7 @@ export function collectPersonAgentPromotionSignals(db: ArchiveDatabase, input: {
   return {
     approvedFactCount,
     evidenceSourceCount,
+    communicationFileCount,
     relationshipDegree,
     recentQuestionCount: interactionCounts.recentQuestionCount,
     recentCitationCount: interactionCounts.recentCitationCount
@@ -311,16 +341,24 @@ export function evaluatePersonAgentPromotion(db: ArchiveDatabase, input: {
   })
 
   const hasApprovedEvidence = signals.approvedFactCount > 0 || signals.evidenceSourceCount > 0
+  const hasCommunicationPromotionEvidence =
+    signals.communicationFileCount >= MIN_COMMUNICATION_PROMOTION_FILE_COUNT
+    && (
+      signals.relationshipDegree > 0
+      || signals.recentQuestionCount >= MIN_RECENT_QUESTION_COUNT_FOR_COMMUNICATION_PROMOTION
+      || signals.recentCitationCount >= MIN_RECENT_CITATION_COUNT_FOR_COMMUNICATION_PROMOTION
+    )
+  const hasPromotionEvidence = hasApprovedEvidence || hasCommunicationPromotionEvidence
   const computedTier = resolveTier(promotionScore.totalScore, promotionScore.thresholds)
-  const promotionTier: PersonAgentPromotionTier = hasApprovedEvidence ? computedTier : 'cold'
+  const promotionTier: PersonAgentPromotionTier = hasPromotionEvidence ? computedTier : 'cold'
 
   let decision: PersonAgentPromotionDecision = 'unpromoted'
   let shouldActivate = false
 
-  if (hasApprovedEvidence && (promotionTier === 'active' || promotionTier === 'high_signal')) {
+  if (hasPromotionEvidence && (promotionTier === 'active' || promotionTier === 'high_signal')) {
     decision = 'active'
     shouldActivate = true
-  } else if (hasApprovedEvidence && promotionTier === 'warming') {
+  } else if (hasPromotionEvidence && promotionTier === 'warming') {
     decision = 'candidate'
   }
 
@@ -332,7 +370,7 @@ export function evaluatePersonAgentPromotion(db: ArchiveDatabase, input: {
     promotionScore,
     reasonSummary: buildReasonSummary({
       decision,
-      hasApprovedEvidence,
+      hasPromotionEvidence,
       signals,
       score: promotionScore.totalScore
     })

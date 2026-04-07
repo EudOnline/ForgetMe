@@ -690,6 +690,7 @@ describe('phase-eight memory workspace contracts', () => {
       signals: {
         approvedFactCount: 9,
         evidenceSourceCount: 14,
+        communicationFileCount: 3,
         relationshipDegree: 6,
         recentQuestionCount: 11,
         recentCitationCount: 27

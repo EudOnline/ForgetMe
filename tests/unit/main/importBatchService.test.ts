@@ -101,4 +101,54 @@ describe('createImportBatch', () => {
       'fixture-unsupported.exe'
     ])
   })
+
+  it('promotes a communication-heavy person agent from real imported chat breadth', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-import-person-agent-real-'))
+    const appPaths = ensureAppPaths(root)
+    const sourceFileOne = path.join(root, 'alice-bob-chat-1.json')
+    const sourceFileTwo = path.join(root, 'alice-bob-chat-2.json')
+
+    fs.writeFileSync(sourceFileOne, JSON.stringify({
+      messages: [
+        { sender: 'Alice Chen', text: '把这些记录继续留在归档里。' },
+        { sender: 'Bob Li', text: '这样后面回看会更清楚。' }
+      ]
+    }))
+    fs.writeFileSync(sourceFileTwo, JSON.stringify({
+      messages: [
+        { sender: 'Alice Chen', text: '重要细节继续记下来。' },
+        { sender: 'Bob Li', text: '后面查证会更稳。' }
+      ]
+    }))
+
+    await createImportBatch({
+      appPaths,
+      sourcePaths: [sourceFileOne, sourceFileTwo],
+      sourceLabel: 'person-agent-real-import'
+    })
+
+    const db = openDatabase(path.join(appPaths.sqliteDir, 'archive.sqlite'))
+    const personRow = db.prepare(
+      `select id
+       from canonical_people
+       where primary_display_name = ?
+       limit 1`
+    ).get('Alice Chen') as { id: string } | undefined
+    const personAgentRow = personRow
+      ? db.prepare(
+          `select status, promotion_tier as promotionTier
+           from person_agents
+           where canonical_person_id = ?
+           limit 1`
+        ).get(personRow.id) as { status: string; promotionTier: string } | undefined
+      : undefined
+
+    expect(personRow).toBeTruthy()
+    expect(personAgentRow).toMatchObject({
+      status: 'active',
+      promotionTier: expect.stringMatching(/active|high_signal/)
+    })
+
+    db.close()
+  })
 })

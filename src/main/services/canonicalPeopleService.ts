@@ -63,6 +63,31 @@ export function ensureCanonicalPeopleForAnchors(db: ArchiveDatabase, anchors: Ca
   const membershipLookup = db.prepare(
     'select canonical_person_id as canonicalPersonId from person_memberships where anchor_person_id = ? and status = ?'
   )
+  const exactCanonicalLookup = db.prepare(
+    `select id as canonicalPersonId
+     from canonical_people
+     where normalized_name = ?
+       and primary_display_name = ?
+       and status = 'approved'
+     order by created_at asc, id asc
+     limit 2`
+  )
+  const updateCanonicalEvidence = db.prepare(
+    `update canonical_people
+     set
+       alias_count = alias_count + 1,
+       evidence_count = evidence_count + 1,
+       first_seen_at = case
+         when first_seen_at is null or first_seen_at > ? then ?
+         else first_seen_at
+       end,
+       last_seen_at = case
+         when last_seen_at is null or last_seen_at < ? then ?
+         else last_seen_at
+       end,
+       updated_at = ?
+     where id = ?`
+  )
 
   return anchors.map((anchor) => {
     const existing = anchor.anchorPersonId
@@ -77,13 +102,63 @@ export function ensureCanonicalPeopleForAnchors(db: ArchiveDatabase, anchors: Ca
       }
     }
 
+    const normalizedName = normalizePersonName(anchor.displayName)
+    const exactMatches = exactCanonicalLookup.all(
+      normalizedName,
+      anchor.displayName
+    ) as Array<{ canonicalPersonId: string }>
+
+    if (exactMatches.length === 1) {
+      const canonicalPersonId = exactMatches[0].canonicalPersonId
+
+      insertAlias.run(
+        crypto.randomUUID(),
+        canonicalPersonId,
+        anchor.anchorPersonId ?? null,
+        anchor.displayName,
+        normalizedName,
+        anchor.sourceType,
+        anchor.confidence,
+        createdAt
+      )
+
+      if (anchor.anchorPersonId) {
+        insertMembership.run(
+          crypto.randomUUID(),
+          canonicalPersonId,
+          anchor.anchorPersonId,
+          'active',
+          createdAt,
+          createdAt
+        )
+      }
+
+      const firstSeenAt = anchor.firstSeenAt ?? createdAt
+      const lastSeenAt = anchor.lastSeenAt ?? createdAt
+      updateCanonicalEvidence.run(
+        firstSeenAt,
+        firstSeenAt,
+        lastSeenAt,
+        lastSeenAt,
+        createdAt,
+        canonicalPersonId
+      )
+
+      return {
+        canonicalPersonId,
+        anchorPersonId: anchor.anchorPersonId ?? null,
+        displayName: anchor.displayName
+      }
+    }
+
     const canonicalPersonId = crypto.randomUUID()
-    const normalizedName = normalizePersonName(chooseCanonicalPersonName([anchor]))
+    const canonicalDisplayName = chooseCanonicalPersonName([anchor])
+    const canonicalNormalizedName = normalizePersonName(canonicalDisplayName)
 
     insertCanonical.run(
       canonicalPersonId,
-      chooseCanonicalPersonName([anchor]),
-      normalizedName,
+      canonicalDisplayName,
+      canonicalNormalizedName,
       1,
       anchor.firstSeenAt ?? createdAt,
       anchor.lastSeenAt ?? createdAt,
@@ -99,7 +174,7 @@ export function ensureCanonicalPeopleForAnchors(db: ArchiveDatabase, anchors: Ca
       canonicalPersonId,
       anchor.anchorPersonId ?? null,
       anchor.displayName,
-      normalizePersonName(anchor.displayName),
+      normalizedName,
       anchor.sourceType,
       anchor.confidence,
       createdAt

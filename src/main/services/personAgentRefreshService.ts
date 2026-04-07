@@ -201,5 +201,21 @@ export function processNextPersonAgentRefresh(db: ArchiveDatabase, input: {
     throw error
   }
 
-  return listPersonAgentRefreshQueue(db, {})[0] ?? null
+  return listPersonAgentRefreshQueue(db, {}).find((row) => row.refreshId === pending.refreshId) ?? null
+}
+
+export function processPendingPersonAgentRefreshes(db: ArchiveDatabase, input: {
+  now?: string
+} = {}) {
+  const processed = [] as ReturnType<typeof listPersonAgentRefreshQueue>
+
+  while (listPersonAgentRefreshQueue(db, { status: 'pending' }).length > 0) {
+    const next = processNextPersonAgentRefresh(db, input)
+    if (!next) {
+      break
+    }
+    processed.push(next)
+  }
+
+  return processed
 }

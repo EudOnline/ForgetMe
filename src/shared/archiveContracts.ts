@@ -627,6 +627,7 @@ export type PersonAgentPromotionScore = {
   signals: {
     approvedFactCount: number
     evidenceSourceCount: number
+    communicationFileCount: number
     relationshipDegree: number
     recentQuestionCount: number
     recentCitationCount: number

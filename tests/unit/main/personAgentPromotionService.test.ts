@@ -133,6 +133,63 @@ function seedMentionRelation(db: ReturnType<typeof openDatabase>, input: {
   )
 }
 
+function seedVaultFile(db: ReturnType<typeof openDatabase>, input: {
+  fileId: string
+}) {
+  db.prepare(
+    `insert or ignore into import_batches (
+      id, source_label, status, created_at
+    ) values (?, ?, ?, ?)`
+  ).run(
+    'batch-test',
+    'person-agent-promotion-test',
+    'ready',
+    NOW
+  )
+
+  db.prepare(
+    `insert into vault_files (
+      id, batch_id, source_path, frozen_path, file_name, extension, mime_type,
+      file_size, sha256, duplicate_class, parser_status, created_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    input.fileId,
+    'batch-test',
+    `/tmp/${input.fileId}.json`,
+    `/tmp/${input.fileId}.json`,
+    `${input.fileId}.json`,
+    'json',
+    'application/json',
+    1,
+    `${input.fileId}-sha`,
+    'unique',
+    'parsed',
+    NOW
+  )
+}
+
+function seedCommunicationEvidence(db: ReturnType<typeof openDatabase>, input: {
+  fileId: string
+  ordinal: number
+  speakerDisplayName: string
+  speakerAnchorPersonId: string
+  text: string
+}) {
+  db.prepare(
+    `insert into communication_evidence (
+      id, file_id, ordinal, speaker_display_name, speaker_anchor_person_id, excerpt_text, created_at
+    ) values (?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    `${input.fileId}:${input.ordinal}:${input.speakerAnchorPersonId}`,
+    input.fileId,
+    input.ordinal,
+    input.speakerDisplayName,
+    input.speakerAnchorPersonId,
+    input.text,
+    NOW
+  )
+}
+
 function seedPersonTurn(db: ReturnType<typeof openDatabase>, input: {
   sessionId: string
   turnId: string
@@ -302,6 +359,7 @@ describe('personAgentPromotionService', () => {
       signals: {
         approvedFactCount: 0,
         evidenceSourceCount: 0,
+        communicationFileCount: 0,
         relationshipDegree: 0,
         recentQuestionCount: 0,
         recentCitationCount: 0
@@ -358,6 +416,77 @@ describe('personAgentPromotionService', () => {
     expect(result.reasonSummary).toContain('No approved evidence')
     expect(result.promotionScore.signals.recentQuestionCount).toBe(4)
     expect(result.promotionScore.signals.recentCitationCount).toBe(24)
+
+    db.close()
+  })
+
+  it('activates communication-heavy people with multi-file chat evidence plus relationship degree', () => {
+    const db = createTestDb()
+    seedCanonicalPerson(db, { id: 'cp-chat-heavy', displayName: 'Chat Heavy' })
+    seedCanonicalPerson(db, { id: 'cp-chat-peer', displayName: 'Chat Peer' })
+
+    seedAnchorMembership(db, { canonicalPersonId: 'cp-chat-heavy', anchorPersonId: 'anchor-chat-heavy-1' })
+    seedAnchorMembership(db, { canonicalPersonId: 'cp-chat-peer', anchorPersonId: 'anchor-chat-peer-1' })
+
+    seedVaultFile(db, { fileId: 'chat-file-1' })
+    seedVaultFile(db, { fileId: 'chat-file-2' })
+    seedMentionRelation(db, { sourceAnchorId: 'anchor-chat-heavy-1', fileId: 'chat-file-1' })
+    seedMentionRelation(db, { sourceAnchorId: 'anchor-chat-heavy-1', fileId: 'chat-file-2' })
+    seedMentionRelation(db, { sourceAnchorId: 'anchor-chat-peer-1', fileId: 'chat-file-1' })
+    seedMentionRelation(db, { sourceAnchorId: 'anchor-chat-peer-1', fileId: 'chat-file-2' })
+    seedCommunicationEvidence(db, {
+      fileId: 'chat-file-1',
+      ordinal: 1,
+      speakerDisplayName: 'Chat Heavy',
+      speakerAnchorPersonId: 'anchor-chat-heavy-1',
+      text: 'first file'
+    })
+    seedCommunicationEvidence(db, {
+      fileId: 'chat-file-2',
+      ordinal: 1,
+      speakerDisplayName: 'Chat Heavy',
+      speakerAnchorPersonId: 'anchor-chat-heavy-1',
+      text: 'second file'
+    })
+
+    const result = evaluatePersonAgentPromotion(db, {
+      canonicalPersonId: 'cp-chat-heavy',
+      now: NOW
+    })
+
+    expect(result.decision).toBe('active')
+    expect(result.shouldActivate).toBe(true)
+    expect(result.reasonSummary).not.toContain('promotion disabled')
+
+    db.close()
+  })
+
+  it('keeps single-file chat-only people unpromoted without enough communication breadth', () => {
+    const db = createTestDb()
+    seedCanonicalPerson(db, { id: 'cp-chat-light', displayName: 'Chat Light' })
+    seedCanonicalPerson(db, { id: 'cp-chat-peer-light', displayName: 'Chat Peer Light' })
+
+    seedAnchorMembership(db, { canonicalPersonId: 'cp-chat-light', anchorPersonId: 'anchor-chat-light-1' })
+    seedAnchorMembership(db, { canonicalPersonId: 'cp-chat-peer-light', anchorPersonId: 'anchor-chat-peer-light-1' })
+
+    seedVaultFile(db, { fileId: 'chat-file-1' })
+    seedMentionRelation(db, { sourceAnchorId: 'anchor-chat-light-1', fileId: 'chat-file-1' })
+    seedMentionRelation(db, { sourceAnchorId: 'anchor-chat-peer-light-1', fileId: 'chat-file-1' })
+    seedCommunicationEvidence(db, {
+      fileId: 'chat-file-1',
+      ordinal: 1,
+      speakerDisplayName: 'Chat Light',
+      speakerAnchorPersonId: 'anchor-chat-light-1',
+      text: 'only file'
+    })
+
+    const result = evaluatePersonAgentPromotion(db, {
+      canonicalPersonId: 'cp-chat-light',
+      now: NOW
+    })
+
+    expect(result.decision).toBe('unpromoted')
+    expect(result.shouldActivate).toBe(false)
 
     db.close()
   })

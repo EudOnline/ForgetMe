@@ -147,8 +147,26 @@ function buildTimelineHighlights(timeline: PersonTimelineEvent[]): PersonDossier
   }))
 }
 
-function buildRelationshipSummary(graph: PersonGraph): PersonDossierRelationshipSummary[] {
+function loadFileNameLookup(db: ArchiveDatabase, fileIds: string[]) {
+  if (fileIds.length === 0) {
+    return new Map<string, string>()
+  }
+
+  const rows = db.prepare(
+    `select id, file_name as fileName
+     from vault_files
+     where id in (${fileIds.map(() => '?').join(', ')})`
+  ).all(...fileIds) as Array<{ id: string; fileName: string }>
+
+  return new Map(rows.map((row) => [row.id, row.fileName]))
+}
+
+function buildRelationshipSummary(db: ArchiveDatabase, graph: PersonGraph): PersonDossierRelationshipSummary[] {
   const nodeLabels = new Map(graph.nodes.map((node) => [node.id, node.primaryDisplayName]))
+  const fileNameLookup = loadFileNameLookup(
+    db,
+    [...new Set(graph.edges.flatMap((edge) => edge.evidenceFileIds))]
+  )
 
   return graph.edges
     .map((edge) => ({
@@ -160,7 +178,7 @@ function buildRelationshipSummary(graph: PersonGraph): PersonDossierRelationship
       evidenceRefs: edge.evidenceFileIds.map((fileId) => ({
         kind: 'file' as const,
         id: fileId,
-        label: fileId
+        label: fileNameLookup.get(fileId) ?? fileId
       }))
     }))
     .sort((left, right) => right.sharedFileCount - left.sharedFileCount || left.displayName.localeCompare(right.displayName))
@@ -318,7 +336,7 @@ export function getPersonDossier(db: ArchiveDatabase, input: { canonicalPersonId
   const graph = getPersonGraph(db, input)
   const thematicSections = buildThematicSections(person)
   const timelineHighlights = buildTimelineHighlights(timeline)
-  const relationshipSummary = buildRelationshipSummary(graph)
+  const relationshipSummary = buildRelationshipSummary(db, graph)
   const conflictSummary = buildConflictSummary(db, input.canonicalPersonId)
   const coverageGaps = buildCoverageGaps(thematicSections, timelineHighlights, relationshipSummary)
   const reviewShortcuts = buildReviewShortcuts(db, input.canonicalPersonId, conflictSummary)
