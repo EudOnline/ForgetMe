@@ -25,6 +25,7 @@ const {
   retryApprovedPersonaDraftProviderSend,
   sendApprovedPersonaDraftToProvider,
   getPersonAgentByCanonicalPersonId,
+  listPersonAgentAuditEvents,
   listPersonAgentRefreshQueue,
   getPersonAgentFactMemorySummary,
   listPersonAgentInteractionMemories
@@ -49,6 +50,7 @@ const {
   retryApprovedPersonaDraftProviderSend: vi.fn(),
   sendApprovedPersonaDraftToProvider: vi.fn(),
   getPersonAgentByCanonicalPersonId: vi.fn(),
+  listPersonAgentAuditEvents: vi.fn(),
   listPersonAgentRefreshQueue: vi.fn(),
   getPersonAgentFactMemorySummary: vi.fn(),
   listPersonAgentInteractionMemories: vi.fn()
@@ -121,6 +123,7 @@ vi.mock('../../../src/main/services/governancePersistenceService', async (import
   return {
     ...actual,
     getPersonAgentByCanonicalPersonId,
+    listPersonAgentAuditEvents,
     listPersonAgentRefreshQueue,
     listPersonAgentInteractionMemories
   }
@@ -186,6 +189,7 @@ describe('registerWorkspaceIpc session handlers', () => {
     runMigrations.mockReset()
     askMemoryWorkspacePersistedService.mockReset()
     getPersonAgentByCanonicalPersonId.mockReset()
+    listPersonAgentAuditEvents.mockReset()
     listPersonAgentRefreshQueue.mockReset()
     getPersonAgentFactMemorySummary.mockReset()
     listPersonAgentInteractionMemories.mockReset()
@@ -270,6 +274,7 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
     openDatabase.mockReset()
     runMigrations.mockReset()
     getPersonAgentByCanonicalPersonId.mockReset()
+    listPersonAgentAuditEvents.mockReset()
     listPersonAgentRefreshQueue.mockReset()
     getPersonAgentFactMemorySummary.mockReset()
     listPersonAgentInteractionMemories.mockReset()
@@ -442,6 +447,48 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
         })
       ]
     }))
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('returns person-agent audit events through ipc', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    listPersonAgentAuditEvents.mockReturnValue([
+      {
+        auditEventId: 'audit-1',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        eventKind: 'strategy_profile_updated',
+        payload: {
+          source: 'refresh_rebuild',
+          reasons: ['review_conflict_changed'],
+          changedFields: ['conflictBehavior']
+        },
+        createdAt: '2026-04-08T00:00:00.000Z'
+      }
+    ])
+
+    registerWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:listPersonAgentAuditEvents')
+    const result = await handler?.({}, {
+      canonicalPersonId: 'cp-1',
+      eventKind: 'strategy_profile_updated'
+    })
+
+    expect(listPersonAgentAuditEvents).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1',
+      eventKind: 'strategy_profile_updated'
+    })
+    expect(result).toEqual([
+      expect.objectContaining({
+        auditEventId: 'audit-1',
+        eventKind: 'strategy_profile_updated',
+        payload: expect.objectContaining({
+          source: 'refresh_rebuild'
+        })
+      })
+    ])
     expect(close).toHaveBeenCalled()
   })
 })

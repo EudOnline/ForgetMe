@@ -21,6 +21,7 @@ import {
 } from '../../../services/memoryWorkspaceSessionService'
 import {
   getPersonAgentByCanonicalPersonId,
+  listPersonAgentAuditEvents,
   listPersonAgentInteractionMemories,
   listPersonAgentRefreshQueue
 } from '../../../services/governancePersistenceService'
@@ -106,6 +107,13 @@ export function createWorkspaceModule(appPaths: AppPaths) {
     },
     async listPersonAgentRefreshQueue(input: { status?: 'pending' | 'processing' | 'completed' | 'failed' } = {}) {
       return this.withArchiveDatabase((db) => listPersonAgentRefreshQueue(db, input))
+    },
+    async listPersonAgentAuditEvents(input: {
+      personAgentId?: string
+      canonicalPersonId?: string
+      eventKind?: string
+    } = {}) {
+      return this.withArchiveDatabase((db) => listPersonAgentAuditEvents(db, input))
     },
     async getPersonAgentMemorySummary(input: { canonicalPersonId: string }) {
       return this.withArchiveDatabase((db) => {

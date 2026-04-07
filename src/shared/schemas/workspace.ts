@@ -115,6 +115,12 @@ export const listPersonAgentRefreshQueueInputSchema = z.object({
   status: z.enum(['pending', 'processing', 'completed', 'failed']).optional()
 }).optional().default({})
 
+export const listPersonAgentAuditEventsInputSchema = z.object({
+  personAgentId: z.string().min(1).optional(),
+  canonicalPersonId: z.string().min(1).optional(),
+  eventKind: z.string().min(1).optional()
+}).optional().default({})
+
 export const getPersonaDraftReviewByTurnInputSchema = z.object({
   turnId: z.string().min(1)
 })

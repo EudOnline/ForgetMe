@@ -927,6 +927,12 @@ export type ListPersonAgentRefreshQueueInput = {
   status?: 'pending' | 'processing' | 'completed' | 'failed'
 }
 
+export type ListPersonAgentAuditEventsInput = {
+  personAgentId?: string
+  canonicalPersonId?: string
+  eventKind?: string
+}
+
 export type GetPersonaDraftReviewByTurnInput = {
   turnId: string
 }
@@ -1869,6 +1875,7 @@ export interface ArchiveApi {
   askMemoryWorkspacePersisted: (input: AskMemoryWorkspacePersistedInput) => Promise<MemoryWorkspaceTurnRecord | null>
   getPersonAgentState: (input: GetPersonAgentStateInput) => Promise<PersonAgentRecord | null>
   listPersonAgentRefreshQueue: (input?: ListPersonAgentRefreshQueueInput) => Promise<PersonAgentRefreshQueueRecord[]>
+  listPersonAgentAuditEvents: (input?: ListPersonAgentAuditEventsInput) => Promise<PersonAgentAuditEventRecord[]>
   getPersonAgentMemorySummary: (input: GetPersonAgentMemorySummaryInput) => Promise<PersonAgentMemorySummary | null>
   runMemoryWorkspaceCompare: (input: RunMemoryWorkspaceCompareInput) => Promise<MemoryWorkspaceCompareSessionDetail | null>
   listMemoryWorkspaceCompareSessions: (input?: { scope?: MemoryWorkspaceScope }) => Promise<MemoryWorkspaceCompareSessionSummary[]>

@@ -16,6 +16,7 @@ type WorkspaceClient = Pick<
   | 'askMemoryWorkspacePersisted'
   | 'getPersonAgentState'
   | 'listPersonAgentRefreshQueue'
+  | 'listPersonAgentAuditEvents'
   | 'getPersonAgentMemorySummary'
   | 'runMemoryWorkspaceCompare'
   | 'listMemoryWorkspaceCompareSessions'
@@ -53,6 +54,7 @@ export function getWorkspaceClient(): WorkspaceClient {
     askMemoryWorkspacePersisted: bridgeMethod('askMemoryWorkspacePersisted', async () => null),
     getPersonAgentState: bridgeMethod('getPersonAgentState', async () => null),
     listPersonAgentRefreshQueue: bridgeMethod('listPersonAgentRefreshQueue', async () => []),
+    listPersonAgentAuditEvents: bridgeMethod('listPersonAgentAuditEvents', async () => []),
     getPersonAgentMemorySummary: bridgeMethod('getPersonAgentMemorySummary', async () => null),
     runMemoryWorkspaceCompare: bridgeMethod('runMemoryWorkspaceCompare', async () => null),
     listMemoryWorkspaceCompareSessions: bridgeMethod('listMemoryWorkspaceCompareSessions', async () => []),
