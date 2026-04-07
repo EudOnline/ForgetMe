@@ -23,7 +23,11 @@ const {
   askMemoryWorkspacePersistedService,
   listApprovedPersonaDraftProviderSends,
   retryApprovedPersonaDraftProviderSend,
-  sendApprovedPersonaDraftToProvider
+  sendApprovedPersonaDraftToProvider,
+  getPersonAgentByCanonicalPersonId,
+  listPersonAgentRefreshQueue,
+  getPersonAgentFactMemorySummary,
+  listPersonAgentInteractionMemories
 } = vi.hoisted(() => ({
   handlerMap: new Map<string, (event: unknown, payload?: unknown) => Promise<unknown>>(),
   showOpenDialog: vi.fn(),
@@ -43,7 +47,11 @@ const {
   askMemoryWorkspacePersistedService: vi.fn(),
   listApprovedPersonaDraftProviderSends: vi.fn(),
   retryApprovedPersonaDraftProviderSend: vi.fn(),
-  sendApprovedPersonaDraftToProvider: vi.fn()
+  sendApprovedPersonaDraftToProvider: vi.fn(),
+  getPersonAgentByCanonicalPersonId: vi.fn(),
+  listPersonAgentRefreshQueue: vi.fn(),
+  getPersonAgentFactMemorySummary: vi.fn(),
+  listPersonAgentInteractionMemories: vi.fn()
 }))
 
 vi.mock('electron', () => ({
@@ -108,6 +116,24 @@ vi.mock('../../../src/main/services/approvedDraftProviderSendService', () => ({
   sendApprovedPersonaDraftToProvider
 }))
 
+vi.mock('../../../src/main/services/governancePersistenceService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/main/services/governancePersistenceService')>()
+  return {
+    ...actual,
+    getPersonAgentByCanonicalPersonId,
+    listPersonAgentRefreshQueue,
+    listPersonAgentInteractionMemories
+  }
+})
+
+vi.mock('../../../src/main/services/personAgentFactMemoryService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/main/services/personAgentFactMemoryService')>()
+  return {
+    ...actual,
+    getPersonAgentFactMemorySummary
+  }
+})
+
 import { registerWorkspaceIpc } from '../../../src/main/modules/workspace/registerWorkspaceIpc'
 
 function appPathsFixture(): AppPaths {
@@ -159,6 +185,10 @@ describe('registerWorkspaceIpc session handlers', () => {
     openDatabase.mockReset()
     runMigrations.mockReset()
     askMemoryWorkspacePersistedService.mockReset()
+    getPersonAgentByCanonicalPersonId.mockReset()
+    listPersonAgentRefreshQueue.mockReset()
+    getPersonAgentFactMemorySummary.mockReset()
+    listPersonAgentInteractionMemories.mockReset()
   })
 
   it('passes persisted session asks through ipc and preserves conversation context cards', async () => {
@@ -230,6 +260,188 @@ describe('registerWorkspaceIpc session handlers', () => {
       ordinal: 2
     }))
     expect((result as { response: { contextCards: Array<{ title: string }> } }).response.contextCards[0]?.title).toBe('Conversation Context')
+    expect(close).toHaveBeenCalled()
+  })
+})
+
+describe('registerWorkspaceIpc person-agent inspection handlers', () => {
+  beforeEach(() => {
+    handlerMap.clear()
+    openDatabase.mockReset()
+    runMigrations.mockReset()
+    getPersonAgentByCanonicalPersonId.mockReset()
+    listPersonAgentRefreshQueue.mockReset()
+    getPersonAgentFactMemorySummary.mockReset()
+    listPersonAgentInteractionMemories.mockReset()
+  })
+
+  it('returns bounded person-agent state through ipc', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    getPersonAgentByCanonicalPersonId.mockReturnValue({
+      personAgentId: 'agent-1',
+      canonicalPersonId: 'cp-1',
+      status: 'active',
+      promotionTier: 'high_signal',
+      promotionScore: 74,
+      promotionReasonSummary: 'High signal person.',
+      factsVersion: 2,
+      interactionVersion: 3,
+      lastRefreshedAt: '2026-03-13T00:00:00.000Z',
+      lastActivatedAt: '2026-03-13T00:00:00.000Z',
+      createdAt: '2026-03-13T00:00:00.000Z',
+      updatedAt: '2026-03-13T00:00:00.000Z'
+    })
+
+    registerWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:getPersonAgentState')
+    const result = await handler?.({}, { canonicalPersonId: 'cp-1' })
+
+    expect(getPersonAgentByCanonicalPersonId).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(result).toEqual(expect.objectContaining({
+      canonicalPersonId: 'cp-1',
+      personAgentId: 'agent-1',
+      status: 'active'
+    }))
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('returns refresh queue rows through ipc', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    listPersonAgentRefreshQueue.mockReturnValue([
+      {
+        refreshId: 'refresh-1',
+        canonicalPersonId: 'cp-1',
+        personAgentId: 'agent-1',
+        status: 'pending',
+        reasons: ['profile_projection_updated'],
+        requestedAt: '2026-03-13T00:00:00.000Z',
+        startedAt: null,
+        completedAt: null,
+        lastError: null,
+        createdAt: '2026-03-13T00:00:00.000Z',
+        updatedAt: '2026-03-13T00:00:00.000Z'
+      }
+    ])
+
+    registerWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:listPersonAgentRefreshQueue')
+    const result = await handler?.({}, { status: 'pending' })
+
+    expect(listPersonAgentRefreshQueue).toHaveBeenCalledWith(expect.anything(), {
+      status: 'pending'
+    })
+    expect(result).toEqual([
+      expect.objectContaining({
+        refreshId: 'refresh-1',
+        status: 'pending'
+      })
+    ])
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('returns a bounded person-agent memory summary through ipc', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    getPersonAgentFactMemorySummary.mockReturnValue({
+      personAgentId: 'agent-1',
+      canonicalPersonId: 'cp-1',
+      factsVersion: 2,
+      counts: {
+        facts: 1,
+        timeline: 0,
+        relationships: 0,
+        conflicts: 0,
+        coverageGaps: 1
+      },
+      facts: [
+        {
+          memoryId: 'fm-1',
+          personAgentId: 'agent-1',
+          canonicalPersonId: 'cp-1',
+          memoryKey: 'identity.birthday',
+          sectionKey: 'identity',
+          displayLabel: 'Birthday',
+          summaryValue: '1997-02-03',
+          memoryKind: 'fact',
+          confidence: 1,
+          conflictState: 'none',
+          freshnessAt: '2026-03-13T00:00:00.000Z',
+          sourceRefs: [],
+          sourceHash: 'hash-1',
+          createdAt: '2026-03-13T00:00:00.000Z',
+          updatedAt: '2026-03-13T00:00:00.000Z'
+        }
+      ],
+      timeline: [],
+      relationships: [],
+      conflicts: [],
+      coverageGaps: [
+        {
+          memoryId: 'fm-2',
+          personAgentId: 'agent-1',
+          canonicalPersonId: 'cp-1',
+          memoryKey: 'coverage.work.empty',
+          sectionKey: 'coverage',
+          displayLabel: 'Work coverage gap',
+          summaryValue: 'No approved work facts yet.',
+          memoryKind: 'coverage_gap',
+          confidence: null,
+          conflictState: 'none',
+          freshnessAt: null,
+          sourceRefs: [],
+          sourceHash: 'hash-2',
+          createdAt: '2026-03-13T00:00:00.000Z',
+          updatedAt: '2026-03-13T00:00:00.000Z'
+        }
+      ]
+    })
+    listPersonAgentInteractionMemories.mockReturnValue([
+      {
+        memoryId: 'im-1',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        memoryKey: 'topic.profile_facts',
+        topicLabel: 'Profile facts',
+        summary: 'Birthday asked 3 times.',
+        questionCount: 3,
+        citationCount: 1,
+        outcomeKinds: ['answered'],
+        supportingTurnIds: ['turn-1'],
+        lastQuestionAt: '2026-03-13T00:00:00.000Z',
+        lastCitationAt: '2026-03-13T00:00:00.000Z',
+        createdAt: '2026-03-13T00:00:00.000Z',
+        updatedAt: '2026-03-13T00:00:00.000Z'
+      }
+    ])
+
+    registerWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:getPersonAgentMemorySummary')
+    const result = await handler?.({}, { canonicalPersonId: 'cp-1' })
+
+    expect(getPersonAgentFactMemorySummary).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(listPersonAgentInteractionMemories).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(result).toEqual(expect.objectContaining({
+      canonicalPersonId: 'cp-1',
+      factSummary: expect.objectContaining({
+        factsVersion: 2
+      }),
+      interactionMemories: [
+        expect.objectContaining({
+          memoryKey: 'topic.profile_facts'
+        })
+      ]
+    }))
     expect(close).toHaveBeenCalled()
   })
 })

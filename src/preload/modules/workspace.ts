@@ -8,6 +8,9 @@ type WorkspacePreloadModule = Pick<
   | 'listMemoryWorkspaceSessions'
   | 'getMemoryWorkspaceSession'
   | 'askMemoryWorkspacePersisted'
+  | 'getPersonAgentState'
+  | 'listPersonAgentRefreshQueue'
+  | 'getPersonAgentMemorySummary'
   | 'runMemoryWorkspaceCompare'
   | 'listMemoryWorkspaceCompareSessions'
   | 'getMemoryWorkspaceCompareSession'
@@ -42,6 +45,9 @@ export function createWorkspacePreloadModule(ipcRenderer: IpcRenderer): Workspac
     listMemoryWorkspaceSessions: invokeWith(ipcRenderer, 'archive:listMemoryWorkspaceSessions'),
     getMemoryWorkspaceSession: (sessionId) => ipcRenderer.invoke('archive:getMemoryWorkspaceSession', { sessionId }),
     askMemoryWorkspacePersisted: invokeWith(ipcRenderer, 'archive:askMemoryWorkspacePersisted'),
+    getPersonAgentState: invokeWith(ipcRenderer, 'archive:getPersonAgentState'),
+    listPersonAgentRefreshQueue: invokeWith(ipcRenderer, 'archive:listPersonAgentRefreshQueue'),
+    getPersonAgentMemorySummary: invokeWith(ipcRenderer, 'archive:getPersonAgentMemorySummary'),
     runMemoryWorkspaceCompare: invokeWith(ipcRenderer, 'archive:runMemoryWorkspaceCompare'),
     listMemoryWorkspaceCompareSessions: invokeWith(ipcRenderer, 'archive:listMemoryWorkspaceCompareSessions'),
     getMemoryWorkspaceCompareSession: (compareSessionId) => ipcRenderer.invoke('archive:getMemoryWorkspaceCompareSession', { compareSessionId }),

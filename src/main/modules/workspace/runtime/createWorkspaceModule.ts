@@ -20,6 +20,12 @@ import {
   listMemoryWorkspaceSessions
 } from '../../../services/memoryWorkspaceSessionService'
 import {
+  getPersonAgentByCanonicalPersonId,
+  listPersonAgentInteractionMemories,
+  listPersonAgentRefreshQueue
+} from '../../../services/governancePersistenceService'
+import { getPersonAgentFactMemorySummary } from '../../../services/personAgentFactMemoryService'
+import {
   createPersonaDraftReviewFromTurn,
   getPersonaDraftReviewByTurn,
   transitionPersonaDraftReview,
@@ -94,6 +100,30 @@ export function createWorkspaceModule(appPaths: AppPaths) {
     },
     async askPersisted(input: Parameters<typeof askMemoryWorkspacePersisted>[1]) {
       return this.withArchiveDatabase((db) => askMemoryWorkspacePersisted(db, input))
+    },
+    async getPersonAgentState(input: { canonicalPersonId: string }) {
+      return this.withArchiveDatabase((db) => getPersonAgentByCanonicalPersonId(db, input))
+    },
+    async listPersonAgentRefreshQueue(input: { status?: 'pending' | 'processing' | 'completed' | 'failed' } = {}) {
+      return this.withArchiveDatabase((db) => listPersonAgentRefreshQueue(db, input))
+    },
+    async getPersonAgentMemorySummary(input: { canonicalPersonId: string }) {
+      return this.withArchiveDatabase((db) => {
+        const factSummary = getPersonAgentFactMemorySummary(db, input)
+        const interactionMemories = listPersonAgentInteractionMemories(db, {
+          canonicalPersonId: input.canonicalPersonId
+        })
+
+        if (!factSummary && interactionMemories.length === 0) {
+          return null
+        }
+
+        return {
+          canonicalPersonId: input.canonicalPersonId,
+          factSummary,
+          interactionMemories
+        }
+      })
     },
     async runCompare(input: Parameters<typeof runMemoryWorkspaceCompare>[1]) {
       return this.withArchiveDatabase((db) => runMemoryWorkspaceCompare(db, input))

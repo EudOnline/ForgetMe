@@ -604,6 +604,201 @@ export type MemoryWorkspacePersonaDraftReviewRecord = {
   updatedAt: string
 }
 
+export type PersonAgentStatus =
+  | 'candidate'
+  | 'active'
+  | 'paused'
+  | 'demoted'
+
+export type PersonAgentPromotionTier =
+  | 'cold'
+  | 'warming'
+  | 'active'
+  | 'high_signal'
+
+export type PersonAgentPromotionScore = {
+  canonicalPersonId: string
+  totalScore: number
+  thresholds: {
+    warming: number
+    active: number
+    highSignal: number
+  }
+  signals: {
+    approvedFactCount: number
+    evidenceSourceCount: number
+    relationshipDegree: number
+    recentQuestionCount: number
+    recentCitationCount: number
+  }
+  evaluatedAt: string
+}
+
+export type PersonAgentRecord = {
+  personAgentId: string
+  canonicalPersonId: string
+  status: PersonAgentStatus
+  promotionTier: PersonAgentPromotionTier
+  promotionScore: number
+  promotionReasonSummary: string
+  factsVersion: number
+  interactionVersion: number
+  lastRefreshedAt: string | null
+  lastActivatedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type PersonAgentMemoryRef = {
+  kind: 'file' | 'journal' | 'person' | 'review' | 'evidence' | 'candidate'
+  id: string
+  label: string
+}
+
+export type PersonAgentFactMemoryKind =
+  | 'fact'
+  | 'timeline'
+  | 'relationship'
+  | 'coverage_gap'
+  | 'conflict'
+
+export type PersonAgentFactMemoryConflictState =
+  | 'none'
+  | 'open'
+  | 'resolved'
+
+export type PersonAgentFactMemoryRecord = {
+  memoryId: string
+  personAgentId: string
+  canonicalPersonId: string
+  memoryKey: string
+  sectionKey: string
+  displayLabel: string
+  summaryValue: string
+  memoryKind: PersonAgentFactMemoryKind
+  confidence: number | null
+  conflictState: PersonAgentFactMemoryConflictState
+  freshnessAt: string | null
+  sourceRefs: PersonAgentMemoryRef[]
+  sourceHash: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type PersonAgentInteractionOutcomeKind =
+  | 'answered'
+  | 'conflict_redirect'
+  | 'coverage_gap'
+  | 'review_redirect'
+
+export type PersonAgentInteractionMemoryRecord = {
+  memoryId: string
+  personAgentId: string
+  canonicalPersonId: string
+  memoryKey: string
+  topicLabel: string
+  summary: string
+  questionCount: number
+  citationCount: number
+  outcomeKinds: PersonAgentInteractionOutcomeKind[]
+  supportingTurnIds: string[]
+  lastQuestionAt: string | null
+  lastCitationAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type PersonAgentRefreshQueueRecord = {
+  refreshId: string
+  canonicalPersonId: string
+  personAgentId: string | null
+  status: 'pending' | 'processing' | 'completed' | 'failed'
+  reasons: string[]
+  requestedAt: string
+  startedAt: string | null
+  completedAt: string | null
+  lastError: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type PersonAgentFactMemorySummary = {
+  personAgentId: string
+  canonicalPersonId: string
+  factsVersion: number
+  counts: {
+    facts: number
+    timeline: number
+    relationships: number
+    conflicts: number
+    coverageGaps: number
+  }
+  facts: PersonAgentFactMemoryRecord[]
+  timeline: PersonAgentFactMemoryRecord[]
+  relationships: PersonAgentFactMemoryRecord[]
+  conflicts: PersonAgentFactMemoryRecord[]
+  coverageGaps: PersonAgentFactMemoryRecord[]
+}
+
+export type PersonAgentMemorySummary = {
+  canonicalPersonId: string
+  factSummary: PersonAgentFactMemorySummary | null
+  interactionMemories: PersonAgentInteractionMemoryRecord[]
+}
+
+export type PersonAgentAnswerPack = {
+  personAgentId: string
+  canonicalPersonId: string
+  question: string
+  questionClassification:
+    | 'profile_fact'
+    | 'relationship'
+    | 'recent_timeline'
+    | 'quote_request'
+    | 'advice'
+    | 'general'
+  candidateAnswer: string
+  supportingFacts: Array<{
+    memoryKey: string
+    label: string
+    value: string
+    memoryKind: PersonAgentFactMemoryKind
+  }>
+  supportingCitations: MemoryWorkspaceCitation[]
+  conflicts: Array<{
+    fieldKey: string
+    summary: string
+  }>
+  coverageGaps: Array<{
+    gapKey: string
+    summary: string
+  }>
+  recentInteractionTopics: Array<{
+    topicLabel: string
+    summary: string
+    questionCount: number
+  }>
+  generationReason: string
+  memoryVersions: {
+    factsVersion: number
+    interactionVersion: number
+  }
+}
+
+export type MemoryWorkspacePersonAgentContext = {
+  consultedAgents: Array<{
+    personAgentId: string
+    canonicalPersonId: string
+    reason: 'scope_person' | 'global_resolved_person'
+  }>
+  archiveRouting?: {
+    strategy: 'person_agent' | 'archive_fallback'
+    reason: 'agent_consulted' | 'no_active_person_agent' | 'unresolved_target_person'
+  }
+  activeCanonicalPersonId: string | null
+  usedAnswerPack: boolean
+}
+
 export type MemoryWorkspaceResponse = {
   scope: MemoryWorkspaceScope
   question: string
@@ -616,6 +811,7 @@ export type MemoryWorkspaceResponse = {
   boundaryRedirect: MemoryWorkspaceBoundaryRedirect | null
   communicationEvidence: MemoryWorkspaceCommunicationEvidence | null
   personaDraft: MemoryWorkspacePersonaDraft | null
+  personAgentContext?: MemoryWorkspacePersonAgentContext
 }
 
 export type AskMemoryWorkspaceInput = {
@@ -697,6 +893,18 @@ export type MemoryWorkspaceSessionDetail = MemoryWorkspaceSessionSummary & {
 
 export type AskMemoryWorkspacePersistedInput = AskMemoryWorkspaceInput & {
   sessionId?: string
+}
+
+export type GetPersonAgentStateInput = {
+  canonicalPersonId: string
+}
+
+export type GetPersonAgentMemorySummaryInput = {
+  canonicalPersonId: string
+}
+
+export type ListPersonAgentRefreshQueueInput = {
+  status?: 'pending' | 'processing' | 'completed' | 'failed'
 }
 
 export type GetPersonaDraftReviewByTurnInput = {
@@ -1639,6 +1847,9 @@ export interface ArchiveApi {
   listMemoryWorkspaceSessions: (input?: { scope?: MemoryWorkspaceScope }) => Promise<MemoryWorkspaceSessionSummary[]>
   getMemoryWorkspaceSession: (sessionId: string) => Promise<MemoryWorkspaceSessionDetail | null>
   askMemoryWorkspacePersisted: (input: AskMemoryWorkspacePersistedInput) => Promise<MemoryWorkspaceTurnRecord | null>
+  getPersonAgentState: (input: GetPersonAgentStateInput) => Promise<PersonAgentRecord | null>
+  listPersonAgentRefreshQueue: (input?: ListPersonAgentRefreshQueueInput) => Promise<PersonAgentRefreshQueueRecord[]>
+  getPersonAgentMemorySummary: (input: GetPersonAgentMemorySummaryInput) => Promise<PersonAgentMemorySummary | null>
   runMemoryWorkspaceCompare: (input: RunMemoryWorkspaceCompareInput) => Promise<MemoryWorkspaceCompareSessionDetail | null>
   listMemoryWorkspaceCompareSessions: (input?: { scope?: MemoryWorkspaceScope }) => Promise<MemoryWorkspaceCompareSessionSummary[]>
   getMemoryWorkspaceCompareSession: (compareSessionId: string) => Promise<MemoryWorkspaceCompareSessionDetail | null>

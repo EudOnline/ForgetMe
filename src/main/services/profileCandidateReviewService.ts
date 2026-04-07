@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import type { ArchiveDatabase } from './db'
 import { appendDecisionJournal, markDecisionUndone } from './journalService'
+import { enqueuePersonAgentRefreshForCanonicalPeople } from './personAgentRefreshService'
 
 function inTransaction<T>(db: ArchiveDatabase, callback: () => T) {
   db.exec('begin immediate')
@@ -143,6 +144,11 @@ export function approveProfileAttributeCandidateInTransaction(db: ArchiveDatabas
 
   db.prepare('update profile_attribute_candidates set approved_journal_id = ? where id = ?').run(journal.journalId, candidate.id)
   db.prepare('update person_profile_attributes set approved_journal_id = ? where id = ?').run(journal.journalId, attributeId)
+  enqueuePersonAgentRefreshForCanonicalPeople(db, {
+    canonicalPersonIds: [candidate.proposedCanonicalPersonId],
+    reason: 'review_approved',
+    requestedAt: reviewedAt
+  })
 
   return {
     status: 'approved' as const,

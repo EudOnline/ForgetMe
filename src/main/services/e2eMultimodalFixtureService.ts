@@ -8,8 +8,89 @@ import {
   loadLinkedCanonicalPersonId,
   persistFixtureProviderBoundary
 } from './e2eMultimodalFixturePersistenceService'
+import {
+  listPersonAgentFactMemories,
+  upsertPersonAgent,
+  upsertPersonAgentInteractionMemory,
+  replacePersonAgentFactMemories
+} from './governancePersistenceService'
 import { queueStructuredFieldCandidate } from './enrichmentReviewService'
 import { queueProfileAttributeCandidate } from './profileProjectionService'
+
+export function seedE2EPersonAgentFixture(db: ArchiveDatabase, input: { fileId: string }) {
+  const canonicalPersonId = loadLinkedCanonicalPersonId(db, input.fileId)
+  if (!canonicalPersonId) {
+    throw new Error(`Person-agent fixture could not resolve canonical person for file: ${input.fileId}`)
+  }
+
+  const file = loadFixtureFile(db, input.fileId)
+  if (!file) {
+    throw new Error(`Fixture file not found for person-agent seed: ${input.fileId}`)
+  }
+
+  const existingFactMemory = listPersonAgentFactMemories(db, {
+    canonicalPersonId,
+    memoryKey: 'identity.birthday'
+  })[0] ?? null
+  if (existingFactMemory) {
+    return { canonicalPersonId, personAgentId: existingFactMemory.personAgentId }
+  }
+
+  const createdAt = new Date().toISOString()
+  const personAgent = upsertPersonAgent(db, {
+    canonicalPersonId,
+    status: 'active',
+    promotionTier: 'high_signal',
+    promotionScore: 76,
+    promotionReasonSummary: 'E2E fixture promoted person-agent.',
+    factsVersion: 2,
+    interactionVersion: 1,
+    lastRefreshedAt: createdAt,
+    lastActivatedAt: createdAt,
+    createdAt,
+    updatedAt: createdAt
+  })
+
+  replacePersonAgentFactMemories(db, {
+    personAgentId: personAgent.personAgentId,
+    canonicalPersonId,
+    rows: [
+      {
+        memoryKey: 'identity.birthday',
+        sectionKey: 'identity',
+        displayLabel: 'Birthday',
+        summaryValue: '1997-02-03',
+        memoryKind: 'fact',
+        confidence: 1,
+        conflictState: 'none',
+        freshnessAt: createdAt,
+        sourceRefs: [{ kind: 'file', id: file.id, label: file.fileName }],
+        sourceHash: 'e2e-person-agent-birthday'
+      }
+    ]
+  })
+
+  upsertPersonAgentInteractionMemory(db, {
+    personAgentId: personAgent.personAgentId,
+    canonicalPersonId,
+    memoryKey: 'topic.profile_facts',
+    topicLabel: 'Profile facts',
+    summary: 'Birthday has already been asked in prior grounded sessions.',
+    questionCount: 4,
+    citationCount: 4,
+    outcomeKinds: ['answered'],
+    supportingTurnIds: ['e2e-turn-1', 'e2e-turn-2'],
+    lastQuestionAt: createdAt,
+    lastCitationAt: createdAt,
+    createdAt,
+    updatedAt: createdAt
+  })
+
+  return {
+    canonicalPersonId,
+    personAgentId: personAgent.personAgentId
+  }
+}
 
 export function seedE2EMultimodalReviewFixture(db: ArchiveDatabase, input: { fileId: string }) {
   const existing = db.prepare(

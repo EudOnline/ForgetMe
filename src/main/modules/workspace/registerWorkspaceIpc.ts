@@ -9,7 +9,10 @@ import {
   listApprovedPersonaDraftPublicationsInputSchema,
   listApprovedPersonaDraftProviderSendsInputSchema,
   createPersonaDraftReviewFromTurnInputSchema,
+  getPersonAgentMemorySummaryInputSchema,
+  getPersonAgentStateInputSchema,
   getPersonaDraftReviewByTurnInputSchema,
+  listPersonAgentRefreshQueueInputSchema,
   memoryWorkspaceCompareMatrixIdSchema,
   memoryWorkspaceCompareSessionFilterSchema,
   memoryWorkspaceCompareSessionIdSchema,
@@ -35,6 +38,9 @@ export function registerWorkspaceIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:listMemoryWorkspaceSessions')
   ipcMain.removeHandler('archive:getMemoryWorkspaceSession')
   ipcMain.removeHandler('archive:askMemoryWorkspacePersisted')
+  ipcMain.removeHandler('archive:getPersonAgentState')
+  ipcMain.removeHandler('archive:listPersonAgentRefreshQueue')
+  ipcMain.removeHandler('archive:getPersonAgentMemorySummary')
   ipcMain.removeHandler('archive:runMemoryWorkspaceCompare')
   ipcMain.removeHandler('archive:listMemoryWorkspaceCompareSessions')
   ipcMain.removeHandler('archive:getMemoryWorkspaceCompareSession')
@@ -80,6 +86,21 @@ export function registerWorkspaceIpc(appPaths: AppPaths) {
   ipcMain.handle('archive:askMemoryWorkspacePersisted', async (_event, payload) => {
     const input = askMemoryWorkspacePersistedInputSchema.parse(payload)
     return workspaceModule.askPersisted(input)
+  })
+
+  ipcMain.handle('archive:getPersonAgentState', async (_event, payload) => {
+    const input = getPersonAgentStateInputSchema.parse(payload)
+    return workspaceModule.getPersonAgentState(input)
+  })
+
+  ipcMain.handle('archive:listPersonAgentRefreshQueue', async (_event, payload) => {
+    const input = listPersonAgentRefreshQueueInputSchema.parse(payload)
+    return workspaceModule.listPersonAgentRefreshQueue(input)
+  })
+
+  ipcMain.handle('archive:getPersonAgentMemorySummary', async (_event, payload) => {
+    const input = getPersonAgentMemorySummaryInputSchema.parse(payload)
+    return workspaceModule.getPersonAgentMemorySummary(input)
   })
 
   ipcMain.handle('archive:runMemoryWorkspaceCompare', async (_event, payload) => {

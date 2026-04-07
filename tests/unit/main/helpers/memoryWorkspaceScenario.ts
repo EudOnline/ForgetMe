@@ -8,6 +8,11 @@ import {
   transitionPersonaDraftReview
 } from '../../../../src/main/services/memoryWorkspaceDraftReviewService'
 import { askMemoryWorkspacePersisted } from '../../../../src/main/services/memoryWorkspaceSessionService'
+import {
+  replacePersonAgentFactMemories,
+  upsertPersonAgent,
+  upsertPersonAgentInteractionMemory
+} from '../../../../src/main/services/governancePersistenceService'
 
 function setupDatabase() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-memory-workspace-'))
@@ -384,5 +389,119 @@ export function seedApprovedPersonaDraftHandoffScenario() {
     sandboxTurn,
     review,
     approvedReview
+  }
+}
+
+export function seedMemoryWorkspacePersonAgentScenario() {
+  const db = seedMemoryWorkspaceScenario()
+
+  const personAgent = upsertPersonAgent(db, {
+    canonicalPersonId: 'cp-1',
+    status: 'active',
+    promotionTier: 'high_signal',
+    promotionScore: 74,
+    promotionReasonSummary: 'High signal person.',
+    factsVersion: 2,
+    interactionVersion: 3
+  })
+
+  replacePersonAgentFactMemories(db, {
+    personAgentId: personAgent.personAgentId,
+    canonicalPersonId: 'cp-1',
+    rows: [
+      {
+        memoryKey: 'identity.birthday',
+        sectionKey: 'identity',
+        displayLabel: 'Birthday',
+        summaryValue: '1997-02-03',
+        memoryKind: 'fact',
+        confidence: 1,
+        conflictState: 'none',
+        freshnessAt: '2026-03-13T00:00:00.000Z',
+        sourceRefs: [{ kind: 'file', id: 'f-1', label: 'chat-1.json' }],
+        sourceHash: 'seed-birthday'
+      },
+      {
+        memoryKey: 'relationship.cp-2',
+        sectionKey: 'relationship',
+        displayLabel: 'Bob Li',
+        summaryValue: 'friend; shared evidence files: 1',
+        memoryKind: 'relationship',
+        confidence: 1,
+        conflictState: 'none',
+        freshnessAt: '2026-03-13T00:00:00.000Z',
+        sourceRefs: [{ kind: 'file', id: 'f-1', label: 'chat-1.json' }],
+        sourceHash: 'seed-relationship'
+      },
+      {
+        memoryKey: 'timeline.ec-1',
+        sectionKey: 'timeline',
+        displayLabel: 'Trip planning',
+        summaryValue: 'Trip planning (2026-03-13T08:00:00.000Z -> 2026-03-13T08:30:00.000Z); shared planning',
+        memoryKind: 'timeline',
+        confidence: 1,
+        conflictState: 'none',
+        freshnessAt: '2026-03-13T08:30:00.000Z',
+        sourceRefs: [{ kind: 'file', id: 'f-1', label: 'chat-1.json' }],
+        sourceHash: 'seed-timeline'
+      },
+      {
+        memoryKey: 'conflict.school_name',
+        sectionKey: 'conflict',
+        displayLabel: 'School name conflict',
+        summaryValue: 'Pending values: 北京大学 / 清华大学 (2 pending)',
+        memoryKind: 'conflict',
+        confidence: null,
+        conflictState: 'open',
+        freshnessAt: null,
+        sourceRefs: [{ kind: 'review', id: 'rq-2', label: 'Open school_name conflicts' }],
+        sourceHash: 'seed-conflict'
+      },
+      {
+        memoryKey: 'coverage.work.empty',
+        sectionKey: 'coverage',
+        displayLabel: 'Work coverage gap',
+        summaryValue: 'No approved work facts yet.',
+        memoryKind: 'coverage_gap',
+        confidence: null,
+        conflictState: 'none',
+        freshnessAt: null,
+        sourceRefs: [],
+        sourceHash: 'seed-gap'
+      }
+    ]
+  })
+
+  upsertPersonAgentInteractionMemory(db, {
+    personAgentId: personAgent.personAgentId,
+    canonicalPersonId: 'cp-1',
+    memoryKey: 'topic.past_expressions',
+    topicLabel: 'Past expressions',
+    summary: 'Past expressions. Asked 2 times. Outcomes: answered. Cited context: chat-1.json, chat-2.json.',
+    questionCount: 2,
+    citationCount: 2,
+    outcomeKinds: ['answered'],
+    supportingTurnIds: ['seed-turn-1', 'seed-turn-2'],
+    lastQuestionAt: '2026-03-13T00:00:00.000Z',
+    lastCitationAt: '2026-03-13T00:00:00.000Z'
+  })
+
+  upsertPersonAgentInteractionMemory(db, {
+    personAgentId: personAgent.personAgentId,
+    canonicalPersonId: 'cp-1',
+    memoryKey: 'topic.conflict_resolution',
+    topicLabel: 'Conflict resolution',
+    summary: 'Conflict resolution. Asked 3 times. Outcomes: conflict_redirect. Cited context: Open school_name conflicts.',
+    questionCount: 3,
+    citationCount: 1,
+    outcomeKinds: ['conflict_redirect'],
+    supportingTurnIds: ['seed-turn-3'],
+    lastQuestionAt: '2026-03-13T00:00:00.000Z',
+    lastCitationAt: '2026-03-13T00:00:00.000Z'
+  })
+
+  return {
+    db,
+    personAgent
   }
 }

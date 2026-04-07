@@ -307,6 +307,7 @@ npm run build
 - immutable saved-session replay for global, person, and group scopes
 - deterministic multi-turn follow-up continuity inside the same saved session via a visible `Conversation Context` card
 - quote-backed evidence reads, advice-mode responses, and persona-request guardrails with reviewed draft sandbox flows
+- promotion-based backstage person agents can answer grounded person-fact questions while the user still interacts with the same primary `Memory Workspace` surface
 - approved-draft publication, provider-send, hosted-share creation, hosted-share revoke, and replay-safe share-surface access from the same workspace
 
 ### Message-Native Objective Runtime Baseline
@@ -362,6 +363,6 @@ npm run verify:release
 ### Current Operational Note
 
 The local-first runner, shared review queue, formal approved profile read model, and phase-five single-item review workbench are now wired end-to-end.
-The archive now also carries `Memory Workspace` through deterministic saved-session follow-up continuity, quote-backed evidence, advice responses, persona guardrails, reviewed draft sandbox flows, internal handoff, provider-boundary send, retry recovery, local publication/share packaging, hosted share-link creation and revocation, and human-readable share-page replay.
+The archive now also carries `Memory Workspace` through deterministic saved-session follow-up continuity, quote-backed evidence, advice responses, persona guardrails, reviewed draft sandbox flows, promotion-routed backstage person-agent answers, internal handoff, provider-boundary send, retry recovery, local publication/share packaging, hosted share-link creation and revocation, and human-readable share-page replay.
 The current engineering-convergence baseline uses an `AppShell` renderer root, domain preload modules, bootstrap-owned IPC registration, feature-owned main-process module entrypoints, and a thin renderer archive bridge assembled from domain clients.
 The latest approved-draft share slice is documented in `docs/plans/2026-03-19-phase-ten-m-approved-draft-hosted-share-link-implementation-plan.md`.
