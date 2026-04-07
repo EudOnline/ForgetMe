@@ -31,6 +31,13 @@ type StoredTurnResponseRow = {
   responseJson: string
 }
 
+type PersistedPersonTurnRow = {
+  turnId: string
+  question: string
+  responseJson: string
+  createdAt: string
+}
+
 function normalizeQuestion(question: string) {
   return question.trim().toLowerCase()
 }
@@ -162,6 +169,127 @@ function buildInteractionSummary(input: {
   return `${input.topicLabel}. Asked ${input.questionCount} times. Outcomes: ${input.outcomeKinds.join(', ')}.${contextText}`
 }
 
+function hydratePersistedMemoryWorkspaceResponse(input: {
+  canonicalPersonId: string
+  question: string
+  responseJson: string
+}): MemoryWorkspaceResponse | null {
+  try {
+    const parsed = JSON.parse(input.responseJson) as Partial<MemoryWorkspaceResponse> & {
+      answer?: Partial<MemoryWorkspaceResponse['answer']>
+      guardrail?: Partial<MemoryWorkspaceResponse['guardrail']>
+    }
+    const citations = Array.isArray(parsed.answer?.citations) ? parsed.answer.citations : []
+    const citationCount = typeof parsed.guardrail?.citationCount === 'number'
+      ? parsed.guardrail.citationCount
+      : citations.length
+
+    return {
+      scope: parsed.scope?.kind === 'person'
+        ? parsed.scope
+        : {
+            kind: 'person',
+            canonicalPersonId: input.canonicalPersonId
+          },
+      question: parsed.question ?? input.question,
+      expressionMode: parsed.expressionMode ?? 'grounded',
+      workflowKind: parsed.workflowKind ?? 'default',
+      title: parsed.title ?? `Memory Workspace · ${input.canonicalPersonId}`,
+      answer: {
+        summary: parsed.answer?.summary ?? '',
+        displayType: parsed.answer?.displayType ?? 'approved_fact',
+        citations
+      },
+      contextCards: Array.isArray(parsed.contextCards) ? parsed.contextCards : [],
+      guardrail: {
+        decision: parsed.guardrail?.decision ?? (citationCount > 0 ? 'grounded_answer' : 'fallback_insufficient_evidence'),
+        reasonCodes: Array.isArray(parsed.guardrail?.reasonCodes) ? parsed.guardrail.reasonCodes : [],
+        citationCount,
+        sourceKinds: Array.isArray(parsed.guardrail?.sourceKinds)
+          ? parsed.guardrail.sourceKinds
+          : citations.map((citation) => citation.kind),
+        fallbackApplied: typeof parsed.guardrail?.fallbackApplied === 'boolean'
+          ? parsed.guardrail.fallbackApplied
+          : citationCount === 0
+      },
+      boundaryRedirect: parsed.boundaryRedirect ?? null,
+      communicationEvidence: parsed.communicationEvidence ?? null,
+      personaDraft: parsed.personaDraft ?? null,
+      ...(parsed.personAgentContext ? { personAgentContext: parsed.personAgentContext } : {})
+    }
+  } catch {
+    return null
+  }
+}
+
+function loadRecentPersistedPersonTurns(db: ArchiveDatabase, input: {
+  canonicalPersonId: string
+  limit: number
+}) {
+  return db.prepare(
+    `select turnId, question, responseJson, createdAt
+     from (
+       select
+         turns.id as turnId,
+         turns.question as question,
+         turns.response_json as responseJson,
+         turns.created_at as createdAt
+       from memory_workspace_turns turns
+       join memory_workspace_sessions sessions
+         on sessions.id = turns.session_id
+       where sessions.scope_kind = 'person'
+         and sessions.scope_target_id = ?
+       order by turns.created_at desc, turns.id desc
+       limit ?
+     )
+     order by createdAt asc, turnId asc`
+  ).all(input.canonicalPersonId, input.limit) as PersistedPersonTurnRow[]
+}
+
+export function backfillPersistedPersonAgentInteractionMemory(db: ArchiveDatabase, input: {
+  personAgentId: string
+  canonicalPersonId: string
+  limit?: number
+}) {
+  const existingTurnIds = new Set(
+    listPersonAgentInteractionMemories(db, {
+      personAgentId: input.personAgentId
+    }).flatMap((record) => record.supportingTurnIds)
+  )
+  const rows = loadRecentPersistedPersonTurns(db, {
+    canonicalPersonId: input.canonicalPersonId,
+    limit: input.limit ?? 5
+  })
+  const recorded = [] as PersonAgentInteractionMemoryRecord[]
+
+  for (const row of rows) {
+    if (existingTurnIds.has(row.turnId)) {
+      continue
+    }
+
+    const response = hydratePersistedMemoryWorkspaceResponse({
+      canonicalPersonId: input.canonicalPersonId,
+      question: row.question,
+      responseJson: row.responseJson
+    })
+    if (!response) {
+      continue
+    }
+
+    recorded.push(recordPersonAgentInteractionMemory(db, {
+      personAgentId: input.personAgentId,
+      canonicalPersonId: input.canonicalPersonId,
+      turnId: row.turnId,
+      question: row.question,
+      response,
+      createdAt: row.createdAt
+    }))
+    existingTurnIds.add(row.turnId)
+  }
+
+  return recorded
+}
+
 export function recordPersonAgentInteractionMemory(db: ArchiveDatabase, input: {
   personAgentId: string
   canonicalPersonId: string
@@ -272,6 +400,15 @@ export function recordPersistedPersonAgentInteractionIfEligible(db: ArchiveDatab
   })
 
   if (!personAgent || personAgent.status !== 'active') {
+    return null
+  }
+
+  const existingTurnIds = new Set(
+    listPersonAgentInteractionMemories(db, {
+      personAgentId: personAgent.personAgentId
+    }).flatMap((record) => record.supportingTurnIds)
+  )
+  if (existingTurnIds.has(input.turnId)) {
     return null
   }
 

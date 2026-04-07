@@ -5,6 +5,7 @@ import {
   listPersonAgentRefreshQueue,
   upsertPersonAgent
 } from './governancePersistenceService'
+import { backfillPersistedPersonAgentInteractionMemory } from './personAgentInteractionMemoryService'
 import { getPersonDossier } from './personDossierService'
 import { syncPersonAgentFactMemory } from './personAgentFactMemoryService'
 import { evaluatePersonAgentPromotion } from './personAgentPromotionService'
@@ -146,6 +147,13 @@ export function rebuildPersonAgentForCanonicalPerson(db: ArchiveDatabase, input:
         personAgentId: nextAgent.personAgentId,
         canonicalPersonId: input.canonicalPersonId,
         dossier
+      })
+    }
+
+    if (nextStatus === 'active') {
+      backfillPersistedPersonAgentInteractionMemory(db, {
+        personAgentId: nextAgent.personAgentId,
+        canonicalPersonId: input.canonicalPersonId
       })
     }
   }

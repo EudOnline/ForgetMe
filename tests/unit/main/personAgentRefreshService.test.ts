@@ -3,7 +3,11 @@ import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
-import { listPersonAgentFactMemories, listPersonAgentRefreshQueue } from '../../../src/main/services/governancePersistenceService'
+import {
+  listPersonAgentFactMemories,
+  listPersonAgentInteractionMemories,
+  listPersonAgentRefreshQueue
+} from '../../../src/main/services/governancePersistenceService'
 import { approveProfileAttributeCandidate } from '../../../src/main/services/profileCandidateReviewService'
 import {
   enqueuePersonAgentRefreshForCanonicalPeople,
@@ -422,6 +426,11 @@ describe('personAgentRefreshService', () => {
     const memories = listPersonAgentFactMemories(db, {
       canonicalPersonId: 'cp-1'
     })
+    const interactionMemories = processed?.personAgentId
+      ? listPersonAgentInteractionMemories(db, {
+          personAgentId: processed.personAgentId
+        })
+      : []
 
     expect(processed).toMatchObject({
       canonicalPersonId: 'cp-1',
@@ -429,6 +438,13 @@ describe('personAgentRefreshService', () => {
     })
     expect(queue[0]?.status).toBe('completed')
     expect(memories.length).toBeGreaterThan(0)
+    expect(interactionMemories).toEqual([
+      expect.objectContaining({
+        memoryKey: 'topic.profile_facts',
+        questionCount: 2,
+        supportingTurnIds: ['turn-1', 'turn-2']
+      })
+    ])
 
     db.close()
   })
