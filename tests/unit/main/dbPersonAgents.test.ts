@@ -4,8 +4,10 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
 import {
+  appendPersonAgentAuditEvent,
   enqueuePersonAgentRefresh,
   getPersonAgentByCanonicalPersonId,
+  listPersonAgentAuditEvents,
   listPersonAgentFactMemories,
   listPersonAgentRefreshQueue,
   listPersonAgents,
@@ -78,7 +80,7 @@ describe('person-agent persistence migrations', () => {
     db.close()
   })
 
-  it('upserts person agents, replaces fact memories, and enqueues refresh requests', () => {
+  it('upserts person agents, replaces fact memories, enqueues refresh requests, and records audit events', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-person-agent-db-'))
     const db = openDatabase(path.join(root, 'archive.sqlite'))
 
@@ -256,6 +258,54 @@ describe('person-agent persistence migrations', () => {
     expect(refreshQueue).toHaveLength(1)
     expect(refreshQueue[0]?.canonicalPersonId).toBe('cp-1')
     expect(refreshQueue[0]?.reasons).toEqual(['import_batch', 'review_approved'])
+
+    appendPersonAgentAuditEvent(db, {
+      personAgentId: created.personAgentId,
+      canonicalPersonId: 'cp-1',
+      eventKind: 'strategy_profile_updated',
+      payload: {
+        source: 'refresh_rebuild',
+        reasons: ['review_approved'],
+        changedFields: ['conflictBehavior'],
+        previousProfile: {
+          profileVersion: 1,
+          responseStyle: 'concise',
+          evidencePreference: 'balanced',
+          conflictBehavior: 'balanced'
+        },
+        nextProfile: {
+          profileVersion: 2,
+          responseStyle: 'concise',
+          evidencePreference: 'balanced',
+          conflictBehavior: 'conflict_forward'
+        }
+      },
+      createdAt: '2026-04-06T09:31:00.000Z'
+    })
+
+    const auditEvents = listPersonAgentAuditEvents(db, {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(auditEvents).toEqual([
+      expect.objectContaining({
+        personAgentId: created.personAgentId,
+        canonicalPersonId: 'cp-1',
+        eventKind: 'strategy_profile_updated',
+        payload: expect.objectContaining({
+          source: 'refresh_rebuild',
+          reasons: ['review_approved'],
+          changedFields: ['conflictBehavior'],
+          previousProfile: expect.objectContaining({
+            profileVersion: 1,
+            conflictBehavior: 'balanced'
+          }),
+          nextProfile: expect.objectContaining({
+            profileVersion: 2,
+            conflictBehavior: 'conflict_forward'
+          })
+        })
+      })
+    ])
 
     db.close()
   })

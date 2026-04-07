@@ -1,5 +1,6 @@
 import type { ArchiveDatabase } from './db'
 import {
+  appendPersonAgentAuditEvent,
   enqueuePersonAgentRefresh,
   getPersonAgentByCanonicalPersonId,
   listPersonAgentRefreshQueue,
@@ -9,7 +10,10 @@ import { backfillPersistedPersonAgentInteractionMemory } from './personAgentInte
 import { getPersonDossier } from './personDossierService'
 import { syncPersonAgentFactMemory } from './personAgentFactMemoryService'
 import { evaluatePersonAgentPromotion } from './personAgentPromotionService'
-import { derivePersonAgentStrategyProfile } from './personAgentStrategyService'
+import {
+  derivePersonAgentStrategyProfile,
+  resolveNextPersonAgentStrategyProfile
+} from './personAgentStrategyService'
 
 function uniqueStrings(values: string[]) {
   return [...new Set(values)].sort((left, right) => left.localeCompare(right))
@@ -103,6 +107,8 @@ export function enqueuePersonAgentRefreshesForBatch(db: ArchiveDatabase, input: 
 export function rebuildPersonAgentForCanonicalPerson(db: ArchiveDatabase, input: {
   canonicalPersonId: string
   now?: string
+  strategyAuditSource?: string
+  strategyAuditReasons?: string[]
 }) {
   const existing = getPersonAgentByCanonicalPersonId(db, {
     canonicalPersonId: input.canonicalPersonId
@@ -161,25 +167,45 @@ export function rebuildPersonAgentForCanonicalPerson(db: ArchiveDatabase, input:
         const afterBackfillAgent = getPersonAgentByCanonicalPersonId(db, {
           canonicalPersonId: input.canonicalPersonId
         })
+        const resolvedStrategy = resolveNextPersonAgentStrategyProfile({
+          existingProfile: afterBackfillAgent?.strategyProfile ?? existing?.strategyProfile ?? null,
+          derivedProfile: derivePersonAgentStrategyProfile(db, {
+            personAgentId: nextAgent.personAgentId,
+            canonicalPersonId: input.canonicalPersonId,
+            dossier
+          })
+        })
 
-        upsertPersonAgent(db, {
+        const persistedAgent = upsertPersonAgent(db, {
           personAgentId: nextAgent.personAgentId,
           canonicalPersonId: input.canonicalPersonId,
           status: nextStatus,
           promotionTier: promotion.promotionTier,
           promotionScore: promotion.promotionScore.totalScore,
           promotionReasonSummary: promotion.reasonSummary,
-          strategyProfile: derivePersonAgentStrategyProfile(db, {
-            personAgentId: nextAgent.personAgentId,
-            canonicalPersonId: input.canonicalPersonId,
-            dossier
-          }),
+          strategyProfile: resolvedStrategy.nextProfile,
           factsVersion: afterBackfillAgent?.factsVersion ?? nextAgent.factsVersion,
           interactionVersion: afterBackfillAgent?.interactionVersion ?? nextAgent.interactionVersion,
           lastRefreshedAt: refreshedAt,
           lastActivatedAt: afterBackfillAgent?.lastActivatedAt ?? nextAgent.lastActivatedAt,
           updatedAt: refreshedAt
         })
+
+        if (resolvedStrategy.changed && resolvedStrategy.previousProfile) {
+          appendPersonAgentAuditEvent(db, {
+            personAgentId: persistedAgent.personAgentId,
+            canonicalPersonId: input.canonicalPersonId,
+            eventKind: 'strategy_profile_updated',
+            payload: {
+              source: input.strategyAuditSource ?? 'refresh_rebuild',
+              reasons: input.strategyAuditReasons ?? [],
+              changedFields: resolvedStrategy.changedFields,
+              previousProfile: resolvedStrategy.previousProfile,
+              nextProfile: resolvedStrategy.nextProfile
+            },
+            createdAt: refreshedAt
+          })
+        }
       }
     }
   }
@@ -210,7 +236,9 @@ export function processNextPersonAgentRefresh(db: ArchiveDatabase, input: {
   try {
     const refreshedAgent = rebuildPersonAgentForCanonicalPerson(db, {
       canonicalPersonId: pending.canonicalPersonId,
-      now
+      now,
+      strategyAuditSource: 'refresh_rebuild',
+      strategyAuditReasons: pending.reasons
     })
 
     db.prepare(

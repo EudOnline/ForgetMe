@@ -6,6 +6,7 @@ import type {
   ListPersonAgentRefreshQueueInput,
   ListAgentMemoriesInput,
   ListAgentPolicyVersionsInput,
+  PersonAgentAuditEventRecord,
   PersonAgentFactMemoryConflictState,
   PersonAgentFactMemoryKind,
   PersonAgentFactMemoryRecord,
@@ -101,6 +102,15 @@ type PersonAgentInteractionMemoryRow = {
   updatedAt: string
 }
 
+type PersonAgentAuditEventRow = {
+  id: string
+  personAgentId: string | null
+  canonicalPersonId: string
+  eventKind: string
+  payloadJson: string
+  createdAt: string
+}
+
 export type PersonAgentRefreshQueueRecord = {
   refreshId: string
   canonicalPersonId: string
@@ -143,6 +153,19 @@ function parseJsonArray<T>(value: string): T[] {
   } catch {
     return []
   }
+}
+
+function parseJsonObject(value: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value) as unknown
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>
+    }
+  } catch {
+    return {}
+  }
+
+  return {}
 }
 
 function parseStrategyProfile(value: string | null): PersonAgentStrategyProfile | null {
@@ -242,6 +265,17 @@ function mapPersonAgentInteractionMemoryRow(row: PersonAgentInteractionMemoryRow
     lastCitationAt: row.lastCitationAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt
+  }
+}
+
+function mapPersonAgentAuditEventRow(row: PersonAgentAuditEventRow): PersonAgentAuditEventRecord {
+  return {
+    auditEventId: row.id,
+    personAgentId: row.personAgentId,
+    canonicalPersonId: row.canonicalPersonId,
+    eventKind: row.eventKind,
+    payload: parseJsonObject(row.payloadJson),
+    createdAt: row.createdAt
   }
 }
 
@@ -808,6 +842,74 @@ export function listPersonAgentInteractionMemories(db: ArchiveDatabase, input: {
       return true
     })
     .map(mapPersonAgentInteractionMemoryRow)
+}
+
+export function appendPersonAgentAuditEvent(db: ArchiveDatabase, input: {
+  auditEventId?: string
+  personAgentId?: string | null
+  canonicalPersonId: string
+  eventKind: string
+  payload?: Record<string, unknown>
+  createdAt?: string
+}): PersonAgentAuditEventRecord {
+  const auditEventId = input.auditEventId ?? crypto.randomUUID()
+  const createdAt = input.createdAt ?? new Date().toISOString()
+
+  db.prepare(
+    `insert into person_agent_audit_events (
+      id,
+      person_agent_id,
+      canonical_person_id,
+      event_kind,
+      payload_json,
+      created_at
+    ) values (?, ?, ?, ?, ?, ?)`
+  ).run(
+    auditEventId,
+    input.personAgentId ?? null,
+    input.canonicalPersonId,
+    input.eventKind,
+    JSON.stringify(input.payload ?? {}),
+    createdAt
+  )
+
+  return listPersonAgentAuditEvents(db, {}).find((row) => row.auditEventId === auditEventId)!
+}
+
+export function listPersonAgentAuditEvents(db: ArchiveDatabase, input: {
+  personAgentId?: string
+  canonicalPersonId?: string
+  eventKind?: string
+} = {}): PersonAgentAuditEventRecord[] {
+  const rows = db.prepare(
+    `select
+      id,
+      person_agent_id as personAgentId,
+      canonical_person_id as canonicalPersonId,
+      event_kind as eventKind,
+      payload_json as payloadJson,
+      created_at as createdAt
+     from person_agent_audit_events
+     order by created_at desc, id asc`
+  ).all() as PersonAgentAuditEventRow[]
+
+  return rows
+    .filter((row) => {
+      if (input.personAgentId && row.personAgentId !== input.personAgentId) {
+        return false
+      }
+
+      if (input.canonicalPersonId && row.canonicalPersonId !== input.canonicalPersonId) {
+        return false
+      }
+
+      if (input.eventKind && row.eventKind !== input.eventKind) {
+        return false
+      }
+
+      return true
+    })
+    .map(mapPersonAgentAuditEventRow)
 }
 
 export function enqueuePersonAgentRefresh(db: ArchiveDatabase, input: {

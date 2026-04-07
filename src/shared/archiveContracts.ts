@@ -658,6 +658,15 @@ export type PersonAgentRecord = {
   updatedAt: string
 }
 
+export type PersonAgentAuditEventRecord = {
+  auditEventId: string
+  personAgentId: string | null
+  canonicalPersonId: string
+  eventKind: string
+  payload: Record<string, unknown>
+  createdAt: string
+}
+
 export type PersonAgentMemoryRef = {
   kind: 'file' | 'journal' | 'person' | 'review' | 'evidence' | 'candidate'
   id: string

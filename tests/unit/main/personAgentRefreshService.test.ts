@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
 import {
   getPersonAgentByCanonicalPersonId,
+  listPersonAgentAuditEvents,
   listPersonAgentFactMemories,
   listPersonAgentInteractionMemories,
   listPersonAgentRefreshQueue
@@ -368,6 +369,53 @@ function seedReviewApprovalFixture(db: ReturnType<typeof openDatabase>) {
   )
 }
 
+function seedPendingConflictProfileCandidates(db: ReturnType<typeof openDatabase>, input: {
+  canonicalPersonId: string
+  createdAt: string
+}) {
+  for (const [suffix, value, fileId, evidenceId] of [
+    ['1', '北京大学', 'f-12', 'ee-12'],
+    ['2', '清华大学', 'f-13', 'ee-13']
+  ] as const) {
+    db.prepare(
+      `insert into profile_attribute_candidates (
+        id, proposed_canonical_person_id, source_file_id, source_evidence_id, source_candidate_id,
+        attribute_group, attribute_key, value_json, proposal_basis_json, reason_code,
+        confidence, status, created_at
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      `pac-conflict-${suffix}`,
+      input.canonicalPersonId,
+      fileId,
+      evidenceId,
+      `fc-conflict-${suffix}`,
+      'education',
+      'school_name',
+      JSON.stringify({ value }),
+      JSON.stringify({ reason: 'refresh-strategy-test' }),
+      'projection_conflict',
+      0.95,
+      'pending',
+      input.createdAt
+    )
+
+    db.prepare(
+      `insert into review_queue (
+        id, item_type, candidate_id, status, priority, confidence, summary_json, created_at
+      ) values (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      `rq-conflict-${suffix}`,
+      'profile_attribute_candidate',
+      `pac-conflict-${suffix}`,
+      'pending',
+      0,
+      0.95,
+      JSON.stringify({ attributeKey: 'school_name' }),
+      input.createdAt
+    )
+  }
+}
+
 describe('personAgentRefreshService', () => {
   it('enqueues import-linked refreshes and coalesces repeated pending reasons', () => {
     const db = setupDatabase()
@@ -464,6 +512,83 @@ describe('personAgentRefreshService', () => {
         memoryKey: 'topic.profile_facts',
         questionCount: 2,
         supportingTurnIds: ['turn-1', 'turn-2']
+      })
+    ])
+
+    db.close()
+  })
+
+  it('increments strategy profile version and records an audit event when refresh changes the strategy', () => {
+    const db = setupDatabase()
+    seedPromotionReadyPerson(db)
+
+    enqueuePersonAgentRefreshForCanonicalPeople(db, {
+      canonicalPersonIds: ['cp-1'],
+      reason: 'relationship_changed',
+      requestedAt: NOW
+    })
+
+    processNextPersonAgentRefresh(db, {
+      now: NOW
+    })
+
+    const initialAgent = getPersonAgentByCanonicalPersonId(db, {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(initialAgent?.strategyProfile).toEqual({
+      profileVersion: 1,
+      responseStyle: 'contextual',
+      evidencePreference: 'quote_first',
+      conflictBehavior: 'balanced'
+    })
+    expect(listPersonAgentAuditEvents(db, {
+      canonicalPersonId: 'cp-1'
+    })).toEqual([])
+
+    seedPendingConflictProfileCandidates(db, {
+      canonicalPersonId: 'cp-1',
+      createdAt: '2026-04-06T12:10:00.000Z'
+    })
+
+    enqueuePersonAgentRefreshForCanonicalPeople(db, {
+      canonicalPersonIds: ['cp-1'],
+      reason: 'review_conflict_changed',
+      requestedAt: '2026-04-06T12:15:00.000Z'
+    })
+
+    processNextPersonAgentRefresh(db, {
+      now: '2026-04-06T12:15:00.000Z'
+    })
+
+    const refreshedAgent = getPersonAgentByCanonicalPersonId(db, {
+      canonicalPersonId: 'cp-1'
+    })
+    const auditEvents = listPersonAgentAuditEvents(db, {
+      canonicalPersonId: 'cp-1'
+    })
+
+    expect(refreshedAgent?.strategyProfile).toEqual({
+      profileVersion: 2,
+      responseStyle: 'contextual',
+      evidencePreference: 'quote_first',
+      conflictBehavior: 'conflict_forward'
+    })
+    expect(auditEvents).toEqual([
+      expect.objectContaining({
+        eventKind: 'strategy_profile_updated',
+        payload: expect.objectContaining({
+          source: 'refresh_rebuild',
+          reasons: ['review_conflict_changed'],
+          changedFields: ['conflictBehavior'],
+          previousProfile: expect.objectContaining({
+            profileVersion: 1,
+            conflictBehavior: 'balanced'
+          }),
+          nextProfile: expect.objectContaining({
+            profileVersion: 2,
+            conflictBehavior: 'conflict_forward'
+          })
+        })
       })
     ])
 
