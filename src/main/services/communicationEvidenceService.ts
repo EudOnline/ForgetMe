@@ -277,6 +277,21 @@ export function listPersonCommunicationEvidence(
   return rankRows(listRowsForPersonScope(db, input.canonicalPersonId), input.question, input.limit ?? 3)
 }
 
+export function listPersonAgentCommunicationEvidence(
+  db: ArchiveDatabase,
+  input: {
+    canonicalPersonId: string
+    question?: string
+    limit?: number
+  }
+) {
+  return listPersonCommunicationEvidence(db, {
+    canonicalPersonId: input.canonicalPersonId,
+    question: input.question,
+    limit: input.limit ?? 2
+  })
+}
+
 export function listGroupCommunicationEvidence(
   db: ArchiveDatabase,
   input: {

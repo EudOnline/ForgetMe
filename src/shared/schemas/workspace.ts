@@ -103,6 +103,18 @@ export const askMemoryWorkspacePersistedInputSchema = z.object({
   sessionId: z.string().min(1).optional()
 })
 
+export const getPersonAgentStateInputSchema = z.object({
+  canonicalPersonId: z.string().min(1)
+})
+
+export const getPersonAgentMemorySummaryInputSchema = z.object({
+  canonicalPersonId: z.string().min(1)
+})
+
+export const listPersonAgentRefreshQueueInputSchema = z.object({
+  status: z.enum(['pending', 'processing', 'completed', 'failed']).optional()
+}).optional().default({})
+
 export const getPersonaDraftReviewByTurnInputSchema = z.object({
   turnId: z.string().min(1)
 })

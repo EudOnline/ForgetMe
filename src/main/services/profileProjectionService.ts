@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import type { ArchiveDatabase } from './db'
+import { enqueuePersonAgentRefreshForCanonicalPeople } from './personAgentRefreshService'
 import { resolveApprovedFieldAttribution } from './profileAttributionService'
 
 function findExistingQueueItem(db: ArchiveDatabase, candidateId: string) {
@@ -195,6 +196,11 @@ export function projectApprovedFieldToProfile(db: ArchiveDatabase, input: {
     createdAt,
     createdAt
   )
+  enqueuePersonAgentRefreshForCanonicalPeople(db, {
+    canonicalPersonIds: [attribution.canonicalPersonId],
+    reason: 'profile_projection',
+    requestedAt: createdAt
+  })
 
   return {
     status: 'projected' as const,

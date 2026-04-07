@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { askMemoryWorkspace } from '../../../src/main/services/memoryWorkspaceService'
 import { askMemoryWorkspacePersisted } from '../../../src/main/services/memoryWorkspaceSessionService'
-import { seedMemoryWorkspaceScenario } from './helpers/memoryWorkspaceScenario'
+import {
+  seedMemoryWorkspacePersonAgentScenario,
+  seedMemoryWorkspaceScenario
+} from './helpers/memoryWorkspaceScenario'
 
 describe('askMemoryWorkspace', () => {
   it('builds a person-scoped grounded answer from dossier facts and open conflicts', () => {
@@ -344,6 +347,82 @@ describe('askMemoryWorkspace', () => {
       scope: { kind: 'person', canonicalPersonId: 'missing' },
       question: 'hi'
     })).toBeNull()
+
+    db.close()
+  })
+
+  it('routes person-scoped factual questions through an active person agent when available', () => {
+    const { db, personAgent } = seedMemoryWorkspacePersonAgentScenario()
+
+    const result = askMemoryWorkspace(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '她的生日是什么？'
+    })
+
+    expect(result?.answer.summary).toContain('1997-02-03')
+    expect(result?.personAgentContext).toMatchObject({
+      consultedAgents: [{
+        personAgentId: personAgent.personAgentId,
+        canonicalPersonId: 'cp-1',
+        reason: 'scope_person'
+      }],
+      archiveRouting: {
+        strategy: 'person_agent',
+        reason: 'agent_consulted'
+      },
+      activeCanonicalPersonId: 'cp-1',
+      usedAnswerPack: true
+    })
+    expect(result?.answer.citations.some((citation) => citation.kind === 'file')).toBe(true)
+
+    db.close()
+  })
+
+  it('routes global questions through exactly one resolved promoted person agent', () => {
+    const { db, personAgent } = seedMemoryWorkspacePersonAgentScenario()
+
+    const result = askMemoryWorkspace(db, {
+      scope: { kind: 'global' },
+      question: 'Alice Chen 的生日是什么？'
+    })
+
+    expect(result?.title).toBe('Memory Workspace · Global')
+    expect(result?.answer.summary).toContain('1997-02-03')
+    expect(result?.personAgentContext).toMatchObject({
+      consultedAgents: [{
+        personAgentId: personAgent.personAgentId,
+        canonicalPersonId: 'cp-1',
+        reason: 'global_resolved_person'
+      }],
+      archiveRouting: {
+        strategy: 'person_agent',
+        reason: 'agent_consulted'
+      },
+      activeCanonicalPersonId: 'cp-1',
+      usedAnswerPack: true
+    })
+
+    db.close()
+  })
+
+  it('falls back to the archive path for non-promoted people while keeping routing metadata bounded', () => {
+    const { db } = seedMemoryWorkspacePersonAgentScenario()
+
+    const result = askMemoryWorkspace(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-3' },
+      question: '她的毕业学校是什么？'
+    })
+
+    expect(result?.answer.displayType).toBe('coverage_gap')
+    expect(result?.personAgentContext).toMatchObject({
+      consultedAgents: [],
+      archiveRouting: {
+        strategy: 'archive_fallback',
+        reason: 'no_active_person_agent'
+      },
+      activeCanonicalPersonId: 'cp-3',
+      usedAnswerPack: false
+    })
 
     db.close()
   })

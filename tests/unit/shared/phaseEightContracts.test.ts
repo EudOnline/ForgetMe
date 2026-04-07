@@ -34,6 +34,11 @@ import type {
   MemoryWorkspaceScope,
   MemoryWorkspaceSuggestedAction,
   MemoryWorkspaceWorkflowKind,
+  PersonAgentAnswerPack,
+  PersonAgentFactMemoryRecord,
+  PersonAgentInteractionMemoryRecord,
+  PersonAgentPromotionScore,
+  PersonAgentRecord,
   RunMemoryWorkspaceCompareInput,
   RunMemoryWorkspaceCompareMatrixInput,
   TransitionPersonaDraftReviewInput,
@@ -42,7 +47,10 @@ import type {
 import {
   askMemoryWorkspaceInputSchema,
   createPersonaDraftReviewFromTurnInputSchema,
+  getPersonAgentMemorySummaryInputSchema,
+  getPersonAgentStateInputSchema,
   getPersonaDraftReviewByTurnInputSchema,
+  listPersonAgentRefreshQueueInputSchema,
   memoryWorkspaceCompareMatrixIdSchema,
   memoryWorkspaceCompareSessionFilterSchema,
   memoryWorkspacePersonaDraftReviewStatusSchema,
@@ -147,7 +155,22 @@ describe('phase-eight memory workspace contracts', () => {
       guardrail,
       boundaryRedirect,
       communicationEvidence,
-      personaDraft
+      personaDraft,
+      personAgentContext: {
+        consultedAgents: [
+          {
+            personAgentId: 'pa-1',
+            canonicalPersonId: 'cp-1',
+            reason: 'scope_person'
+          }
+        ],
+        archiveRouting: {
+          strategy: 'person_agent',
+          reason: 'agent_consulted'
+        },
+        activeCanonicalPersonId: 'cp-1',
+        usedAnswerPack: true
+      }
     }
 
     expect(globalScope.kind).toBe('global')
@@ -161,6 +184,8 @@ describe('phase-eight memory workspace contracts', () => {
     expect(response.boundaryRedirect?.suggestedActions[0]?.kind).toBe('open_persona_draft_sandbox')
     expect(response.communicationEvidence?.excerpts[0]?.speakerDisplayName).toBe('Alice Chen')
     expect(response.personaDraft?.reviewState).toBe('review_required')
+    expect(response.personAgentContext?.consultedAgents[0]?.reason).toBe('scope_person')
+    expect(response.personAgentContext?.archiveRouting?.strategy).toBe('person_agent')
 
     expectTypeOf(response.scope).toEqualTypeOf<MemoryWorkspaceScope>()
     expectTypeOf(response.answer.citations).toEqualTypeOf<MemoryWorkspaceCitation[]>()
@@ -169,6 +194,7 @@ describe('phase-eight memory workspace contracts', () => {
     expectTypeOf(response.boundaryRedirect).toEqualTypeOf<MemoryWorkspaceBoundaryRedirect | null>()
     expectTypeOf(response.communicationEvidence).toEqualTypeOf<MemoryWorkspaceCommunicationEvidence | null>()
     expectTypeOf(response.personaDraft).toEqualTypeOf<MemoryWorkspacePersonaDraft | null>()
+    expectTypeOf(response.personAgentContext).toEqualTypeOf<MemoryWorkspaceResponse['personAgentContext']>()
     expectTypeOf<MemoryWorkspaceExpressionMode>().toEqualTypeOf<'grounded' | 'advice'>()
     expectTypeOf<ArchiveApi['askMemoryWorkspace']>().toEqualTypeOf<(input: AskMemoryWorkspaceInput) => Promise<MemoryWorkspaceResponse | null>>()
   })
@@ -649,6 +675,137 @@ describe('phase-eight memory workspace contracts', () => {
     })).toEqual({
       draftReviewId: 'review-1',
       status: 'in_review'
+    })
+  })
+
+  it('exports person-agent shared shapes and inspection schemas', () => {
+    const promotionScore: PersonAgentPromotionScore = {
+      canonicalPersonId: 'cp-1',
+      totalScore: 67,
+      thresholds: {
+        warming: 20,
+        active: 45,
+        highSignal: 70
+      },
+      signals: {
+        approvedFactCount: 9,
+        evidenceSourceCount: 14,
+        relationshipDegree: 6,
+        recentQuestionCount: 11,
+        recentCitationCount: 27
+      },
+      evaluatedAt: '2026-04-06T10:00:00.000Z'
+    }
+
+    const personAgent: PersonAgentRecord = {
+      personAgentId: 'pa-1',
+      canonicalPersonId: 'cp-1',
+      status: 'active',
+      promotionTier: 'active',
+      promotionScore: promotionScore.totalScore,
+      promotionReasonSummary: 'High approved-fact confidence with sustained recent asks.',
+      factsVersion: 3,
+      interactionVersion: 5,
+      lastRefreshedAt: '2026-04-06T10:10:00.000Z',
+      lastActivatedAt: '2026-04-06T10:12:00.000Z',
+      createdAt: '2026-04-05T18:00:00.000Z',
+      updatedAt: '2026-04-06T10:12:00.000Z'
+    }
+
+    const factMemoryRecord: PersonAgentFactMemoryRecord = {
+      memoryId: 'pafm-1',
+      personAgentId: 'pa-1',
+      canonicalPersonId: 'cp-1',
+      memoryKey: 'identity.birthday',
+      sectionKey: 'identity',
+      displayLabel: 'Birthday',
+      summaryValue: '1997-02-03',
+      memoryKind: 'fact',
+      confidence: 0.92,
+      conflictState: 'none',
+      freshnessAt: '2026-04-06T09:00:00.000Z',
+      sourceRefs: [{
+        kind: 'file',
+        id: 'file-1',
+        label: 'chat-1.json'
+      }],
+      sourceHash: 'hash-fact-1',
+      createdAt: '2026-04-06T09:00:00.000Z',
+      updatedAt: '2026-04-06T09:00:00.000Z'
+    }
+
+    const interactionMemoryRecord: PersonAgentInteractionMemoryRecord = {
+      memoryId: 'paim-1',
+      personAgentId: 'pa-1',
+      canonicalPersonId: 'cp-1',
+      memoryKey: 'topic.birthday',
+      topicLabel: 'Birthday checks',
+      summary: 'User repeatedly asks for current trusted birthday.',
+      questionCount: 4,
+      citationCount: 5,
+      outcomeKinds: ['answered'],
+      supportingTurnIds: ['turn-2', 'turn-4'],
+      lastQuestionAt: '2026-04-06T10:08:00.000Z',
+      lastCitationAt: '2026-04-06T10:08:01.000Z',
+      createdAt: '2026-04-06T09:40:00.000Z',
+      updatedAt: '2026-04-06T10:08:01.000Z'
+    }
+
+    const answerPack: PersonAgentAnswerPack = {
+      personAgentId: 'pa-1',
+      canonicalPersonId: 'cp-1',
+      question: 'xxx 的生日是什么？',
+      questionClassification: 'profile_fact',
+      candidateAnswer: 'Current approved birthday is 1997-02-03.',
+      supportingFacts: [{
+        memoryKey: factMemoryRecord.memoryKey,
+        label: factMemoryRecord.displayLabel,
+        value: factMemoryRecord.summaryValue,
+        memoryKind: factMemoryRecord.memoryKind
+      }],
+      supportingCitations: [{
+        citationId: 'citation-1',
+        kind: 'person',
+        targetId: 'cp-1',
+        label: 'Alice Chen'
+      }],
+      conflicts: [],
+      coverageGaps: [],
+      recentInteractionTopics: [{
+        topicLabel: interactionMemoryRecord.topicLabel,
+        summary: interactionMemoryRecord.summary,
+        questionCount: interactionMemoryRecord.questionCount
+      }],
+      generationReason: 'Resolved through active person-agent fact memory.',
+      memoryVersions: {
+        factsVersion: personAgent.factsVersion,
+        interactionVersion: personAgent.interactionVersion
+      }
+    }
+
+    expect(personAgent.status).toBe('active')
+    expect(factMemoryRecord.memoryKind).toBe('fact')
+    expect(interactionMemoryRecord.outcomeKinds).toContain('answered')
+    expect(answerPack.questionClassification).toBe('profile_fact')
+    expect(promotionScore.thresholds.active).toBe(45)
+
+    expect(getPersonAgentStateInputSchema.parse({
+      canonicalPersonId: 'cp-1'
+    })).toEqual({
+      canonicalPersonId: 'cp-1'
+    })
+
+    expect(getPersonAgentMemorySummaryInputSchema.parse({
+      canonicalPersonId: 'cp-1'
+    })).toEqual({
+      canonicalPersonId: 'cp-1'
+    })
+
+    expect(listPersonAgentRefreshQueueInputSchema.parse(undefined)).toEqual({})
+    expect(listPersonAgentRefreshQueueInputSchema.parse({
+      status: 'pending'
+    })).toEqual({
+      status: 'pending'
     })
   })
 })

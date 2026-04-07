@@ -101,6 +101,32 @@ describe('preload archiveApi bridge', () => {
     })
   })
 
+  it('exposes person-agent inspection methods through contextBridge', async () => {
+    await import('../../../src/preload/index')
+
+    expect(exposeInMainWorld).toHaveBeenCalledTimes(1)
+
+    const archiveApi = exposeInMainWorld.mock.calls[0]?.[1] as {
+      getPersonAgentState: (input: { canonicalPersonId: string }) => Promise<unknown>
+      listPersonAgentRefreshQueue: (input?: { status?: 'pending' | 'processing' | 'completed' | 'failed' }) => Promise<unknown>
+      getPersonAgentMemorySummary: (input: { canonicalPersonId: string }) => Promise<unknown>
+    }
+
+    await archiveApi.getPersonAgentState({ canonicalPersonId: 'cp-1' })
+    await archiveApi.listPersonAgentRefreshQueue({ status: 'pending' })
+    await archiveApi.getPersonAgentMemorySummary({ canonicalPersonId: 'cp-1' })
+
+    expect(invoke).toHaveBeenNthCalledWith(1, 'archive:getPersonAgentState', {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(invoke).toHaveBeenNthCalledWith(2, 'archive:listPersonAgentRefreshQueue', {
+      status: 'pending'
+    })
+    expect(invoke).toHaveBeenNthCalledWith(3, 'archive:getPersonAgentMemorySummary', {
+      canonicalPersonId: 'cp-1'
+    })
+  })
+
   it('exposes objective runtime methods and omits obsolete run-centric bridges', async () => {
     await import('../../../src/preload/index')
 

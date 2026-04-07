@@ -104,7 +104,22 @@ describe('phase-eight conversation persistence contracts', () => {
         },
         boundaryRedirect,
         communicationEvidence,
-        personaDraft
+        personaDraft,
+        personAgentContext: {
+          consultedAgents: [
+            {
+              personAgentId: 'pa-1',
+              canonicalPersonId: 'cp-1',
+              reason: 'scope_person'
+            }
+          ],
+          archiveRouting: {
+            strategy: 'person_agent',
+            reason: 'agent_consulted'
+          },
+          activeCanonicalPersonId: 'cp-1',
+          usedAnswerPack: true
+        }
       } satisfies MemoryWorkspaceResponse,
       provider: null,
       model: null,
@@ -126,6 +141,8 @@ describe('phase-eight conversation persistence contracts', () => {
     expect(detail.turns[0]?.response.boundaryRedirect?.kind).toBe('persona_request')
     expect(detail.turns[0]?.response.communicationEvidence?.excerpts[0]?.speakerDisplayName).toBe('Alice Chen')
     expect(detail.turns[0]?.response.personaDraft?.reviewState).toBe('review_required')
+    expect(detail.turns[0]?.response.personAgentContext?.consultedAgents[0]?.reason).toBe('scope_person')
+    expect(detail.turns[0]?.response.personAgentContext?.archiveRouting?.reason).toBe('agent_consulted')
 
     expectTypeOf<ArchiveApi['listMemoryWorkspaceSessions']>().toEqualTypeOf<
       (input?: { scope?: MemoryWorkspaceScope }) => Promise<MemoryWorkspaceSessionSummary[]>

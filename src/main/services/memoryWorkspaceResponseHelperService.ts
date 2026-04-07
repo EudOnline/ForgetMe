@@ -14,6 +14,7 @@ import type {
   MemoryWorkspaceResponse,
   MemoryWorkspaceSuggestedAction,
   MemoryWorkspaceWorkflowKind,
+  PersonAgentAnswerPack,
   PersonDossierEvidenceRef
 } from '../../shared/archiveContracts'
 
@@ -50,6 +51,34 @@ export function isFollowUpQuestion(question: string) {
 
 export function isPersonaRequestQuestion(question: string) {
   return hasKeyword(question, PERSONA_REQUEST_KEYWORDS)
+}
+
+export function isAdviceQuestion(question: string) {
+  return hasKeyword(question, ['建议', '怎么办', '怎么做', '下一步', 'advice', 'should', 'recommend'])
+}
+
+export function classifyPersonAgentQuestion(question: string): PersonAgentAnswerPack['questionClassification'] {
+  if (isPersonaRequestQuestion(question) || isAdviceQuestion(question)) {
+    return 'advice'
+  }
+
+  if (hasKeyword(question, ['关系', '朋友', '家人', '同学', '同事', 'relationship'])) {
+    return 'relationship'
+  }
+
+  if (hasKeyword(question, RECENT_KEYWORDS)) {
+    return 'recent_timeline'
+  }
+
+  if (hasKeyword(question, ['生日', '学校', '哪里人', '住', '是谁', '叫什么', '多大', 'profile', 'fact'])) {
+    return 'profile_fact'
+  }
+
+  if (hasKeyword(question, ['原话', '原文', 'quote', '摘录', '引用', '怎么表达', '怎么说', '说过'])) {
+    return 'quote_request'
+  }
+
+  return 'general'
 }
 
 export function createCitation(

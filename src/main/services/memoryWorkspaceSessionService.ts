@@ -8,6 +8,7 @@ import type {
   MemoryWorkspaceTurnRecord
 } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
+import { recordPersistedPersonAgentInteractionIfEligible } from './personAgentInteractionMemoryService'
 import { askMemoryWorkspace } from './memoryWorkspaceService'
 
 type SessionRow = {
@@ -282,6 +283,14 @@ export function askMemoryWorkspacePersisted(
       createdAt,
       sessionId
     )
+
+    recordPersistedPersonAgentInteractionIfEligible(db, {
+      scope: input.scope,
+      turnId,
+      question: input.question,
+      response,
+      createdAt
+    })
 
     db.exec('commit')
   } catch (error) {

@@ -5,10 +5,16 @@ import { describe, expect, it } from 'vitest'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
 import { setRelationshipLabel } from '../../../src/main/services/graphService'
 import {
+  getPersonAgentByCanonicalPersonId,
+  listPersonAgentInteractionMemories,
+  upsertPersonAgent
+} from '../../../src/main/services/governancePersistenceService'
+import {
   askMemoryWorkspacePersisted,
   getMemoryWorkspaceSession,
   listMemoryWorkspaceSessions
 } from '../../../src/main/services/memoryWorkspaceSessionService'
+import { seedMemoryWorkspacePersonAgentScenario } from './helpers/memoryWorkspaceScenario'
 
 function setupDatabase() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-memory-session-'))
@@ -254,6 +260,18 @@ function seedConversationScenario() {
   return db
 }
 
+function seedActivePersonAgent(db: ReturnType<typeof openDatabase>, canonicalPersonId: string) {
+  return upsertPersonAgent(db, {
+    canonicalPersonId,
+    status: 'active',
+    promotionTier: 'active',
+    promotionScore: 52,
+    promotionReasonSummary: 'High signal person.',
+    factsVersion: 1,
+    interactionVersion: 0
+  })
+}
+
 describe('memoryWorkspaceSessionService', () => {
   it('creates a new session and first turn for a persisted ask', () => {
     const db = seedConversationScenario()
@@ -454,6 +472,43 @@ describe('memoryWorkspaceSessionService', () => {
     db.close()
   })
 
+  it('writes aggregated person-agent interaction memory after persisted person asks', () => {
+    const db = seedConversationScenario()
+    const personAgent = seedActivePersonAgent(db, 'cp-1')
+
+    const firstTurn = askMemoryWorkspacePersisted(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '她过去是怎么表达记录和归档这类事的？给我看原话。',
+      expressionMode: 'grounded'
+    })
+    const secondTurn = askMemoryWorkspacePersisted(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '她以前怎么说记录这件事的？给我看原话。',
+      expressionMode: 'grounded'
+    })
+
+    const interactionMemories = listPersonAgentInteractionMemories(db, {
+      personAgentId: personAgent.personAgentId
+    })
+    const refreshedAgent = getPersonAgentByCanonicalPersonId(db, {
+      canonicalPersonId: 'cp-1'
+    })
+
+    expect(interactionMemories).toHaveLength(1)
+    expect(interactionMemories[0]).toMatchObject({
+      memoryKey: 'topic.past_expressions',
+      topicLabel: 'Past expressions',
+      questionCount: 2,
+      supportingTurnIds: [firstTurn!.turnId, secondTurn!.turnId]
+    })
+    expect(interactionMemories[0]?.citationCount).toBeGreaterThan(1)
+    expect(interactionMemories[0]?.summary).toContain('chat-1.json')
+    expect(interactionMemories[0]?.summary).not.toContain('她以前怎么说记录这件事的？给我看原话。')
+    expect(refreshedAgent?.interactionVersion).toBe(2)
+
+    db.close()
+  })
+
   it('persists reviewed persona draft sandbox turns for replay', () => {
     const db = seedConversationScenario()
 
@@ -495,6 +550,34 @@ describe('memoryWorkspaceSessionService', () => {
       question: '现在档案库里最值得优先关注的是什么？',
       sessionId: 'missing-session'
     })).toBeNull()
+
+    db.close()
+  })
+
+  it('persists person-agent consultation metadata in replayable turns', () => {
+    const { db, personAgent } = seedMemoryWorkspacePersonAgentScenario()
+
+    const turn = askMemoryWorkspacePersisted(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-1' },
+      question: '她的生日是什么？'
+    })
+
+    const detail = getMemoryWorkspaceSession(db, { sessionId: turn!.sessionId })
+
+    expect(turn?.response.personAgentContext).toMatchObject({
+      consultedAgents: [{
+        personAgentId: personAgent.personAgentId,
+        canonicalPersonId: 'cp-1',
+        reason: 'scope_person'
+      }],
+      archiveRouting: {
+        strategy: 'person_agent',
+        reason: 'agent_consulted'
+      },
+      activeCanonicalPersonId: 'cp-1',
+      usedAnswerPack: true
+    })
+    expect(detail?.turns[0]?.response.personAgentContext).toEqual(turn?.response.personAgentContext)
 
     db.close()
   })

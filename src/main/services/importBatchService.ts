@@ -9,6 +9,7 @@ import {
   seedE2EDossierConflictFixture,
   seedE2EGroupPortraitFixture,
   seedE2EMultimodalReviewFixture,
+  seedE2EPersonAgentFixture,
   seedE2ERunnerProfileFixture,
   seedE2ESafeBatchFixture
 } from './e2eMultimodalFixtureService'
@@ -16,6 +17,7 @@ import { enqueueEnrichmentJobs } from './enrichmentDispatchService'
 import { openDatabase, runMigrations } from './db'
 import { parseFrozenFile } from './parserRegistry'
 import { collectPeopleAnchors, persistPeopleAnchors } from './peopleService'
+import { enqueuePersonAgentRefreshesForBatch } from './personAgentRefreshService'
 import { persistFileBatchRelations, persistPeopleFileRelations } from './relationService'
 import { freezeOriginal } from './vaultService'
 
@@ -150,6 +152,11 @@ export async function createImportBatch(input: {
   })))
   persistFileBatchRelations(db, batchId, files.map((file) => file.fileId))
   persistPeopleFileRelations(db, anchors)
+  enqueuePersonAgentRefreshesForBatch(db, {
+    batchId,
+    reason: 'import_batch',
+    requestedAt: createdAt
+  })
 
   if (process.env.FORGETME_E2E_MULTIMODAL_FIXTURE === '1' && files.length > 0 && anchors.length > 0) {
     seedE2EMultimodalReviewFixture(db, { fileId: files[0].fileId })
@@ -165,6 +172,10 @@ export async function createImportBatch(input: {
 
   if (process.env.FORGETME_E2E_GROUP_PORTRAIT_FIXTURE === '1' && files.length > 0 && anchors.length > 0) {
     seedE2EGroupPortraitFixture(db, { fileId: files[0].fileId })
+  }
+
+  if (process.env.FORGETME_E2E_PERSON_AGENT_FIXTURE === '1' && files.length > 0 && anchors.length > 0) {
+    seedE2EPersonAgentFixture(db, { fileId: files[0].fileId })
   }
 
   if (process.env.FORGETME_E2E_SAFE_BATCH_FIXTURE === '1' && files.length > 0 && anchors.length > 0) {

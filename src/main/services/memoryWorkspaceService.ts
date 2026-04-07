@@ -17,6 +17,10 @@ import {
   toMemoryCitationFromEvidenceRef
 } from './memoryWorkspaceResponseService'
 import { getPersonDossier } from './personDossierService'
+import {
+  resolvePersonAgentRoute,
+  type PersonAgentRouteDecoration
+} from './personAgentRoutingService'
 import { listReviewConflictGroups, listReviewWorkbenchItems } from './reviewWorkbenchReadService'
 import { getPeopleList } from './timelineService'
 
@@ -139,7 +143,8 @@ export function buildPersonContextPack(
   question: string,
   expressionMode?: MemoryWorkspaceExpressionMode,
   workflowKind?: MemoryWorkspaceWorkflowKind,
-  priorTurnContext?: MemoryWorkspacePriorTurnContext[]
+  priorTurnContext?: MemoryWorkspacePriorTurnContext[],
+  routeDecoration?: PersonAgentRouteDecoration | null
 ): MemoryWorkspaceResponse | null {
   const dossier = getPersonDossier(db, { canonicalPersonId })
   if (!dossier) {
@@ -147,12 +152,13 @@ export function buildPersonContextPack(
   }
 
   const contextCards = [
+    ...(routeDecoration?.injectedContextCards ?? []),
     buildPersonSummaryCard(db, canonicalPersonId),
     buildPersonTimelineCard(db, canonicalPersonId),
     buildPersonConflictCard(db, canonicalPersonId)
   ].filter((card): card is MemoryWorkspaceContextCard => Boolean(card))
 
-  return createResponse({
+  const response = createResponse({
     db,
     scope: { kind: 'person', canonicalPersonId },
     question,
@@ -160,8 +166,16 @@ export function buildPersonContextPack(
     workflowKind,
     title: `Memory Workspace · ${dossier.identityCard.primaryDisplayName}`,
     contextCards,
+    communicationEvidenceScope: routeDecoration?.communicationEvidenceScope,
     priorTurnContext
   })
+
+  return routeDecoration
+    ? {
+        ...response,
+        personAgentContext: routeDecoration.personAgentContext
+      }
+    : response
 }
 
 function buildGroupSummaryCard(db: ArchiveDatabase, anchorPersonId: string) {
@@ -360,16 +374,18 @@ export function buildGlobalContextPack(
   question: string,
   expressionMode?: MemoryWorkspaceExpressionMode,
   workflowKind?: MemoryWorkspaceWorkflowKind,
-  priorTurnContext?: MemoryWorkspacePriorTurnContext[]
+  priorTurnContext?: MemoryWorkspacePriorTurnContext[],
+  routeDecoration?: PersonAgentRouteDecoration | null
 ): MemoryWorkspaceResponse {
   const contextCards = [
+    ...(routeDecoration?.injectedContextCards ?? []),
     buildGlobalPeopleCard(db),
     buildGlobalGroupCard(db),
     buildGlobalReviewPressureCard(db),
     buildGlobalDecisionCard(db)
   ]
 
-  return createResponse({
+  const response = createResponse({
     db,
     scope: { kind: 'global' },
     question,
@@ -377,8 +393,16 @@ export function buildGlobalContextPack(
     workflowKind,
     title: 'Memory Workspace · Global',
     contextCards,
+    communicationEvidenceScope: routeDecoration?.communicationEvidenceScope,
     priorTurnContext
   })
+
+  return routeDecoration
+    ? {
+        ...response,
+        personAgentContext: routeDecoration.personAgentContext
+      }
+    : response
 }
 
 export function askMemoryWorkspace(
@@ -386,17 +410,35 @@ export function askMemoryWorkspace(
   input: AskMemoryWorkspaceInternalInput
 ): MemoryWorkspaceResponse | null {
   if (input.scope.kind === 'global') {
-    return buildGlobalContextPack(db, input.question, input.expressionMode, input.workflowKind, input.priorTurnContext)
+    const routeDecoration = resolvePersonAgentRoute(db, {
+      scope: input.scope,
+      question: input.question
+    })
+
+    return buildGlobalContextPack(
+      db,
+      input.question,
+      input.expressionMode,
+      input.workflowKind,
+      input.priorTurnContext,
+      routeDecoration
+    )
   }
 
   if (input.scope.kind === 'person') {
+    const routeDecoration = resolvePersonAgentRoute(db, {
+      scope: input.scope,
+      question: input.question
+    })
+
     return buildPersonContextPack(
       db,
       input.scope.canonicalPersonId,
       input.question,
       input.expressionMode,
       input.workflowKind,
-      input.priorTurnContext
+      input.priorTurnContext,
+      routeDecoration
     )
   }
 
