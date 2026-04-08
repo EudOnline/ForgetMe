@@ -133,6 +133,41 @@ export function createWorkspaceModule(appPaths: AppPaths) {
         }
       })
     },
+    async getPersonAgentInspectionBundle(input: { canonicalPersonId: string }) {
+      return this.withArchiveDatabase((db) => {
+        const state = getPersonAgentByCanonicalPersonId(db, input)
+        const factSummary = getPersonAgentFactMemorySummary(db, input)
+        const interactionMemories = listPersonAgentInteractionMemories(db, {
+          canonicalPersonId: input.canonicalPersonId
+        })
+        const refreshQueue = listPersonAgentRefreshQueue(db, {
+          canonicalPersonId: input.canonicalPersonId
+        })
+        const auditEvents = listPersonAgentAuditEvents(db, {
+          canonicalPersonId: input.canonicalPersonId
+        })
+
+        const memorySummary = factSummary || interactionMemories.length > 0
+          ? {
+              canonicalPersonId: input.canonicalPersonId,
+              factSummary,
+              interactionMemories
+            }
+          : null
+
+        if (!state && !memorySummary && refreshQueue.length === 0 && auditEvents.length === 0) {
+          return null
+        }
+
+        return {
+          canonicalPersonId: input.canonicalPersonId,
+          state,
+          memorySummary,
+          refreshQueue,
+          auditEvents
+        }
+      })
+    },
     async runCompare(input: Parameters<typeof runMemoryWorkspaceCompare>[1]) {
       return this.withArchiveDatabase((db) => runMemoryWorkspaceCompare(db, input))
     },

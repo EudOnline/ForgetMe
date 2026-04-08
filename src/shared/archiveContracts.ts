@@ -764,6 +764,14 @@ export type PersonAgentMemorySummary = {
   interactionMemories: PersonAgentInteractionMemoryRecord[]
 }
 
+export type PersonAgentInspectionBundle = {
+  canonicalPersonId: string
+  state: PersonAgentRecord | null
+  memorySummary: PersonAgentMemorySummary | null
+  refreshQueue: PersonAgentRefreshQueueRecord[]
+  auditEvents: PersonAgentAuditEventRecord[]
+}
+
 export type PersonAgentAnswerPack = {
   personAgentId: string
   canonicalPersonId: string
@@ -920,6 +928,10 @@ export type GetPersonAgentStateInput = {
 }
 
 export type GetPersonAgentMemorySummaryInput = {
+  canonicalPersonId: string
+}
+
+export type GetPersonAgentInspectionBundleInput = {
   canonicalPersonId: string
 }
 
@@ -1877,6 +1889,7 @@ export interface ArchiveApi {
   listPersonAgentRefreshQueue: (input?: ListPersonAgentRefreshQueueInput) => Promise<PersonAgentRefreshQueueRecord[]>
   listPersonAgentAuditEvents: (input?: ListPersonAgentAuditEventsInput) => Promise<PersonAgentAuditEventRecord[]>
   getPersonAgentMemorySummary: (input: GetPersonAgentMemorySummaryInput) => Promise<PersonAgentMemorySummary | null>
+  getPersonAgentInspectionBundle: (input: GetPersonAgentInspectionBundleInput) => Promise<PersonAgentInspectionBundle | null>
   runMemoryWorkspaceCompare: (input: RunMemoryWorkspaceCompareInput) => Promise<MemoryWorkspaceCompareSessionDetail | null>
   listMemoryWorkspaceCompareSessions: (input?: { scope?: MemoryWorkspaceScope }) => Promise<MemoryWorkspaceCompareSessionSummary[]>
   getMemoryWorkspaceCompareSession: (compareSessionId: string) => Promise<MemoryWorkspaceCompareSessionDetail | null>

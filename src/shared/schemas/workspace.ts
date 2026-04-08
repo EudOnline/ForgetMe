@@ -111,6 +111,10 @@ export const getPersonAgentMemorySummaryInputSchema = z.object({
   canonicalPersonId: z.string().min(1)
 })
 
+export const getPersonAgentInspectionBundleInputSchema = z.object({
+  canonicalPersonId: z.string().min(1)
+})
+
 export const listPersonAgentRefreshQueueInputSchema = z.object({
   status: z.enum(['pending', 'processing', 'completed', 'failed']).optional()
 }).optional().default({})

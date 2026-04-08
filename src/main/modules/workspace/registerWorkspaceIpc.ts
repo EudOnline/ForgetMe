@@ -4,6 +4,7 @@ import {
   askMemoryWorkspacePersistedInputSchema,
   approvedPersonaDraftReviewIdSchema,
   exportApprovedPersonaDraftInputSchema,
+  getPersonAgentInspectionBundleInputSchema,
   listApprovedPersonaDraftHandoffsInputSchema,
   listPersonAgentAuditEventsInputSchema,
   listApprovedPersonaDraftHostedShareLinksInputSchema,
@@ -43,6 +44,7 @@ export function registerWorkspaceIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:listPersonAgentRefreshQueue')
   ipcMain.removeHandler('archive:listPersonAgentAuditEvents')
   ipcMain.removeHandler('archive:getPersonAgentMemorySummary')
+  ipcMain.removeHandler('archive:getPersonAgentInspectionBundle')
   ipcMain.removeHandler('archive:runMemoryWorkspaceCompare')
   ipcMain.removeHandler('archive:listMemoryWorkspaceCompareSessions')
   ipcMain.removeHandler('archive:getMemoryWorkspaceCompareSession')
@@ -108,6 +110,11 @@ export function registerWorkspaceIpc(appPaths: AppPaths) {
   ipcMain.handle('archive:getPersonAgentMemorySummary', async (_event, payload) => {
     const input = getPersonAgentMemorySummaryInputSchema.parse(payload)
     return workspaceModule.getPersonAgentMemorySummary(input)
+  })
+
+  ipcMain.handle('archive:getPersonAgentInspectionBundle', async (_event, payload) => {
+    const input = getPersonAgentInspectionBundleInputSchema.parse(payload)
+    return workspaceModule.getPersonAgentInspectionBundle(input)
   })
 
   ipcMain.handle('archive:runMemoryWorkspaceCompare', async (_event, payload) => {

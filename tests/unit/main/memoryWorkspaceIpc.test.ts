@@ -491,6 +491,140 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
     ])
     expect(close).toHaveBeenCalled()
   })
+
+  it('returns a bundled person-agent inspection payload through ipc', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    getPersonAgentByCanonicalPersonId.mockReturnValue({
+      personAgentId: 'agent-1',
+      canonicalPersonId: 'cp-1',
+      status: 'active',
+      promotionTier: 'high_signal',
+      promotionScore: 81,
+      promotionReasonSummary: 'High-signal person agent.',
+      strategyProfile: {
+        profileVersion: 2,
+        responseStyle: 'contextual',
+        evidencePreference: 'quote_first',
+        conflictBehavior: 'conflict_forward'
+      },
+      factsVersion: 3,
+      interactionVersion: 4,
+      lastRefreshedAt: '2026-04-08T01:00:00.000Z',
+      lastActivatedAt: '2026-04-08T00:30:00.000Z',
+      createdAt: '2026-04-07T00:00:00.000Z',
+      updatedAt: '2026-04-08T01:00:00.000Z'
+    })
+    getPersonAgentFactMemorySummary.mockReturnValue({
+      personAgentId: 'agent-1',
+      canonicalPersonId: 'cp-1',
+      factsVersion: 3,
+      counts: {
+        facts: 1,
+        timeline: 0,
+        relationships: 0,
+        conflicts: 1,
+        coverageGaps: 0
+      },
+      facts: [],
+      timeline: [],
+      relationships: [],
+      conflicts: [],
+      coverageGaps: []
+    })
+    listPersonAgentInteractionMemories.mockReturnValue([
+      {
+        memoryId: 'im-1',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        memoryKey: 'topic.profile_facts',
+        topicLabel: 'Profile facts',
+        summary: 'Birthday asked 3 times.',
+        questionCount: 3,
+        citationCount: 1,
+        outcomeKinds: ['answered'],
+        supportingTurnIds: ['turn-1'],
+        lastQuestionAt: '2026-04-08T00:00:00.000Z',
+        lastCitationAt: '2026-04-08T00:00:00.000Z',
+        createdAt: '2026-04-08T00:00:00.000Z',
+        updatedAt: '2026-04-08T00:00:00.000Z'
+      }
+    ])
+    listPersonAgentRefreshQueue.mockReturnValue([
+      {
+        refreshId: 'refresh-1',
+        canonicalPersonId: 'cp-1',
+        personAgentId: 'agent-1',
+        status: 'pending',
+        reasons: ['review_conflict_changed'],
+        requestedAt: '2026-04-08T01:10:00.000Z',
+        startedAt: null,
+        completedAt: null,
+        lastError: null,
+        createdAt: '2026-04-08T01:10:00.000Z',
+        updatedAt: '2026-04-08T01:10:00.000Z'
+      }
+    ])
+    listPersonAgentAuditEvents.mockReturnValue([
+      {
+        auditEventId: 'audit-1',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        eventKind: 'strategy_profile_updated',
+        payload: {
+          source: 'refresh_rebuild',
+          changedFields: ['conflictBehavior']
+        },
+        createdAt: '2026-04-08T01:00:00.000Z'
+      }
+    ])
+
+    registerWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:getPersonAgentInspectionBundle')
+    const result = await handler?.({}, { canonicalPersonId: 'cp-1' })
+
+    expect(getPersonAgentByCanonicalPersonId).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(getPersonAgentFactMemorySummary).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(listPersonAgentInteractionMemories).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(listPersonAgentRefreshQueue).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(listPersonAgentAuditEvents).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(result).toEqual(expect.objectContaining({
+      canonicalPersonId: 'cp-1',
+      state: expect.objectContaining({
+        personAgentId: 'agent-1',
+        status: 'active'
+      }),
+      memorySummary: expect.objectContaining({
+        interactionMemories: [
+          expect.objectContaining({
+            memoryKey: 'topic.profile_facts'
+          })
+        ]
+      }),
+      refreshQueue: [
+        expect.objectContaining({
+          refreshId: 'refresh-1'
+        })
+      ],
+      auditEvents: [
+        expect.objectContaining({
+          auditEventId: 'audit-1'
+        })
+      ]
+    }))
+    expect(close).toHaveBeenCalled()
+  })
 })
 
 describe('registerWorkspaceIpc approved handoff handlers', () => {
