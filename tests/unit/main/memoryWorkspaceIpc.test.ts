@@ -615,6 +615,23 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
           changedFields: ['conflictBehavior']
         })
       }),
+      highlights: [
+        expect.objectContaining({
+          kind: 'refresh_pending',
+          createdAt: '2026-04-08T01:10:00.000Z',
+          title: 'Pending refresh queued'
+        }),
+        expect.objectContaining({
+          kind: 'strategy_change',
+          createdAt: '2026-04-08T01:00:00.000Z',
+          title: 'Strategy profile updated'
+        }),
+        expect.objectContaining({
+          kind: 'interaction_hotspot',
+          createdAt: '2026-04-08T00:00:00.000Z',
+          title: 'Recurring interaction topic'
+        })
+      ],
       state: expect.objectContaining({
         personAgentId: 'agent-1',
         status: 'active'

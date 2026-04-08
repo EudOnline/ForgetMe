@@ -767,6 +767,7 @@ export type PersonAgentMemorySummary = {
 export type PersonAgentInspectionBundle = {
   canonicalPersonId: string
   overview: PersonAgentInspectionOverview
+  highlights: PersonAgentInspectionHighlight[]
   state: PersonAgentRecord | null
   memorySummary: PersonAgentMemorySummary | null
   refreshQueue: PersonAgentRefreshQueueRecord[]
@@ -786,6 +787,14 @@ export type PersonAgentInspectionOverview = {
     source: string | null
     changedFields: string[]
   } | null
+}
+
+export type PersonAgentInspectionHighlight = {
+  kind: 'refresh_pending' | 'refresh_failed' | 'strategy_change' | 'interaction_hotspot'
+  createdAt: string
+  title: string
+  summary: string
+  emphasis: 'high' | 'medium'
 }
 
 export type PersonAgentAnswerPack = {

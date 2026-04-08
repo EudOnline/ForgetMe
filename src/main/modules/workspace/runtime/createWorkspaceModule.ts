@@ -55,6 +55,7 @@ import {
 import { listApprovedDraftSendDestinations } from '../../../services/approvedDraftSendDestinationService'
 import type {
   PersonAgentAuditEventRecord,
+  PersonAgentInspectionHighlight,
   PersonAgentMemorySummary,
   PersonAgentRecord,
   PersonAgentRefreshQueueRecord
@@ -114,6 +115,79 @@ function buildPersonAgentInspectionOverview(input: {
         }
       : null
   }
+}
+
+function buildPersonAgentInspectionHighlights(input: {
+  refreshQueue: PersonAgentRefreshQueueRecord[]
+  auditEvents: PersonAgentAuditEventRecord[]
+  memorySummary: PersonAgentMemorySummary | null
+}) {
+  const refreshHighlights = input.refreshQueue.flatMap((row) => {
+    if (row.status === 'pending') {
+      return [{
+        kind: 'refresh_pending',
+        createdAt: row.requestedAt,
+        title: 'Pending refresh queued',
+        summary: row.reasons.length > 0
+          ? `Waiting on refresh for: ${row.reasons.join(', ')}.`
+          : 'Waiting on refresh processing.',
+        emphasis: 'high'
+      } satisfies PersonAgentInspectionHighlight]
+    }
+
+    if (row.status === 'failed') {
+      return [{
+        kind: 'refresh_failed',
+        createdAt: row.completedAt ?? row.updatedAt,
+        title: 'Refresh failed',
+        summary: row.lastError ?? 'The latest person-agent refresh failed.',
+        emphasis: 'high'
+      } satisfies PersonAgentInspectionHighlight]
+    }
+
+    return [] as PersonAgentInspectionHighlight[]
+  })
+
+  const strategyHighlights = input.auditEvents.flatMap((event) => {
+    if (event.eventKind !== 'strategy_profile_updated') {
+      return [] as PersonAgentInspectionHighlight[]
+    }
+
+    const source = typeof event.payload.source === 'string' ? event.payload.source : 'unknown source'
+    const changedFields = Array.isArray(event.payload.changedFields)
+      ? event.payload.changedFields.filter((value): value is string => typeof value === 'string')
+      : []
+
+    return [{
+      kind: 'strategy_change',
+      createdAt: event.createdAt,
+      title: 'Strategy profile updated',
+      summary: changedFields.length > 0
+        ? `Changed ${changedFields.join(', ')} via ${source}.`
+        : `Strategy updated via ${source}.`,
+      emphasis: 'medium'
+    } satisfies PersonAgentInspectionHighlight]
+  })
+
+  const interactionHighlights = (input.memorySummary?.interactionMemories ?? [])
+    .filter((row) => row.questionCount > 0)
+    .sort((left, right) => {
+      const leftAt = left.lastQuestionAt ?? left.updatedAt
+      const rightAt = right.lastQuestionAt ?? right.updatedAt
+      return rightAt.localeCompare(leftAt)
+    })
+    .slice(0, 2)
+    .map((row) => ({
+      kind: 'interaction_hotspot',
+      createdAt: row.lastQuestionAt ?? row.updatedAt,
+      title: 'Recurring interaction topic',
+      summary: `${row.topicLabel}: ${row.summary}`,
+      emphasis: row.questionCount >= 3 ? 'high' : 'medium'
+    } satisfies PersonAgentInspectionHighlight))
+
+  return [...refreshHighlights, ...strategyHighlights, ...interactionHighlights]
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .slice(0, 6)
 }
 
 async function selectDirectory(envKey: string) {
@@ -210,6 +284,11 @@ export function createWorkspaceModule(appPaths: AppPaths) {
             memorySummary,
             refreshQueue,
             auditEvents
+          }),
+          highlights: buildPersonAgentInspectionHighlights({
+            refreshQueue,
+            auditEvents,
+            memorySummary
           }),
           state,
           memorySummary,
