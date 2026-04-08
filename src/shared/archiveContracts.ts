@@ -765,6 +765,25 @@ export type PersonAgentRuntimeStateRecord = {
   updatedAt: string
 }
 
+export type PersonAgentTaskRecord = {
+  taskId: string
+  personAgentId: string
+  canonicalPersonId: string
+  taskKind:
+    | 'await_refresh'
+    | 'resolve_conflict'
+    | 'fill_coverage_gap'
+    | 'expand_topic'
+    | 'review_strategy_change'
+  status: 'pending'
+  priority: 'high' | 'medium'
+  title: string
+  summary: string
+  sourceRef: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
 export type PersonAgentRefreshQueueRecord = {
   refreshId: string
   canonicalPersonId: string
@@ -808,6 +827,7 @@ export type PersonAgentInspectionBundle = {
   overview: PersonAgentInspectionOverview
   recommendations: PersonAgentInspectionRecommendations
   highlights: PersonAgentInspectionHighlight[]
+  tasks: PersonAgentTaskRecord[]
   state: PersonAgentRecord | null
   memorySummary: PersonAgentMemorySummary | null
   refreshQueue: PersonAgentRefreshQueueRecord[]

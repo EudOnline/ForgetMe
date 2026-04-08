@@ -31,6 +31,7 @@ const {
   getPersonAgentByCanonicalPersonId,
   listPersonAgentAuditEvents,
   listPersonAgentRefreshQueue,
+  listPersonAgentTasks,
   getPersonAgentFactMemorySummary,
   listPersonAgentInteractionMemories
 } = vi.hoisted(() => ({
@@ -60,6 +61,7 @@ const {
   getPersonAgentByCanonicalPersonId: vi.fn(),
   listPersonAgentAuditEvents: vi.fn(),
   listPersonAgentRefreshQueue: vi.fn(),
+  listPersonAgentTasks: vi.fn(),
   getPersonAgentFactMemorySummary: vi.fn(),
   listPersonAgentInteractionMemories: vi.fn()
 }))
@@ -144,6 +146,7 @@ vi.mock('../../../src/main/services/governancePersistenceService', async (import
     getPersonAgentByCanonicalPersonId,
     listPersonAgentAuditEvents,
     listPersonAgentRefreshQueue,
+    listPersonAgentTasks,
     listPersonAgentInteractionMemories
   }
 })
@@ -214,6 +217,7 @@ describe('registerWorkspaceIpc session handlers', () => {
     getPersonAgentByCanonicalPersonId.mockReset()
     listPersonAgentAuditEvents.mockReset()
     listPersonAgentRefreshQueue.mockReset()
+    listPersonAgentTasks.mockReset()
     getPersonAgentFactMemorySummary.mockReset()
     listPersonAgentInteractionMemories.mockReset()
   })
@@ -614,6 +618,23 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
         createdAt: '2026-04-08T00:00:00.000Z'
       }
     ])
+    listPersonAgentTasks.mockReturnValue([
+      {
+        taskId: 'task-1',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        taskKind: 'await_refresh',
+        status: 'pending',
+        priority: 'high',
+        title: 'Await queued refresh',
+        summary: 'Wait for refresh to finish before acting on: review_conflict_changed.',
+        sourceRef: {
+          refreshId: 'refresh-1'
+        },
+        createdAt: '2026-04-08T01:10:00.000Z',
+        updatedAt: '2026-04-08T01:10:00.000Z'
+      }
+    ])
 
     registerWorkspaceIpc(appPathsFixture())
 
@@ -764,6 +785,9 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
     expect(listPersonAgentAuditEvents).toHaveBeenCalledWith(expect.anything(), {
       canonicalPersonId: 'cp-1'
     })
+    expect(listPersonAgentTasks).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
     expect(result).toEqual(expect.objectContaining({
       canonicalPersonId: 'cp-1',
       overview: expect.objectContaining({
@@ -815,6 +839,12 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
           title: 'Recurring interaction topic'
         })
       ],
+      tasks: [
+        expect.objectContaining({
+          taskId: 'task-1',
+          taskKind: 'await_refresh'
+        })
+      ],
       state: expect.objectContaining({
         personAgentId: 'agent-1',
         status: 'active'
@@ -863,6 +893,7 @@ describe('registerWorkspaceIpc approved handoff handlers', () => {
     getPersonAgentConsultationRuntimeState.mockReset()
     getPersonAgentConsultationSession.mockReset()
     listPersonAgentConsultationSessions.mockReset()
+    listPersonAgentTasks.mockReset()
     listApprovedPersonaDraftProviderSends.mockReset()
     retryApprovedPersonaDraftProviderSend.mockReset()
     sendApprovedPersonaDraftToProvider.mockReset()

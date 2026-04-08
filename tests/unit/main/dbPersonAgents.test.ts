@@ -11,6 +11,7 @@ import {
   listPersonAgentConsultationSessions,
   listPersonAgentFactMemories,
   listPersonAgentRefreshQueue,
+  listPersonAgentTasks,
   listPersonAgents,
   getPersonAgentRuntimeState,
   replacePersonAgentFactMemories,
@@ -35,7 +36,8 @@ describe('person-agent persistence migrations', () => {
       'person_agent_audit_events',
       'person_agent_consultation_sessions',
       'person_agent_consultation_turns',
-      'person_agent_runtime_state'
+      'person_agent_runtime_state',
+      'person_agent_tasks'
     ]))
 
     const personAgentColumns = db.prepare("pragma table_info('person_agents')").all() as Array<{ name: string }>
@@ -101,6 +103,15 @@ describe('person-agent persistence migrations', () => {
     expect(consultationIndexes.map((row) => row.name)).toEqual(expect.arrayContaining([
       'idx_person_agent_consultation_sessions_person_agent_id',
       'idx_person_agent_consultation_sessions_canonical_person_id'
+    ]))
+
+    const taskIndexes = db.prepare(
+      "select name from sqlite_master where type='index' and tbl_name='person_agent_tasks'"
+    ).all() as Array<{ name: string }>
+    expect(taskIndexes.map((row) => row.name)).toEqual(expect.arrayContaining([
+      'idx_person_agent_tasks_person_agent_id',
+      'idx_person_agent_tasks_canonical_person_id',
+      'idx_person_agent_tasks_status_priority'
     ]))
 
     db.close()
@@ -339,6 +350,9 @@ describe('person-agent persistence migrations', () => {
     expect(getPersonAgentRuntimeState(db, {
       canonicalPersonId: 'cp-1'
     })).toBeNull()
+    expect(listPersonAgentTasks(db, {
+      canonicalPersonId: 'cp-1'
+    })).toEqual([])
 
     db.close()
   })

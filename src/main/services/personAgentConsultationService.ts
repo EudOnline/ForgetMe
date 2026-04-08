@@ -15,6 +15,7 @@ import {
   upsertPersonAgentRuntimeState
 } from './governancePersistenceService'
 import { buildPersonAgentAnswerPack } from './personAgentAnswerPackService'
+import { syncPersonAgentTasks } from './personAgentTaskService'
 
 function resolveSessionTitle(db: ArchiveDatabase, canonicalPersonId: string) {
   const row = db.prepare(
@@ -110,6 +111,11 @@ export function askPersonAgentConsultationPersisted(db: ArchiveDatabase, input: 
     lastAnswerDigest: summarizeAnswerDigest(answerPack.candidateAnswer),
     lastConsultedAt: now,
     updatedAt: now
+  })
+
+  syncPersonAgentTasks(db, {
+    canonicalPersonId: input.canonicalPersonId,
+    now
   })
 
   return turn

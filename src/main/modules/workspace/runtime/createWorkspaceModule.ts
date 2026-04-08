@@ -29,7 +29,8 @@ import {
   getPersonAgentByCanonicalPersonId,
   listPersonAgentAuditEvents,
   listPersonAgentInteractionMemories,
-  listPersonAgentRefreshQueue
+  listPersonAgentRefreshQueue,
+  listPersonAgentTasks
 } from '../../../services/governancePersistenceService'
 import { getPersonAgentFactMemorySummary } from '../../../services/personAgentFactMemoryService'
 import {
@@ -397,13 +398,16 @@ export function createWorkspaceModule(appPaths: AppPaths) {
         const auditEvents = listPersonAgentAuditEvents(db, {
           canonicalPersonId: input.canonicalPersonId
         })
+        const tasks = listPersonAgentTasks(db, {
+          canonicalPersonId: input.canonicalPersonId
+        })
         const memorySummary = buildPersonAgentMemorySummary({
           canonicalPersonId: input.canonicalPersonId,
           factSummary,
           interactionMemories
         })
 
-        if (!state && !memorySummary && refreshQueue.length === 0 && auditEvents.length === 0) {
+        if (!state && !memorySummary && refreshQueue.length === 0 && auditEvents.length === 0 && tasks.length === 0) {
           return null
         }
 
@@ -429,6 +433,7 @@ export function createWorkspaceModule(appPaths: AppPaths) {
             auditEvents,
             memorySummary
           }),
+          tasks,
           state,
           memorySummary,
           refreshQueue,
