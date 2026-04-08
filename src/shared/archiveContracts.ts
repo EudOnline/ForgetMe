@@ -766,10 +766,26 @@ export type PersonAgentMemorySummary = {
 
 export type PersonAgentInspectionBundle = {
   canonicalPersonId: string
+  overview: PersonAgentInspectionOverview
   state: PersonAgentRecord | null
   memorySummary: PersonAgentMemorySummary | null
   refreshQueue: PersonAgentRefreshQueueRecord[]
   auditEvents: PersonAgentAuditEventRecord[]
+}
+
+export type PersonAgentInspectionOverview = {
+  hasActiveAgent: boolean
+  pendingRefreshCount: number
+  openConflictCount: number
+  coverageGapCount: number
+  interactionTopicCount: number
+  totalQuestionCount: number
+  latestRefreshRequestedAt: string | null
+  latestStrategyChange: {
+    createdAt: string
+    source: string | null
+    changedFields: string[]
+  } | null
 }
 
 export type PersonAgentAnswerPack = {

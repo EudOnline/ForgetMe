@@ -53,6 +53,12 @@ import {
   sendApprovedPersonaDraftToProvider
 } from '../../../services/approvedDraftProviderSendService'
 import { listApprovedDraftSendDestinations } from '../../../services/approvedDraftSendDestinationService'
+import type {
+  PersonAgentAuditEventRecord,
+  PersonAgentMemorySummary,
+  PersonAgentRecord,
+  PersonAgentRefreshQueueRecord
+} from '../../../shared/archiveContracts'
 
 function databasePath(appPaths: AppPaths) {
   return path.join(appPaths.sqliteDir, 'archive.sqlite')
@@ -62,6 +68,52 @@ function openArchiveDatabase(appPaths: AppPaths) {
   const db = openDatabase(databasePath(appPaths))
   runMigrations(db)
   return db
+}
+
+function buildPersonAgentMemorySummary(input: {
+  canonicalPersonId: string
+  factSummary: ReturnType<typeof getPersonAgentFactMemorySummary>
+  interactionMemories: ReturnType<typeof listPersonAgentInteractionMemories>
+}): PersonAgentMemorySummary | null {
+  if (!input.factSummary && input.interactionMemories.length === 0) {
+    return null
+  }
+
+  return {
+    canonicalPersonId: input.canonicalPersonId,
+    factSummary: input.factSummary,
+    interactionMemories: input.interactionMemories
+  }
+}
+
+function buildPersonAgentInspectionOverview(input: {
+  state: PersonAgentRecord | null
+  memorySummary: PersonAgentMemorySummary | null
+  refreshQueue: PersonAgentRefreshQueueRecord[]
+  auditEvents: PersonAgentAuditEventRecord[]
+}) {
+  const latestStrategyChangeEvent = input.auditEvents.find((event) => event.eventKind === 'strategy_profile_updated') ?? null
+  const latestStrategyChangePayload = latestStrategyChangeEvent?.payload ?? {}
+  const changedFields = Array.isArray(latestStrategyChangePayload.changedFields)
+    ? latestStrategyChangePayload.changedFields.filter((value): value is string => typeof value === 'string')
+    : []
+
+  return {
+    hasActiveAgent: input.state?.status === 'active',
+    pendingRefreshCount: input.refreshQueue.filter((row) => row.status === 'pending').length,
+    openConflictCount: input.memorySummary?.factSummary?.counts.conflicts ?? 0,
+    coverageGapCount: input.memorySummary?.factSummary?.counts.coverageGaps ?? 0,
+    interactionTopicCount: input.memorySummary?.interactionMemories.length ?? 0,
+    totalQuestionCount: input.memorySummary?.interactionMemories.reduce((sum, row) => sum + row.questionCount, 0) ?? 0,
+    latestRefreshRequestedAt: input.refreshQueue[0]?.requestedAt ?? null,
+    latestStrategyChange: latestStrategyChangeEvent
+      ? {
+          createdAt: latestStrategyChangeEvent.createdAt,
+          source: typeof latestStrategyChangePayload.source === 'string' ? latestStrategyChangePayload.source : null,
+          changedFields
+        }
+      : null
+  }
 }
 
 async function selectDirectory(envKey: string) {
@@ -121,16 +173,11 @@ export function createWorkspaceModule(appPaths: AppPaths) {
         const interactionMemories = listPersonAgentInteractionMemories(db, {
           canonicalPersonId: input.canonicalPersonId
         })
-
-        if (!factSummary && interactionMemories.length === 0) {
-          return null
-        }
-
-        return {
+        return buildPersonAgentMemorySummary({
           canonicalPersonId: input.canonicalPersonId,
           factSummary,
           interactionMemories
-        }
+        })
       })
     },
     async getPersonAgentInspectionBundle(input: { canonicalPersonId: string }) {
@@ -146,14 +193,11 @@ export function createWorkspaceModule(appPaths: AppPaths) {
         const auditEvents = listPersonAgentAuditEvents(db, {
           canonicalPersonId: input.canonicalPersonId
         })
-
-        const memorySummary = factSummary || interactionMemories.length > 0
-          ? {
-              canonicalPersonId: input.canonicalPersonId,
-              factSummary,
-              interactionMemories
-            }
-          : null
+        const memorySummary = buildPersonAgentMemorySummary({
+          canonicalPersonId: input.canonicalPersonId,
+          factSummary,
+          interactionMemories
+        })
 
         if (!state && !memorySummary && refreshQueue.length === 0 && auditEvents.length === 0) {
           return null
@@ -161,6 +205,12 @@ export function createWorkspaceModule(appPaths: AppPaths) {
 
         return {
           canonicalPersonId: input.canonicalPersonId,
+          overview: buildPersonAgentInspectionOverview({
+            state,
+            memorySummary,
+            refreshQueue,
+            auditEvents
+          }),
           state,
           memorySummary,
           refreshQueue,

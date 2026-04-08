@@ -601,6 +601,20 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
     })
     expect(result).toEqual(expect.objectContaining({
       canonicalPersonId: 'cp-1',
+      overview: expect.objectContaining({
+        hasActiveAgent: true,
+        pendingRefreshCount: 1,
+        openConflictCount: 1,
+        coverageGapCount: 0,
+        interactionTopicCount: 1,
+        totalQuestionCount: 3,
+        latestRefreshRequestedAt: '2026-04-08T01:10:00.000Z',
+        latestStrategyChange: expect.objectContaining({
+          createdAt: '2026-04-08T01:00:00.000Z',
+          source: 'refresh_rebuild',
+          changedFields: ['conflictBehavior']
+        })
+      }),
       state: expect.objectContaining({
         personAgentId: 'agent-1',
         status: 'active'
