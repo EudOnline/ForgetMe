@@ -6,12 +6,16 @@ import { openDatabase, runMigrations } from '../../../src/main/services/db'
 import {
   appendPersonAgentAuditEvent,
   enqueuePersonAgentRefresh,
+  listPersonAgentAuditEvents,
   listPersonAgentTasks,
   replacePersonAgentFactMemories,
   upsertPersonAgent,
   upsertPersonAgentInteractionMemory
 } from '../../../src/main/services/governancePersistenceService'
-import { syncPersonAgentTasks } from '../../../src/main/services/personAgentTaskService'
+import {
+  syncPersonAgentTasks,
+  transitionPersonAgentTask
+} from '../../../src/main/services/personAgentTaskService'
 
 const NOW = '2026-04-08T12:00:00.000Z'
 
@@ -136,6 +140,7 @@ function seedTaskFixture(db: ReturnType<typeof openDatabase>) {
   })
 
   enqueuePersonAgentRefresh(db, {
+    refreshId: 'refresh-1',
     canonicalPersonId: 'cp-1',
     personAgentId: personAgent.personAgentId,
     status: 'pending',
@@ -176,8 +181,12 @@ describe('personAgentTaskService', () => {
     ])
     expect(tasks[0]).toMatchObject({
       personAgentId: personAgent.personAgentId,
+      taskKey: 'await_refresh:refresh-1',
       status: 'pending',
-      priority: 'high'
+      priority: 'high',
+      statusChangedAt: NOW,
+      statusSource: null,
+      statusReason: null
     })
 
     db.close()
@@ -210,6 +219,176 @@ describe('personAgentTaskService', () => {
     }).map((task) => task.taskKind)).toEqual([
       'resolve_conflict',
       'fill_coverage_gap'
+    ])
+
+    db.close()
+  })
+
+  it('preserves dismissed task state across sync when the derived task key is unchanged', () => {
+    const db = setupDatabase()
+    seedTaskFixture(db)
+
+    const firstSync = syncPersonAgentTasks(db, {
+      canonicalPersonId: 'cp-1',
+      now: NOW
+    })
+    const conflictTask = firstSync.find((task) => task.taskKind === 'resolve_conflict')
+
+    expect(conflictTask).toBeTruthy()
+
+    transitionPersonAgentTask(db, {
+      taskId: conflictTask!.taskId,
+      status: 'dismissed',
+      source: 'workspace_ui',
+      reason: 'handled in external review queue',
+      now: '2026-04-08T12:02:00.000Z'
+    })
+
+    const resynced = syncPersonAgentTasks(db, {
+      canonicalPersonId: 'cp-1',
+      now: '2026-04-08T12:03:00.000Z'
+    })
+    const dismissedTask = resynced.find((task) => task.taskKind === 'resolve_conflict')
+
+    expect(dismissedTask).toMatchObject({
+      taskKey: 'resolve_conflict:conflict.school_name:hash-conflict',
+      status: 'dismissed',
+      statusChangedAt: '2026-04-08T12:02:00.000Z',
+      statusSource: 'workspace_ui',
+      statusReason: 'handled in external review queue'
+    })
+
+    db.close()
+  })
+
+  it('reopens a derived task when its source fingerprint changes', () => {
+    const db = setupDatabase()
+    const personAgent = seedTaskFixture(db)
+
+    const firstSync = syncPersonAgentTasks(db, {
+      canonicalPersonId: 'cp-1',
+      now: NOW
+    })
+    const conflictTask = firstSync.find((task) => task.taskKind === 'resolve_conflict')
+
+    transitionPersonAgentTask(db, {
+      taskId: conflictTask!.taskId,
+      status: 'completed',
+      source: 'workspace_ui',
+      reason: 'reviewed current evidence set',
+      now: '2026-04-08T12:02:00.000Z'
+    })
+
+    replacePersonAgentFactMemories(db, {
+      personAgentId: personAgent.personAgentId,
+      canonicalPersonId: 'cp-1',
+      rows: [
+        {
+          memoryKey: 'conflict.school_name',
+          sectionKey: 'conflict',
+          displayLabel: 'school_name',
+          summaryValue: 'Pending values: 北京大学 / 清华大学 / 复旦大学 (3 pending)',
+          memoryKind: 'conflict',
+          confidence: null,
+          conflictState: 'open',
+          freshnessAt: NOW,
+          sourceRefs: [],
+          sourceHash: 'hash-conflict-v2'
+        },
+        {
+          memoryKey: 'coverage.work.empty',
+          sectionKey: 'coverage',
+          displayLabel: 'Work coverage gap',
+          summaryValue: 'No approved work facts yet.',
+          memoryKind: 'coverage_gap',
+          confidence: null,
+          conflictState: 'none',
+          freshnessAt: null,
+          sourceRefs: [],
+          sourceHash: 'hash-gap'
+        }
+      ]
+    })
+
+    const resynced = syncPersonAgentTasks(db, {
+      canonicalPersonId: 'cp-1',
+      now: '2026-04-08T12:05:00.000Z'
+    })
+    const reopenedTask = resynced.find((task) => task.taskKind === 'resolve_conflict')
+
+    expect(reopenedTask).toMatchObject({
+      taskKey: 'resolve_conflict:conflict.school_name:hash-conflict-v2',
+      status: 'pending',
+      statusChangedAt: '2026-04-08T12:05:00.000Z',
+      statusSource: null,
+      statusReason: null
+    })
+
+    db.close()
+  })
+
+  it('transitions tasks and records audit events for task status updates', () => {
+    const db = setupDatabase()
+    seedTaskFixture(db)
+
+    const [firstTask] = syncPersonAgentTasks(db, {
+      canonicalPersonId: 'cp-1',
+      now: NOW
+    })
+
+    const processingTask = transitionPersonAgentTask(db, {
+      taskId: firstTask.taskId,
+      status: 'processing',
+      source: 'workspace_ui',
+      reason: 'starting review',
+      now: '2026-04-08T12:02:00.000Z'
+    })
+    const completedTask = transitionPersonAgentTask(db, {
+      taskId: firstTask.taskId,
+      status: 'completed',
+      source: 'workspace_ui',
+      reason: 'refresh finished and reviewed',
+      now: '2026-04-08T12:04:00.000Z'
+    })
+
+    expect(processingTask).toMatchObject({
+      taskId: firstTask.taskId,
+      status: 'processing',
+      statusChangedAt: '2026-04-08T12:02:00.000Z',
+      statusSource: 'workspace_ui',
+      statusReason: 'starting review'
+    })
+    expect(completedTask).toMatchObject({
+      taskId: firstTask.taskId,
+      status: 'completed',
+      statusChangedAt: '2026-04-08T12:04:00.000Z',
+      statusSource: 'workspace_ui',
+      statusReason: 'refresh finished and reviewed'
+    })
+    expect(listPersonAgentAuditEvents(db, {
+      canonicalPersonId: 'cp-1',
+      eventKind: 'task_status_updated'
+    })).toEqual([
+      expect.objectContaining({
+        eventKind: 'task_status_updated',
+        payload: expect.objectContaining({
+          taskId: firstTask.taskId,
+          taskKey: firstTask.taskKey,
+          nextStatus: 'completed',
+          source: 'workspace_ui',
+          reason: 'refresh finished and reviewed'
+        })
+      }),
+      expect.objectContaining({
+        eventKind: 'task_status_updated',
+        payload: expect.objectContaining({
+          taskId: firstTask.taskId,
+          taskKey: firstTask.taskKey,
+          nextStatus: 'processing',
+          source: 'workspace_ui',
+          reason: 'starting review'
+        })
+      })
     ])
 
     db.close()

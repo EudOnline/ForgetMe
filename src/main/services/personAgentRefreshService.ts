@@ -14,6 +14,7 @@ import {
   derivePersonAgentStrategyProfile,
   resolveNextPersonAgentStrategyProfile
 } from './personAgentStrategyService'
+import { syncPersonAgentTasks } from './personAgentTaskService'
 
 function uniqueStrings(values: string[]) {
   return [...new Set(values)].sort((left, right) => left.localeCompare(right))
@@ -253,6 +254,11 @@ export function processNextPersonAgentRefresh(db: ArchiveDatabase, input: {
       now,
       pending.refreshId
     )
+
+    syncPersonAgentTasks(db, {
+      canonicalPersonId: pending.canonicalPersonId,
+      now
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     db.prepare(

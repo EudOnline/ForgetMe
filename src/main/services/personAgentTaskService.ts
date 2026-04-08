@@ -1,20 +1,58 @@
-import type { PersonAgentTaskRecord } from '../../shared/archiveContracts'
+import type {
+  PersonAgentTaskRecord,
+  PersonAgentTaskStatus
+} from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
 import {
+  appendPersonAgentAuditEvent,
   getPersonAgentByCanonicalPersonId,
+  getPersonAgentTaskById,
   listPersonAgentAuditEvents,
   listPersonAgentInteractionMemories,
   listPersonAgentRefreshQueue,
-  replacePersonAgentTasks
+  replacePersonAgentTasks,
+  updatePersonAgentTaskStatus
 } from './governancePersistenceService'
 import { getPersonAgentFactMemorySummary } from './personAgentFactMemoryService'
 
-function sortTasks(tasks: Array<Omit<PersonAgentTaskRecord, 'taskId' | 'personAgentId' | 'canonicalPersonId' | 'createdAt' | 'updatedAt'>>) {
+type DerivedTaskRow = Omit<
+  PersonAgentTaskRecord,
+  | 'taskId'
+  | 'personAgentId'
+  | 'canonicalPersonId'
+  | 'statusChangedAt'
+  | 'statusSource'
+  | 'statusReason'
+  | 'createdAt'
+  | 'updatedAt'
+>
+
+function sortTasks(tasks: DerivedTaskRow[]) {
   return [...tasks].sort((left, right) => {
     const leftPriority = left.priority === 'high' ? 0 : 1
     const rightPriority = right.priority === 'high' ? 0 : 1
     return leftPriority - rightPriority || left.taskKind.localeCompare(right.taskKind)
   })
+}
+
+function buildTaskKey(parts: string[]) {
+  return parts.join(':')
+}
+
+function canTransitionTaskStatus(currentStatus: PersonAgentTaskStatus, nextStatus: PersonAgentTaskStatus) {
+  if (currentStatus === nextStatus) {
+    return true
+  }
+
+  if (currentStatus === 'pending') {
+    return nextStatus === 'processing' || nextStatus === 'completed' || nextStatus === 'dismissed'
+  }
+
+  if (currentStatus === 'processing') {
+    return nextStatus === 'completed' || nextStatus === 'dismissed'
+  }
+
+  return false
 }
 
 export function syncPersonAgentTasks(db: ArchiveDatabase, input: {
@@ -42,10 +80,11 @@ export function syncPersonAgentTasks(db: ArchiveDatabase, input: {
     canonicalPersonId: input.canonicalPersonId
   })
 
-  const tasks = [] as Array<Omit<PersonAgentTaskRecord, 'taskId' | 'personAgentId' | 'canonicalPersonId' | 'createdAt' | 'updatedAt'>>
+  const tasks = [] as DerivedTaskRow[]
   const pendingRefresh = refreshQueue.find((row) => row.status === 'pending') ?? null
   if (pendingRefresh) {
     tasks.push({
+      taskKey: buildTaskKey(['await_refresh', pendingRefresh.refreshId]),
       taskKind: 'await_refresh',
       status: 'pending',
       priority: 'high',
@@ -63,6 +102,7 @@ export function syncPersonAgentTasks(db: ArchiveDatabase, input: {
   const firstConflict = factSummary?.conflicts[0] ?? null
   if (firstConflict) {
     tasks.push({
+      taskKey: buildTaskKey(['resolve_conflict', firstConflict.memoryKey, firstConflict.sourceHash]),
       taskKind: 'resolve_conflict',
       status: 'pending',
       priority: 'high',
@@ -77,6 +117,7 @@ export function syncPersonAgentTasks(db: ArchiveDatabase, input: {
   const firstGap = factSummary?.coverageGaps[0] ?? null
   if (firstGap) {
     tasks.push({
+      taskKey: buildTaskKey(['fill_coverage_gap', firstGap.memoryKey, firstGap.sourceHash]),
       taskKind: 'fill_coverage_gap',
       status: 'pending',
       priority: 'medium',
@@ -93,6 +134,12 @@ export function syncPersonAgentTasks(db: ArchiveDatabase, input: {
     .sort((left, right) => right.questionCount - left.questionCount || left.memoryKey.localeCompare(right.memoryKey))[0] ?? null
   if (hotspot) {
     tasks.push({
+      taskKey: buildTaskKey([
+        'expand_topic',
+        hotspot.memoryKey,
+        String(hotspot.questionCount),
+        String(hotspot.citationCount)
+      ]),
       taskKind: 'expand_topic',
       status: 'pending',
       priority: 'medium',
@@ -108,6 +155,7 @@ export function syncPersonAgentTasks(db: ArchiveDatabase, input: {
   const latestStrategyChange = auditEvents.find((event) => event.eventKind === 'strategy_profile_updated') ?? null
   if (latestStrategyChange) {
     tasks.push({
+      taskKey: buildTaskKey(['review_strategy_change', latestStrategyChange.auditEventId]),
       taskKind: 'review_strategy_change',
       status: 'pending',
       priority: 'medium',
@@ -125,4 +173,56 @@ export function syncPersonAgentTasks(db: ArchiveDatabase, input: {
     rows: sortTasks(tasks),
     now: input.now
   })
+}
+
+export function transitionPersonAgentTask(db: ArchiveDatabase, input: {
+  taskId: string
+  status: Exclude<PersonAgentTaskStatus, 'pending'>
+  source?: string
+  reason?: string
+  now?: string
+}) {
+  const existing = getPersonAgentTaskById(db, {
+    taskId: input.taskId
+  })
+
+  if (!existing) {
+    return null
+  }
+
+  if (!canTransitionTaskStatus(existing.status, input.status)) {
+    throw new Error(`Unsupported person-agent task transition: ${existing.status} -> ${input.status}`)
+  }
+
+  const now = input.now ?? new Date().toISOString()
+  const updatedTask = updatePersonAgentTaskStatus(db, {
+    taskId: input.taskId,
+    status: input.status,
+    statusChangedAt: now,
+    statusSource: input.source ?? null,
+    statusReason: input.reason ?? null,
+    updatedAt: now
+  })
+
+  if (!updatedTask) {
+    return null
+  }
+
+  appendPersonAgentAuditEvent(db, {
+    personAgentId: updatedTask.personAgentId,
+    canonicalPersonId: updatedTask.canonicalPersonId,
+    eventKind: 'task_status_updated',
+    payload: {
+      taskId: updatedTask.taskId,
+      taskKey: updatedTask.taskKey,
+      taskKind: updatedTask.taskKind,
+      previousStatus: existing.status,
+      nextStatus: updatedTask.status,
+      source: input.source ?? null,
+      reason: input.reason ?? null
+    },
+    createdAt: now
+  })
+
+  return updatedTask
 }

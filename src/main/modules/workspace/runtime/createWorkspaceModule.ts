@@ -25,6 +25,7 @@ import {
   getPersonAgentConsultationSession,
   listPersonAgentConsultationSessions
 } from '../../../services/personAgentConsultationService'
+import { transitionPersonAgentTask } from '../../../services/personAgentTaskService'
 import {
   getPersonAgentByCanonicalPersonId,
   listPersonAgentAuditEvents,
@@ -371,6 +372,21 @@ export function createWorkspaceModule(appPaths: AppPaths) {
       eventKind?: string
     } = {}) {
       return this.withArchiveDatabase((db) => listPersonAgentAuditEvents(db, input))
+    },
+    async listPersonAgentTasks(input: {
+      personAgentId?: string
+      canonicalPersonId?: string
+      status?: 'pending' | 'processing' | 'completed' | 'dismissed'
+    } = {}) {
+      return this.withArchiveDatabase((db) => listPersonAgentTasks(db, input))
+    },
+    async transitionPersonAgentTask(input: {
+      taskId: string
+      status: 'processing' | 'completed' | 'dismissed'
+      source?: string
+      reason?: string
+    }) {
+      return this.withArchiveDatabase((db) => transitionPersonAgentTask(db, input))
     },
     async getPersonAgentMemorySummary(input: { canonicalPersonId: string }) {
       return this.withArchiveDatabase((db) => {

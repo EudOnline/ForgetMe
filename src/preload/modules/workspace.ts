@@ -15,6 +15,8 @@ type WorkspacePreloadModule = Pick<
   | 'getPersonAgentState'
   | 'listPersonAgentRefreshQueue'
   | 'listPersonAgentAuditEvents'
+  | 'listPersonAgentTasks'
+  | 'transitionPersonAgentTask'
   | 'getPersonAgentMemorySummary'
   | 'getPersonAgentInspectionBundle'
   | 'runMemoryWorkspaceCompare'
@@ -58,6 +60,8 @@ export function createWorkspacePreloadModule(ipcRenderer: IpcRenderer): Workspac
     getPersonAgentState: invokeWith(ipcRenderer, 'archive:getPersonAgentState'),
     listPersonAgentRefreshQueue: invokeWith(ipcRenderer, 'archive:listPersonAgentRefreshQueue'),
     listPersonAgentAuditEvents: invokeWith(ipcRenderer, 'archive:listPersonAgentAuditEvents'),
+    listPersonAgentTasks: invokeWith(ipcRenderer, 'archive:listPersonAgentTasks'),
+    transitionPersonAgentTask: invokeWith(ipcRenderer, 'archive:transitionPersonAgentTask'),
     getPersonAgentMemorySummary: invokeWith(ipcRenderer, 'archive:getPersonAgentMemorySummary'),
     getPersonAgentInspectionBundle: invokeWith(ipcRenderer, 'archive:getPersonAgentInspectionBundle'),
     runMemoryWorkspaceCompare: invokeWith(ipcRenderer, 'archive:runMemoryWorkspaceCompare'),

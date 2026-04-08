@@ -21,6 +21,8 @@ type WorkspaceClient = Pick<
   | 'getPersonAgentState'
   | 'listPersonAgentRefreshQueue'
   | 'listPersonAgentAuditEvents'
+  | 'listPersonAgentTasks'
+  | 'transitionPersonAgentTask'
   | 'getPersonAgentMemorySummary'
   | 'getPersonAgentInspectionBundle'
   | 'runMemoryWorkspaceCompare'
@@ -64,6 +66,8 @@ export function getWorkspaceClient(): WorkspaceClient {
     getPersonAgentState: bridgeMethod('getPersonAgentState', async () => null),
     listPersonAgentRefreshQueue: bridgeMethod('listPersonAgentRefreshQueue', async () => []),
     listPersonAgentAuditEvents: bridgeMethod('listPersonAgentAuditEvents', async () => []),
+    listPersonAgentTasks: bridgeMethod('listPersonAgentTasks', async () => []),
+    transitionPersonAgentTask: bridgeMethod('transitionPersonAgentTask', async () => null),
     getPersonAgentMemorySummary: bridgeMethod('getPersonAgentMemorySummary', async () => null),
     getPersonAgentInspectionBundle: bridgeMethod('getPersonAgentInspectionBundle', async () => null),
     runMemoryWorkspaceCompare: bridgeMethod('runMemoryWorkspaceCompare', async () => null),

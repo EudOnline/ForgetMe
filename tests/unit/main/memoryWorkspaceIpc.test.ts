@@ -28,6 +28,7 @@ const {
   getPersonAgentConsultationRuntimeState,
   getPersonAgentConsultationSession,
   listPersonAgentConsultationSessions,
+  transitionPersonAgentTask,
   getPersonAgentByCanonicalPersonId,
   listPersonAgentAuditEvents,
   listPersonAgentRefreshQueue,
@@ -58,6 +59,7 @@ const {
   getPersonAgentConsultationRuntimeState: vi.fn(),
   getPersonAgentConsultationSession: vi.fn(),
   listPersonAgentConsultationSessions: vi.fn(),
+  transitionPersonAgentTask: vi.fn(),
   getPersonAgentByCanonicalPersonId: vi.fn(),
   listPersonAgentAuditEvents: vi.fn(),
   listPersonAgentRefreshQueue: vi.fn(),
@@ -139,6 +141,14 @@ vi.mock('../../../src/main/services/personAgentConsultationService', async (impo
   }
 })
 
+vi.mock('../../../src/main/services/personAgentTaskService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/main/services/personAgentTaskService')>()
+  return {
+    ...actual,
+    transitionPersonAgentTask
+  }
+})
+
 vi.mock('../../../src/main/services/governancePersistenceService', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../src/main/services/governancePersistenceService')>()
   return {
@@ -214,6 +224,7 @@ describe('registerWorkspaceIpc session handlers', () => {
     getPersonAgentConsultationRuntimeState.mockReset()
     getPersonAgentConsultationSession.mockReset()
     listPersonAgentConsultationSessions.mockReset()
+    transitionPersonAgentTask.mockReset()
     getPersonAgentByCanonicalPersonId.mockReset()
     listPersonAgentAuditEvents.mockReset()
     listPersonAgentRefreshQueue.mockReset()
@@ -621,6 +632,7 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
     listPersonAgentTasks.mockReturnValue([
       {
         taskId: 'task-1',
+        taskKey: 'await_refresh:refresh-1',
         personAgentId: 'agent-1',
         canonicalPersonId: 'cp-1',
         taskKind: 'await_refresh',
@@ -631,6 +643,9 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
         sourceRef: {
           refreshId: 'refresh-1'
         },
+        statusChangedAt: '2026-04-08T01:10:00.000Z',
+        statusSource: null,
+        statusReason: null,
         createdAt: '2026-04-08T01:10:00.000Z',
         updatedAt: '2026-04-08T01:10:00.000Z'
       }
@@ -842,6 +857,7 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
       tasks: [
         expect.objectContaining({
           taskId: 'task-1',
+          taskKey: 'await_refresh:refresh-1',
           taskKind: 'await_refresh'
         })
       ],
@@ -868,6 +884,90 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
       ]
     }))
     expect(close).toHaveBeenCalled()
+  })
+
+  it('lists and transitions person-agent tasks through ipc', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    listPersonAgentTasks.mockReturnValue([
+      {
+        taskId: 'task-1',
+        taskKey: 'resolve_conflict:conflict.school_name:hash-conflict',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        taskKind: 'resolve_conflict',
+        status: 'pending',
+        priority: 'high',
+        title: 'Resolve school_name',
+        summary: 'Pending values: 北京大学 / 清华大学 (2 pending)',
+        sourceRef: {
+          memoryKey: 'conflict.school_name'
+        },
+        statusChangedAt: '2026-04-08T01:10:00.000Z',
+        statusSource: null,
+        statusReason: null,
+        createdAt: '2026-04-08T01:10:00.000Z',
+        updatedAt: '2026-04-08T01:10:00.000Z'
+      }
+    ])
+    transitionPersonAgentTask.mockReturnValue({
+      taskId: 'task-1',
+      taskKey: 'resolve_conflict:conflict.school_name:hash-conflict',
+      personAgentId: 'agent-1',
+      canonicalPersonId: 'cp-1',
+      taskKind: 'resolve_conflict',
+      status: 'dismissed',
+      priority: 'high',
+      title: 'Resolve school_name',
+      summary: 'Pending values: 北京大学 / 清华大学 (2 pending)',
+      sourceRef: {
+        memoryKey: 'conflict.school_name'
+      },
+      statusChangedAt: '2026-04-08T01:12:00.000Z',
+      statusSource: 'workspace_ui',
+      statusReason: 'handled externally',
+      createdAt: '2026-04-08T01:10:00.000Z',
+      updatedAt: '2026-04-08T01:12:00.000Z'
+    })
+
+    registerWorkspaceIpc(appPathsFixture())
+
+    const listHandler = handlerMap.get('archive:listPersonAgentTasks')
+    const transitionHandler = handlerMap.get('archive:transitionPersonAgentTask')
+    const listed = await listHandler?.({}, {
+      canonicalPersonId: 'cp-1',
+      status: 'pending'
+    })
+    const transitioned = await transitionHandler?.({}, {
+      taskId: 'task-1',
+      status: 'dismissed',
+      source: 'workspace_ui',
+      reason: 'handled externally'
+    })
+
+    expect(listPersonAgentTasks).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1',
+      status: 'pending'
+    })
+    expect(transitionPersonAgentTask).toHaveBeenCalledWith(expect.anything(), {
+      taskId: 'task-1',
+      status: 'dismissed',
+      source: 'workspace_ui',
+      reason: 'handled externally'
+    })
+    expect(listed).toEqual([
+      expect.objectContaining({
+        taskKey: 'resolve_conflict:conflict.school_name:hash-conflict',
+        status: 'pending'
+      })
+    ])
+    expect(transitioned).toEqual(expect.objectContaining({
+      taskId: 'task-1',
+      status: 'dismissed',
+      statusSource: 'workspace_ui',
+      statusReason: 'handled externally'
+    }))
+    expect(close).toHaveBeenCalledTimes(2)
   })
 })
 

@@ -20,6 +20,7 @@ import type {
   PersonAgentRecord,
   PersonAgentRuntimeStateRecord,
   PersonAgentStrategyProfile,
+  PersonAgentTaskStatus,
   PersonAgentTaskRecord,
   PersonAgentStatus
 } from '../../shared/archiveContracts'
@@ -155,12 +156,16 @@ type PersonAgentTaskRow = {
   id: string
   personAgentId: string
   canonicalPersonId: string
+  taskKey: string | null
   taskKind: PersonAgentTaskRecord['taskKind']
   status: PersonAgentTaskRecord['status']
   priority: PersonAgentTaskRecord['priority']
   title: string
   summary: string
   sourceRefJson: string
+  statusChangedAt: string | null
+  statusSource: string | null
+  statusReason: string | null
   createdAt: string
   updatedAt: string
 }
@@ -377,6 +382,7 @@ function mapPersonAgentRuntimeStateRow(row: PersonAgentRuntimeStateRow): PersonA
 function mapPersonAgentTaskRow(row: PersonAgentTaskRow): PersonAgentTaskRecord {
   return {
     taskId: row.id,
+    taskKey: row.taskKey ?? `${row.taskKind}:${row.id}`,
     personAgentId: row.personAgentId,
     canonicalPersonId: row.canonicalPersonId,
     taskKind: row.taskKind,
@@ -385,6 +391,9 @@ function mapPersonAgentTaskRow(row: PersonAgentTaskRow): PersonAgentTaskRecord {
     title: row.title,
     summary: row.summary,
     sourceRef: parseJsonObject(row.sourceRefJson),
+    statusChangedAt: row.statusChangedAt ?? row.updatedAt,
+    statusSource: row.statusSource,
+    statusReason: row.statusReason,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt
   }
@@ -1300,6 +1309,7 @@ export function replacePersonAgentTasks(db: ArchiveDatabase, input: {
   personAgentId: string
   canonicalPersonId: string
   rows: Array<{
+    taskKey: string
     taskKind: PersonAgentTaskRecord['taskKind']
     status: PersonAgentTaskRecord['status']
     priority: PersonAgentTaskRecord['priority']
@@ -1326,6 +1336,10 @@ export function replacePersonAgentTasks(db: ArchiveDatabase, input: {
   }
 
   const now = input.now ?? new Date().toISOString()
+  const existingTasks = listPersonAgentTasks(db, {
+    personAgentId: input.personAgentId
+  })
+  const existingByTaskKey = new Map(existingTasks.map((task) => [task.taskKey, task]))
   db.exec('begin immediate')
   try {
     db.prepare(
@@ -1339,26 +1353,34 @@ export function replacePersonAgentTasks(db: ArchiveDatabase, input: {
           id,
           person_agent_id,
           canonical_person_id,
+          task_key,
           task_kind,
           status,
           priority,
           title,
           summary,
           source_ref_json,
+          status_changed_at,
+          status_source,
+          status_reason,
           created_at,
           updated_at
-        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
-        crypto.randomUUID(),
+        existingByTaskKey.get(row.taskKey)?.taskId ?? crypto.randomUUID(),
         input.personAgentId,
         input.canonicalPersonId,
+        row.taskKey,
         row.taskKind,
-        row.status,
+        existingByTaskKey.get(row.taskKey)?.status ?? row.status,
         row.priority,
         row.title,
         row.summary,
         JSON.stringify(row.sourceRef ?? {}),
-        now,
+        existingByTaskKey.get(row.taskKey)?.statusChangedAt ?? now,
+        existingByTaskKey.get(row.taskKey)?.statusSource ?? null,
+        existingByTaskKey.get(row.taskKey)?.statusReason ?? null,
+        existingByTaskKey.get(row.taskKey)?.createdAt ?? now,
         now
       )
     }
@@ -1377,23 +1399,34 @@ export function replacePersonAgentTasks(db: ArchiveDatabase, input: {
 export function listPersonAgentTasks(db: ArchiveDatabase, input: {
   personAgentId?: string
   canonicalPersonId?: string
-  status?: PersonAgentTaskRecord['status']
+  status?: PersonAgentTaskStatus
 } = {}): PersonAgentTaskRecord[] {
   const rows = db.prepare(
     `select
       id,
       person_agent_id as personAgentId,
       canonical_person_id as canonicalPersonId,
+      task_key as taskKey,
       task_kind as taskKind,
       status,
       priority,
       title,
       summary,
       source_ref_json as sourceRefJson,
+      status_changed_at as statusChangedAt,
+      status_source as statusSource,
+      status_reason as statusReason,
       created_at as createdAt,
       updated_at as updatedAt
      from person_agent_tasks
      order by
+       case status
+         when 'pending' then 0
+         when 'processing' then 1
+         when 'completed' then 2
+         when 'dismissed' then 3
+         else 4
+       end asc,
        case priority when 'high' then 0 else 1 end asc,
        case task_kind
          when 'await_refresh' then 0
@@ -1421,6 +1454,53 @@ export function listPersonAgentTasks(db: ArchiveDatabase, input: {
       return true
     })
     .map(mapPersonAgentTaskRow)
+}
+
+export function getPersonAgentTaskById(db: ArchiveDatabase, input: {
+  taskId: string
+}): PersonAgentTaskRecord | null {
+  return listPersonAgentTasks(db).find((task) => task.taskId === input.taskId) ?? null
+}
+
+export function updatePersonAgentTaskStatus(db: ArchiveDatabase, input: {
+  taskId: string
+  status: PersonAgentTaskStatus
+  statusChangedAt?: string
+  statusSource?: string | null
+  statusReason?: string | null
+  updatedAt?: string
+}) {
+  const existing = getPersonAgentTaskById(db, {
+    taskId: input.taskId
+  })
+
+  if (!existing) {
+    return null
+  }
+
+  const updatedAt = input.updatedAt ?? input.statusChangedAt ?? new Date().toISOString()
+  const statusChangedAt = input.statusChangedAt ?? updatedAt
+
+  db.prepare(
+    `update person_agent_tasks
+     set status = ?,
+         status_changed_at = ?,
+         status_source = ?,
+         status_reason = ?,
+         updated_at = ?
+     where id = ?`
+  ).run(
+    input.status,
+    statusChangedAt,
+    input.statusSource ?? null,
+    input.statusReason ?? null,
+    updatedAt,
+    input.taskId
+  )
+
+  return getPersonAgentTaskById(db, {
+    taskId: input.taskId
+  })
 }
 
 export function enqueuePersonAgentRefresh(db: ArchiveDatabase, input: {

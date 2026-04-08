@@ -8,7 +8,8 @@ import {
   listPersonAgentAuditEvents,
   listPersonAgentFactMemories,
   listPersonAgentInteractionMemories,
-  listPersonAgentRefreshQueue
+  listPersonAgentRefreshQueue,
+  listPersonAgentTasks
 } from '../../../src/main/services/governancePersistenceService'
 import { approveProfileAttributeCandidate } from '../../../src/main/services/profileCandidateReviewService'
 import {
@@ -591,6 +592,33 @@ describe('personAgentRefreshService', () => {
         })
       })
     ])
+
+    db.close()
+  })
+
+  it('resyncs person-agent tasks after refresh completion', () => {
+    const db = setupDatabase()
+    seedPromotionReadyPerson(db)
+
+    enqueuePersonAgentRefreshForCanonicalPeople(db, {
+      canonicalPersonIds: ['cp-1'],
+      reason: 'relationship_changed',
+      requestedAt: NOW
+    })
+
+    processNextPersonAgentRefresh(db, {
+      now: NOW
+    })
+
+    const tasks = listPersonAgentTasks(db, {
+      canonicalPersonId: 'cp-1'
+    })
+    const expandTask = tasks.find((task) => task.taskKind === 'expand_topic')
+
+    expect(expandTask).toMatchObject({
+      taskKind: 'expand_topic',
+      taskKey: 'expand_topic:topic.profile_facts:2:4'
+    })
 
     db.close()
   })

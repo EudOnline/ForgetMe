@@ -144,6 +144,19 @@ export const listPersonAgentAuditEventsInputSchema = z.object({
   eventKind: z.string().min(1).optional()
 }).optional().default({})
 
+export const listPersonAgentTasksInputSchema = z.object({
+  personAgentId: z.string().min(1).optional(),
+  canonicalPersonId: z.string().min(1).optional(),
+  status: z.enum(['pending', 'processing', 'completed', 'dismissed']).optional()
+}).optional().default({})
+
+export const transitionPersonAgentTaskInputSchema = z.object({
+  taskId: z.string().min(1),
+  status: z.enum(['processing', 'completed', 'dismissed']),
+  source: z.string().min(1).optional(),
+  reason: z.string().min(1).optional()
+})
+
 export const getPersonaDraftReviewByTurnInputSchema = z.object({
   turnId: z.string().min(1)
 })

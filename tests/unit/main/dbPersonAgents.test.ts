@@ -111,7 +111,16 @@ describe('person-agent persistence migrations', () => {
     expect(taskIndexes.map((row) => row.name)).toEqual(expect.arrayContaining([
       'idx_person_agent_tasks_person_agent_id',
       'idx_person_agent_tasks_canonical_person_id',
-      'idx_person_agent_tasks_status_priority'
+      'idx_person_agent_tasks_status_priority',
+      'uq_person_agent_tasks_person_agent_task_key'
+    ]))
+
+    const taskColumns = db.prepare("pragma table_info('person_agent_tasks')").all() as Array<{ name: string }>
+    expect(taskColumns.map((column) => column.name)).toEqual(expect.arrayContaining([
+      'task_key',
+      'status_changed_at',
+      'status_source',
+      'status_reason'
     ]))
 
     db.close()
