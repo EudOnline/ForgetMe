@@ -8,9 +8,11 @@ import {
   enqueuePersonAgentRefresh,
   getPersonAgentByCanonicalPersonId,
   listPersonAgentAuditEvents,
+  listPersonAgentConsultationSessions,
   listPersonAgentFactMemories,
   listPersonAgentRefreshQueue,
   listPersonAgents,
+  getPersonAgentRuntimeState,
   replacePersonAgentFactMemories,
   upsertPersonAgent
 } from '../../../src/main/services/governancePersistenceService'
@@ -30,7 +32,10 @@ describe('person-agent persistence migrations', () => {
       'person_agent_fact_memory',
       'person_agent_interaction_memory',
       'person_agent_refresh_queue',
-      'person_agent_audit_events'
+      'person_agent_audit_events',
+      'person_agent_consultation_sessions',
+      'person_agent_consultation_turns',
+      'person_agent_runtime_state'
     ]))
 
     const personAgentColumns = db.prepare("pragma table_info('person_agents')").all() as Array<{ name: string }>
@@ -51,6 +56,19 @@ describe('person-agent persistence migrations', () => {
       'status',
       'reasons_json',
       'requested_at'
+    ]))
+
+    const runtimeStateColumns = db.prepare("pragma table_info('person_agent_runtime_state')").all() as Array<{ name: string }>
+    expect(runtimeStateColumns.map((column) => column.name)).toEqual(expect.arrayContaining([
+      'person_agent_id',
+      'canonical_person_id',
+      'active_session_id',
+      'session_count',
+      'total_turn_count',
+      'latest_question',
+      'latest_question_classification',
+      'last_answer_digest',
+      'last_consulted_at'
     ]))
 
     const personAgentIndexes = db.prepare(
@@ -75,6 +93,14 @@ describe('person-agent persistence migrations', () => {
     expect(factMemoryIndexes.map((row) => row.name)).toEqual(expect.arrayContaining([
       'idx_person_agent_fact_memory_canonical_person_id',
       'idx_person_agent_fact_memory_person_agent_memory_key'
+    ]))
+
+    const consultationIndexes = db.prepare(
+      "select name from sqlite_master where type='index' and tbl_name='person_agent_consultation_sessions'"
+    ).all() as Array<{ name: string }>
+    expect(consultationIndexes.map((row) => row.name)).toEqual(expect.arrayContaining([
+      'idx_person_agent_consultation_sessions_person_agent_id',
+      'idx_person_agent_consultation_sessions_canonical_person_id'
     ]))
 
     db.close()
@@ -306,6 +332,13 @@ describe('person-agent persistence migrations', () => {
         })
       })
     ])
+
+    expect(listPersonAgentConsultationSessions(db, {
+      canonicalPersonId: 'cp-1'
+    })).toEqual([])
+    expect(getPersonAgentRuntimeState(db, {
+      canonicalPersonId: 'cp-1'
+    })).toBeNull()
 
     db.close()
   })

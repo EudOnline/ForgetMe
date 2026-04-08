@@ -20,6 +20,12 @@ import {
   listMemoryWorkspaceSessions
 } from '../../../services/memoryWorkspaceSessionService'
 import {
+  askPersonAgentConsultationPersisted,
+  getPersonAgentConsultationRuntimeState,
+  getPersonAgentConsultationSession,
+  listPersonAgentConsultationSessions
+} from '../../../services/personAgentConsultationService'
+import {
   getPersonAgentByCanonicalPersonId,
   listPersonAgentAuditEvents,
   listPersonAgentInteractionMemories,
@@ -339,6 +345,18 @@ export function createWorkspaceModule(appPaths: AppPaths) {
     },
     async askPersisted(input: Parameters<typeof askMemoryWorkspacePersisted>[1]) {
       return this.withArchiveDatabase((db) => askMemoryWorkspacePersisted(db, input))
+    },
+    async askPersonAgentConsultation(input: Parameters<typeof askPersonAgentConsultationPersisted>[1]) {
+      return this.withArchiveDatabase((db) => askPersonAgentConsultationPersisted(db, input))
+    },
+    async listPersonAgentConsultationSessions(input: Parameters<typeof listPersonAgentConsultationSessions>[1] = {}) {
+      return this.withArchiveDatabase((db) => listPersonAgentConsultationSessions(db, input))
+    },
+    async getPersonAgentConsultationSession(input: Parameters<typeof getPersonAgentConsultationSession>[1]) {
+      return this.withArchiveDatabase((db) => getPersonAgentConsultationSession(db, input))
+    },
+    async getPersonAgentRuntimeState(input: Parameters<typeof getPersonAgentConsultationRuntimeState>[1]) {
+      return this.withArchiveDatabase((db) => getPersonAgentConsultationRuntimeState(db, input))
     },
     async getPersonAgentState(input: { canonicalPersonId: string }) {
       return this.withArchiveDatabase((db) => getPersonAgentByCanonicalPersonId(db, input))

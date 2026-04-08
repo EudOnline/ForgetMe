@@ -7,6 +7,9 @@ import type {
   ListAgentMemoriesInput,
   ListAgentPolicyVersionsInput,
   PersonAgentAuditEventRecord,
+  PersonAgentConsultationSessionDetail,
+  PersonAgentConsultationSessionSummary,
+  PersonAgentConsultationTurnRecord,
   PersonAgentFactMemoryConflictState,
   PersonAgentFactMemoryKind,
   PersonAgentFactMemoryRecord,
@@ -15,6 +18,7 @@ import type {
   PersonAgentMemoryRef,
   PersonAgentPromotionTier,
   PersonAgentRecord,
+  PersonAgentRuntimeStateRecord,
   PersonAgentStrategyProfile,
   PersonAgentStatus
 } from '../../shared/archiveContracts'
@@ -109,6 +113,41 @@ type PersonAgentAuditEventRow = {
   eventKind: string
   payloadJson: string
   createdAt: string
+}
+
+type PersonAgentConsultationSessionRow = {
+  id: string
+  personAgentId: string
+  canonicalPersonId: string
+  title: string
+  latestQuestion: string | null
+  turnCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+type PersonAgentConsultationTurnRow = {
+  id: string
+  sessionId: string
+  personAgentId: string
+  canonicalPersonId: string
+  ordinal: number
+  question: string
+  answerPackJson: string
+  createdAt: string
+}
+
+type PersonAgentRuntimeStateRow = {
+  personAgentId: string
+  canonicalPersonId: string
+  activeSessionId: string | null
+  sessionCount: number
+  totalTurnCount: number
+  latestQuestion: string | null
+  latestQuestionClassification: string | null
+  lastAnswerDigest: string | null
+  lastConsultedAt: string | null
+  updatedAt: string
 }
 
 export type PersonAgentRefreshQueueRecord = {
@@ -276,6 +315,47 @@ function mapPersonAgentAuditEventRow(row: PersonAgentAuditEventRow): PersonAgent
     eventKind: row.eventKind,
     payload: parseJsonObject(row.payloadJson),
     createdAt: row.createdAt
+  }
+}
+
+function mapPersonAgentConsultationSessionRow(row: PersonAgentConsultationSessionRow): PersonAgentConsultationSessionSummary {
+  return {
+    sessionId: row.id,
+    personAgentId: row.personAgentId,
+    canonicalPersonId: row.canonicalPersonId,
+    title: row.title,
+    latestQuestion: row.latestQuestion,
+    turnCount: row.turnCount,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt
+  }
+}
+
+function mapPersonAgentConsultationTurnRow(row: PersonAgentConsultationTurnRow): PersonAgentConsultationTurnRecord {
+  return {
+    turnId: row.id,
+    sessionId: row.sessionId,
+    personAgentId: row.personAgentId,
+    canonicalPersonId: row.canonicalPersonId,
+    ordinal: row.ordinal,
+    question: row.question,
+    answerPack: JSON.parse(row.answerPackJson),
+    createdAt: row.createdAt
+  }
+}
+
+function mapPersonAgentRuntimeStateRow(row: PersonAgentRuntimeStateRow): PersonAgentRuntimeStateRecord {
+  return {
+    personAgentId: row.personAgentId,
+    canonicalPersonId: row.canonicalPersonId,
+    activeSessionId: row.activeSessionId,
+    sessionCount: row.sessionCount,
+    totalTurnCount: row.totalTurnCount,
+    latestQuestion: row.latestQuestion,
+    latestQuestionClassification: row.latestQuestionClassification as PersonAgentRuntimeStateRecord['latestQuestionClassification'],
+    lastAnswerDigest: row.lastAnswerDigest,
+    lastConsultedAt: row.lastConsultedAt,
+    updatedAt: row.updatedAt
   }
 }
 
@@ -910,6 +990,279 @@ export function listPersonAgentAuditEvents(db: ArchiveDatabase, input: {
       return true
     })
     .map(mapPersonAgentAuditEventRow)
+}
+
+export function createPersonAgentConsultationSession(db: ArchiveDatabase, input: {
+  sessionId?: string
+  personAgentId: string
+  canonicalPersonId: string
+  title: string
+  latestQuestion?: string | null
+  turnCount?: number
+  createdAt?: string
+  updatedAt?: string
+}): PersonAgentConsultationSessionSummary {
+  const sessionId = input.sessionId ?? crypto.randomUUID()
+  const createdAt = input.createdAt ?? new Date().toISOString()
+  const updatedAt = input.updatedAt ?? createdAt
+
+  db.prepare(
+    `insert into person_agent_consultation_sessions (
+      id,
+      person_agent_id,
+      canonical_person_id,
+      title,
+      latest_question,
+      turn_count,
+      created_at,
+      updated_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    sessionId,
+    input.personAgentId,
+    input.canonicalPersonId,
+    input.title,
+    input.latestQuestion ?? null,
+    input.turnCount ?? 0,
+    createdAt,
+    updatedAt
+  )
+
+  return listPersonAgentConsultationSessions(db, {}).find((row) => row.sessionId === sessionId)!
+}
+
+export function listPersonAgentConsultationSessions(db: ArchiveDatabase, input: {
+  personAgentId?: string
+  canonicalPersonId?: string
+} = {}): PersonAgentConsultationSessionSummary[] {
+  const rows = db.prepare(
+    `select
+      id,
+      person_agent_id as personAgentId,
+      canonical_person_id as canonicalPersonId,
+      title,
+      latest_question as latestQuestion,
+      turn_count as turnCount,
+      created_at as createdAt,
+      updated_at as updatedAt
+     from person_agent_consultation_sessions
+     order by updated_at desc, created_at desc, id asc`
+  ).all() as PersonAgentConsultationSessionRow[]
+
+  return rows
+    .filter((row) => {
+      if (input.personAgentId && row.personAgentId !== input.personAgentId) {
+        return false
+      }
+      if (input.canonicalPersonId && row.canonicalPersonId !== input.canonicalPersonId) {
+        return false
+      }
+      return true
+    })
+    .map(mapPersonAgentConsultationSessionRow)
+}
+
+export function appendPersonAgentConsultationTurn(db: ArchiveDatabase, input: {
+  turnId?: string
+  sessionId: string
+  personAgentId: string
+  canonicalPersonId: string
+  question: string
+  answerPack: PersonAgentConsultationTurnRecord['answerPack']
+  createdAt?: string
+}): PersonAgentConsultationTurnRecord {
+  const existingSession = db.prepare(
+    `select
+      id,
+      person_agent_id as personAgentId,
+      canonical_person_id as canonicalPersonId,
+      title,
+      latest_question as latestQuestion,
+      turn_count as turnCount,
+      created_at as createdAt,
+      updated_at as updatedAt
+     from person_agent_consultation_sessions
+     where id = ?`
+  ).get(input.sessionId) as PersonAgentConsultationSessionRow | undefined
+
+  if (!existingSession) {
+    throw new Error(`Person-agent consultation session not found: ${input.sessionId}`)
+  }
+
+  if (existingSession.personAgentId !== input.personAgentId || existingSession.canonicalPersonId !== input.canonicalPersonId) {
+    throw new Error(`Person-agent consultation session mismatch: ${input.sessionId}`)
+  }
+
+  const turnId = input.turnId ?? crypto.randomUUID()
+  const createdAt = input.createdAt ?? new Date().toISOString()
+  const ordinal = existingSession.turnCount + 1
+
+  db.prepare(
+    `insert into person_agent_consultation_turns (
+      id,
+      session_id,
+      person_agent_id,
+      canonical_person_id,
+      ordinal,
+      question,
+      answer_pack_json,
+      created_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    turnId,
+    input.sessionId,
+    input.personAgentId,
+    input.canonicalPersonId,
+    ordinal,
+    input.question,
+    JSON.stringify(input.answerPack),
+    createdAt
+  )
+
+  db.prepare(
+    `update person_agent_consultation_sessions
+     set latest_question = ?, turn_count = ?, updated_at = ?
+     where id = ?`
+  ).run(
+    input.question,
+    ordinal,
+    createdAt,
+    input.sessionId
+  )
+
+  return getPersonAgentConsultationSession(db, {
+    sessionId: input.sessionId
+  })!.turns.find((turn) => turn.turnId === turnId)!
+}
+
+export function getPersonAgentConsultationSession(db: ArchiveDatabase, input: {
+  sessionId: string
+}): PersonAgentConsultationSessionDetail | null {
+  const sessionRow = db.prepare(
+    `select
+      id,
+      person_agent_id as personAgentId,
+      canonical_person_id as canonicalPersonId,
+      title,
+      latest_question as latestQuestion,
+      turn_count as turnCount,
+      created_at as createdAt,
+      updated_at as updatedAt
+     from person_agent_consultation_sessions
+     where id = ?`
+  ).get(input.sessionId) as PersonAgentConsultationSessionRow | undefined
+
+  if (!sessionRow) {
+    return null
+  }
+
+  const turnRows = db.prepare(
+    `select
+      id,
+      session_id as sessionId,
+      person_agent_id as personAgentId,
+      canonical_person_id as canonicalPersonId,
+      ordinal,
+      question,
+      answer_pack_json as answerPackJson,
+      created_at as createdAt
+     from person_agent_consultation_turns
+     where session_id = ?
+     order by ordinal asc, created_at asc`
+  ).all(input.sessionId) as PersonAgentConsultationTurnRow[]
+
+  return {
+    ...mapPersonAgentConsultationSessionRow(sessionRow),
+    turns: turnRows.map(mapPersonAgentConsultationTurnRow)
+  }
+}
+
+export function upsertPersonAgentRuntimeState(db: ArchiveDatabase, input: {
+  personAgentId: string
+  canonicalPersonId: string
+  activeSessionId?: string | null
+  sessionCount: number
+  totalTurnCount: number
+  latestQuestion?: string | null
+  latestQuestionClassification?: PersonAgentRuntimeStateRecord['latestQuestionClassification']
+  lastAnswerDigest?: string | null
+  lastConsultedAt?: string | null
+  updatedAt?: string
+}): PersonAgentRuntimeStateRecord {
+  const updatedAt = input.updatedAt ?? new Date().toISOString()
+
+  db.prepare(
+    `insert into person_agent_runtime_state (
+      person_agent_id,
+      canonical_person_id,
+      active_session_id,
+      session_count,
+      total_turn_count,
+      latest_question,
+      latest_question_classification,
+      last_answer_digest,
+      last_consulted_at,
+      updated_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    on conflict(person_agent_id) do update set
+      canonical_person_id = excluded.canonical_person_id,
+      active_session_id = excluded.active_session_id,
+      session_count = excluded.session_count,
+      total_turn_count = excluded.total_turn_count,
+      latest_question = excluded.latest_question,
+      latest_question_classification = excluded.latest_question_classification,
+      last_answer_digest = excluded.last_answer_digest,
+      last_consulted_at = excluded.last_consulted_at,
+      updated_at = excluded.updated_at`
+  ).run(
+    input.personAgentId,
+    input.canonicalPersonId,
+    input.activeSessionId ?? null,
+    input.sessionCount,
+    input.totalTurnCount,
+    input.latestQuestion ?? null,
+    input.latestQuestionClassification ?? null,
+    input.lastAnswerDigest ?? null,
+    input.lastConsultedAt ?? null,
+    updatedAt
+  )
+
+  return getPersonAgentRuntimeState(db, {
+    personAgentId: input.personAgentId
+  })!
+}
+
+export function getPersonAgentRuntimeState(db: ArchiveDatabase, input: {
+  personAgentId?: string
+  canonicalPersonId?: string
+}): PersonAgentRuntimeStateRecord | null {
+  const row = db.prepare(
+    `select
+      person_agent_id as personAgentId,
+      canonical_person_id as canonicalPersonId,
+      active_session_id as activeSessionId,
+      session_count as sessionCount,
+      total_turn_count as totalTurnCount,
+      latest_question as latestQuestion,
+      latest_question_classification as latestQuestionClassification,
+      last_answer_digest as lastAnswerDigest,
+      last_consulted_at as lastConsultedAt,
+      updated_at as updatedAt
+     from person_agent_runtime_state
+     order by updated_at desc`
+  ).all() as PersonAgentRuntimeStateRow[]
+
+  const matched = row.find((candidate) => {
+    if (input.personAgentId && candidate.personAgentId !== input.personAgentId) {
+      return false
+    }
+    if (input.canonicalPersonId && candidate.canonicalPersonId !== input.canonicalPersonId) {
+      return false
+    }
+    return true
+  })
+
+  return matched ? mapPersonAgentRuntimeStateRow(matched) : null
 }
 
 export function enqueuePersonAgentRefresh(db: ArchiveDatabase, input: {

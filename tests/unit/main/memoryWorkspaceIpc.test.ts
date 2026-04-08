@@ -24,6 +24,10 @@ const {
   listApprovedPersonaDraftProviderSends,
   retryApprovedPersonaDraftProviderSend,
   sendApprovedPersonaDraftToProvider,
+  askPersonAgentConsultationPersisted,
+  getPersonAgentConsultationRuntimeState,
+  getPersonAgentConsultationSession,
+  listPersonAgentConsultationSessions,
   getPersonAgentByCanonicalPersonId,
   listPersonAgentAuditEvents,
   listPersonAgentRefreshQueue,
@@ -49,6 +53,10 @@ const {
   listApprovedPersonaDraftProviderSends: vi.fn(),
   retryApprovedPersonaDraftProviderSend: vi.fn(),
   sendApprovedPersonaDraftToProvider: vi.fn(),
+  askPersonAgentConsultationPersisted: vi.fn(),
+  getPersonAgentConsultationRuntimeState: vi.fn(),
+  getPersonAgentConsultationSession: vi.fn(),
+  listPersonAgentConsultationSessions: vi.fn(),
   getPersonAgentByCanonicalPersonId: vi.fn(),
   listPersonAgentAuditEvents: vi.fn(),
   listPersonAgentRefreshQueue: vi.fn(),
@@ -117,6 +125,17 @@ vi.mock('../../../src/main/services/approvedDraftProviderSendService', () => ({
   retryApprovedPersonaDraftProviderSend,
   sendApprovedPersonaDraftToProvider
 }))
+
+vi.mock('../../../src/main/services/personAgentConsultationService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/main/services/personAgentConsultationService')>()
+  return {
+    ...actual,
+    askPersonAgentConsultationPersisted,
+    getPersonAgentConsultationRuntimeState,
+    getPersonAgentConsultationSession,
+    listPersonAgentConsultationSessions
+  }
+})
 
 vi.mock('../../../src/main/services/governancePersistenceService', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../src/main/services/governancePersistenceService')>()
@@ -188,6 +207,10 @@ describe('registerWorkspaceIpc session handlers', () => {
     openDatabase.mockReset()
     runMigrations.mockReset()
     askMemoryWorkspacePersistedService.mockReset()
+    askPersonAgentConsultationPersisted.mockReset()
+    getPersonAgentConsultationRuntimeState.mockReset()
+    getPersonAgentConsultationSession.mockReset()
+    listPersonAgentConsultationSessions.mockReset()
     getPersonAgentByCanonicalPersonId.mockReset()
     listPersonAgentAuditEvents.mockReset()
     listPersonAgentRefreshQueue.mockReset()
@@ -264,6 +287,130 @@ describe('registerWorkspaceIpc session handlers', () => {
       ordinal: 2
     }))
     expect((result as { response: { contextCards: Array<{ title: string }> } }).response.contextCards[0]?.title).toBe('Conversation Context')
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('persists person-agent consultation turns through ipc', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    askPersonAgentConsultationPersisted.mockReturnValue({
+      turnId: 'pct-1',
+      sessionId: 'pcs-1',
+      personAgentId: 'agent-1',
+      canonicalPersonId: 'cp-1',
+      ordinal: 1,
+      question: '她的生日是什么？',
+      answerPack: {
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        question: '她的生日是什么？',
+        questionClassification: 'profile_fact',
+        candidateAnswer: 'Birthday: 1997-02-03.',
+        supportingFacts: [],
+        supportingCitations: [],
+        conflicts: [],
+        coverageGaps: [],
+        recentInteractionTopics: [],
+        generationReason: 'Resolved through active person-agent fact memory.',
+        memoryVersions: {
+          factsVersion: 2,
+          interactionVersion: 3
+        }
+      },
+      createdAt: '2026-04-08T12:00:00.000Z'
+    })
+
+    registerWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:askPersonAgentConsultation')
+    const result = await handler?.({}, {
+      canonicalPersonId: 'cp-1',
+      question: '她的生日是什么？',
+      sessionId: 'pcs-1'
+    })
+
+    expect(askPersonAgentConsultationPersisted).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1',
+      question: '她的生日是什么？',
+      sessionId: 'pcs-1'
+    })
+    expect(result).toEqual(expect.objectContaining({
+      sessionId: 'pcs-1',
+      ordinal: 1
+    }))
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('returns person-agent consultation sessions and runtime state through ipc', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    listPersonAgentConsultationSessions.mockReturnValue([
+      {
+        sessionId: 'pcs-1',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        title: 'Person Agent · Alice Chen',
+        latestQuestion: '她的生日是什么？',
+        turnCount: 1,
+        createdAt: '2026-04-08T12:00:00.000Z',
+        updatedAt: '2026-04-08T12:00:00.000Z'
+      }
+    ])
+    getPersonAgentConsultationRuntimeState.mockReturnValue({
+      personAgentId: 'agent-1',
+      canonicalPersonId: 'cp-1',
+      activeSessionId: 'pcs-1',
+      sessionCount: 1,
+      totalTurnCount: 1,
+      latestQuestion: '她的生日是什么？',
+      latestQuestionClassification: 'profile_fact',
+      lastAnswerDigest: 'Birthday: 1997-02-03.',
+      lastConsultedAt: '2026-04-08T12:00:00.000Z',
+      updatedAt: '2026-04-08T12:00:00.000Z'
+    })
+    getPersonAgentConsultationSession.mockReturnValue({
+      sessionId: 'pcs-1',
+      personAgentId: 'agent-1',
+      canonicalPersonId: 'cp-1',
+      title: 'Person Agent · Alice Chen',
+      latestQuestion: '她的生日是什么？',
+      turnCount: 1,
+      createdAt: '2026-04-08T12:00:00.000Z',
+      updatedAt: '2026-04-08T12:00:00.000Z',
+      turns: []
+    })
+
+    registerWorkspaceIpc(appPathsFixture())
+
+    const listHandler = handlerMap.get('archive:listPersonAgentConsultationSessions')
+    const runtimeHandler = handlerMap.get('archive:getPersonAgentRuntimeState')
+    const detailHandler = handlerMap.get('archive:getPersonAgentConsultationSession')
+
+    const sessions = await listHandler?.({}, { canonicalPersonId: 'cp-1' })
+    const runtimeState = await runtimeHandler?.({}, { canonicalPersonId: 'cp-1' })
+    const detail = await detailHandler?.({}, { sessionId: 'pcs-1' })
+
+    expect(listPersonAgentConsultationSessions).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(getPersonAgentConsultationRuntimeState).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(getPersonAgentConsultationSession).toHaveBeenCalledWith(expect.anything(), {
+      sessionId: 'pcs-1'
+    })
+    expect(sessions).toEqual([
+      expect.objectContaining({
+        sessionId: 'pcs-1'
+      })
+    ])
+    expect(runtimeState).toEqual(expect.objectContaining({
+      activeSessionId: 'pcs-1',
+      totalTurnCount: 1
+    }))
+    expect(detail).toEqual(expect.objectContaining({
+      sessionId: 'pcs-1'
+    }))
     expect(close).toHaveBeenCalled()
   })
 })
@@ -712,6 +859,10 @@ describe('registerWorkspaceIpc approved handoff handlers', () => {
     createApprovedPersonaDraftHostedShareLink.mockReset()
     revokeApprovedPersonaDraftHostedShareLink.mockReset()
     askMemoryWorkspacePersistedService.mockReset()
+    askPersonAgentConsultationPersisted.mockReset()
+    getPersonAgentConsultationRuntimeState.mockReset()
+    getPersonAgentConsultationSession.mockReset()
+    listPersonAgentConsultationSessions.mockReset()
     listApprovedPersonaDraftProviderSends.mockReset()
     retryApprovedPersonaDraftProviderSend.mockReset()
     sendApprovedPersonaDraftToProvider.mockReset()

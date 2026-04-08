@@ -103,6 +103,12 @@ export const askMemoryWorkspacePersistedInputSchema = z.object({
   sessionId: z.string().min(1).optional()
 })
 
+export const askPersonAgentConsultationInputSchema = z.object({
+  canonicalPersonId: z.string().min(1),
+  question: z.string().min(1),
+  sessionId: z.string().min(1).optional()
+})
+
 export const getPersonAgentStateInputSchema = z.object({
   canonicalPersonId: z.string().min(1)
 })
@@ -112,6 +118,19 @@ export const getPersonAgentMemorySummaryInputSchema = z.object({
 })
 
 export const getPersonAgentInspectionBundleInputSchema = z.object({
+  canonicalPersonId: z.string().min(1)
+})
+
+export const listPersonAgentConsultationSessionsInputSchema = z.object({
+  personAgentId: z.string().min(1).optional(),
+  canonicalPersonId: z.string().min(1).optional()
+}).optional().default({})
+
+export const getPersonAgentConsultationSessionInputSchema = z.object({
+  sessionId: z.string().min(1)
+})
+
+export const getPersonAgentRuntimeStateInputSchema = z.object({
   canonicalPersonId: z.string().min(1)
 })
 

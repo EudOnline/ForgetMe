@@ -1,17 +1,21 @@
 import { ipcMain } from 'electron'
 import {
+  askPersonAgentConsultationInputSchema,
   askMemoryWorkspaceInputSchema,
   askMemoryWorkspacePersistedInputSchema,
   approvedPersonaDraftReviewIdSchema,
   exportApprovedPersonaDraftInputSchema,
+  getPersonAgentConsultationSessionInputSchema,
   getPersonAgentInspectionBundleInputSchema,
   listApprovedPersonaDraftHandoffsInputSchema,
+  listPersonAgentConsultationSessionsInputSchema,
   listPersonAgentAuditEventsInputSchema,
   listApprovedPersonaDraftHostedShareLinksInputSchema,
   listApprovedPersonaDraftPublicationsInputSchema,
   listApprovedPersonaDraftProviderSendsInputSchema,
   createPersonaDraftReviewFromTurnInputSchema,
   getPersonAgentMemorySummaryInputSchema,
+  getPersonAgentRuntimeStateInputSchema,
   getPersonAgentStateInputSchema,
   getPersonaDraftReviewByTurnInputSchema,
   listPersonAgentRefreshQueueInputSchema,
@@ -40,6 +44,10 @@ export function registerWorkspaceIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:listMemoryWorkspaceSessions')
   ipcMain.removeHandler('archive:getMemoryWorkspaceSession')
   ipcMain.removeHandler('archive:askMemoryWorkspacePersisted')
+  ipcMain.removeHandler('archive:askPersonAgentConsultation')
+  ipcMain.removeHandler('archive:listPersonAgentConsultationSessions')
+  ipcMain.removeHandler('archive:getPersonAgentConsultationSession')
+  ipcMain.removeHandler('archive:getPersonAgentRuntimeState')
   ipcMain.removeHandler('archive:getPersonAgentState')
   ipcMain.removeHandler('archive:listPersonAgentRefreshQueue')
   ipcMain.removeHandler('archive:listPersonAgentAuditEvents')
@@ -90,6 +98,26 @@ export function registerWorkspaceIpc(appPaths: AppPaths) {
   ipcMain.handle('archive:askMemoryWorkspacePersisted', async (_event, payload) => {
     const input = askMemoryWorkspacePersistedInputSchema.parse(payload)
     return workspaceModule.askPersisted(input)
+  })
+
+  ipcMain.handle('archive:askPersonAgentConsultation', async (_event, payload) => {
+    const input = askPersonAgentConsultationInputSchema.parse(payload)
+    return workspaceModule.askPersonAgentConsultation(input)
+  })
+
+  ipcMain.handle('archive:listPersonAgentConsultationSessions', async (_event, payload) => {
+    const input = listPersonAgentConsultationSessionsInputSchema.parse(payload)
+    return workspaceModule.listPersonAgentConsultationSessions(input)
+  })
+
+  ipcMain.handle('archive:getPersonAgentConsultationSession', async (_event, payload) => {
+    const input = getPersonAgentConsultationSessionInputSchema.parse(payload)
+    return workspaceModule.getPersonAgentConsultationSession(input)
+  })
+
+  ipcMain.handle('archive:getPersonAgentRuntimeState', async (_event, payload) => {
+    const input = getPersonAgentRuntimeStateInputSchema.parse(payload)
+    return workspaceModule.getPersonAgentRuntimeState(input)
   })
 
   ipcMain.handle('archive:getPersonAgentState', async (_event, payload) => {

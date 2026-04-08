@@ -726,6 +726,45 @@ export type PersonAgentInteractionMemoryRecord = {
   updatedAt: string
 }
 
+export type PersonAgentConsultationSessionSummary = {
+  sessionId: string
+  personAgentId: string
+  canonicalPersonId: string
+  title: string
+  latestQuestion: string | null
+  turnCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type PersonAgentConsultationTurnRecord = {
+  turnId: string
+  sessionId: string
+  personAgentId: string
+  canonicalPersonId: string
+  ordinal: number
+  question: string
+  answerPack: PersonAgentAnswerPack
+  createdAt: string
+}
+
+export type PersonAgentConsultationSessionDetail = PersonAgentConsultationSessionSummary & {
+  turns: PersonAgentConsultationTurnRecord[]
+}
+
+export type PersonAgentRuntimeStateRecord = {
+  personAgentId: string
+  canonicalPersonId: string
+  activeSessionId: string | null
+  sessionCount: number
+  totalTurnCount: number
+  latestQuestion: string | null
+  latestQuestionClassification: PersonAgentAnswerPack['questionClassification'] | null
+  lastAnswerDigest: string | null
+  lastConsultedAt: string | null
+  updatedAt: string
+}
+
 export type PersonAgentRefreshQueueRecord = {
   refreshId: string
   canonicalPersonId: string
@@ -976,6 +1015,25 @@ export type GetPersonAgentMemorySummaryInput = {
 }
 
 export type GetPersonAgentInspectionBundleInput = {
+  canonicalPersonId: string
+}
+
+export type AskPersonAgentConsultationInput = {
+  canonicalPersonId: string
+  question: string
+  sessionId?: string
+}
+
+export type ListPersonAgentConsultationSessionsInput = {
+  personAgentId?: string
+  canonicalPersonId?: string
+}
+
+export type GetPersonAgentConsultationSessionInput = {
+  sessionId: string
+}
+
+export type GetPersonAgentRuntimeStateInput = {
   canonicalPersonId: string
 }
 
@@ -1929,6 +1987,10 @@ export interface ArchiveApi {
   listMemoryWorkspaceSessions: (input?: { scope?: MemoryWorkspaceScope }) => Promise<MemoryWorkspaceSessionSummary[]>
   getMemoryWorkspaceSession: (sessionId: string) => Promise<MemoryWorkspaceSessionDetail | null>
   askMemoryWorkspacePersisted: (input: AskMemoryWorkspacePersistedInput) => Promise<MemoryWorkspaceTurnRecord | null>
+  askPersonAgentConsultation: (input: AskPersonAgentConsultationInput) => Promise<PersonAgentConsultationTurnRecord | null>
+  listPersonAgentConsultationSessions: (input?: ListPersonAgentConsultationSessionsInput) => Promise<PersonAgentConsultationSessionSummary[]>
+  getPersonAgentConsultationSession: (input: GetPersonAgentConsultationSessionInput) => Promise<PersonAgentConsultationSessionDetail | null>
+  getPersonAgentRuntimeState: (input: GetPersonAgentRuntimeStateInput) => Promise<PersonAgentRuntimeStateRecord | null>
   getPersonAgentState: (input: GetPersonAgentStateInput) => Promise<PersonAgentRecord | null>
   listPersonAgentRefreshQueue: (input?: ListPersonAgentRefreshQueueInput) => Promise<PersonAgentRefreshQueueRecord[]>
   listPersonAgentAuditEvents: (input?: ListPersonAgentAuditEventsInput) => Promise<PersonAgentAuditEventRecord[]>

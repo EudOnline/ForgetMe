@@ -14,6 +14,10 @@ type WorkspaceClient = Pick<
   | 'listMemoryWorkspaceSessions'
   | 'getMemoryWorkspaceSession'
   | 'askMemoryWorkspacePersisted'
+  | 'askPersonAgentConsultation'
+  | 'listPersonAgentConsultationSessions'
+  | 'getPersonAgentConsultationSession'
+  | 'getPersonAgentRuntimeState'
   | 'getPersonAgentState'
   | 'listPersonAgentRefreshQueue'
   | 'listPersonAgentAuditEvents'
@@ -53,6 +57,10 @@ export function getWorkspaceClient(): WorkspaceClient {
     listMemoryWorkspaceSessions: bridgeMethod('listMemoryWorkspaceSessions', async () => []),
     getMemoryWorkspaceSession: bridgeMethod('getMemoryWorkspaceSession', async () => null),
     askMemoryWorkspacePersisted: bridgeMethod('askMemoryWorkspacePersisted', async () => null),
+    askPersonAgentConsultation: bridgeMethod('askPersonAgentConsultation', async () => null),
+    listPersonAgentConsultationSessions: bridgeMethod('listPersonAgentConsultationSessions', async () => []),
+    getPersonAgentConsultationSession: bridgeMethod('getPersonAgentConsultationSession', async () => null),
+    getPersonAgentRuntimeState: bridgeMethod('getPersonAgentRuntimeState', async () => null),
     getPersonAgentState: bridgeMethod('getPersonAgentState', async () => null),
     listPersonAgentRefreshQueue: bridgeMethod('listPersonAgentRefreshQueue', async () => []),
     listPersonAgentAuditEvents: bridgeMethod('listPersonAgentAuditEvents', async () => []),

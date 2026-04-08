@@ -8,6 +8,10 @@ type WorkspacePreloadModule = Pick<
   | 'listMemoryWorkspaceSessions'
   | 'getMemoryWorkspaceSession'
   | 'askMemoryWorkspacePersisted'
+  | 'askPersonAgentConsultation'
+  | 'listPersonAgentConsultationSessions'
+  | 'getPersonAgentConsultationSession'
+  | 'getPersonAgentRuntimeState'
   | 'getPersonAgentState'
   | 'listPersonAgentRefreshQueue'
   | 'listPersonAgentAuditEvents'
@@ -47,6 +51,10 @@ export function createWorkspacePreloadModule(ipcRenderer: IpcRenderer): Workspac
     listMemoryWorkspaceSessions: invokeWith(ipcRenderer, 'archive:listMemoryWorkspaceSessions'),
     getMemoryWorkspaceSession: (sessionId) => ipcRenderer.invoke('archive:getMemoryWorkspaceSession', { sessionId }),
     askMemoryWorkspacePersisted: invokeWith(ipcRenderer, 'archive:askMemoryWorkspacePersisted'),
+    askPersonAgentConsultation: invokeWith(ipcRenderer, 'archive:askPersonAgentConsultation'),
+    listPersonAgentConsultationSessions: invokeWith(ipcRenderer, 'archive:listPersonAgentConsultationSessions'),
+    getPersonAgentConsultationSession: (sessionId) => ipcRenderer.invoke('archive:getPersonAgentConsultationSession', { sessionId }),
+    getPersonAgentRuntimeState: invokeWith(ipcRenderer, 'archive:getPersonAgentRuntimeState'),
     getPersonAgentState: invokeWith(ipcRenderer, 'archive:getPersonAgentState'),
     listPersonAgentRefreshQueue: invokeWith(ipcRenderer, 'archive:listPersonAgentRefreshQueue'),
     listPersonAgentAuditEvents: invokeWith(ipcRenderer, 'archive:listPersonAgentAuditEvents'),
