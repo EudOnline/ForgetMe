@@ -56,6 +56,7 @@ import { listApprovedDraftSendDestinations } from '../../../services/approvedDra
 import type {
   PersonAgentAuditEventRecord,
   PersonAgentInspectionHighlight,
+  PersonAgentInspectionRecommendations,
   PersonAgentMemorySummary,
   PersonAgentRecord,
   PersonAgentRefreshQueueRecord
@@ -190,6 +191,117 @@ function buildPersonAgentInspectionHighlights(input: {
     .slice(0, 6)
 }
 
+function buildPersonAgentInspectionRecommendations(input: {
+  overview: ReturnType<typeof buildPersonAgentInspectionOverview>
+  memorySummary: PersonAgentMemorySummary | null
+}) {
+  const conflictMemory = input.memorySummary?.factSummary?.conflicts[0] ?? null
+  const coverageGapMemory = input.memorySummary?.factSummary?.coverageGaps[0] ?? null
+  const interactionTopic = (input.memorySummary?.interactionMemories ?? [])
+    .slice()
+    .sort((left, right) => {
+      if (right.questionCount !== left.questionCount) {
+        return right.questionCount - left.questionCount
+      }
+
+      const leftAt = left.lastQuestionAt ?? left.updatedAt
+      const rightAt = right.lastQuestionAt ?? right.updatedAt
+      return rightAt.localeCompare(leftAt)
+    })[0] ?? null
+
+  const recommendedTopics = [] as PersonAgentInspectionRecommendations['recommendedTopics']
+
+  if (input.overview.openConflictCount > 0) {
+    recommendedTopics.push({
+      kind: 'conflict',
+      label: conflictMemory?.displayLabel ?? conflictMemory?.memoryKey ?? 'open_conflict',
+      reason: 'Open conflict needs review after refresh completes.'
+    })
+  }
+
+  if (interactionTopic) {
+    recommendedTopics.push({
+      kind: 'interaction_topic',
+      label: interactionTopic.topicLabel,
+      reason: 'Repeated questions suggest a stable follow-up topic.'
+    })
+  }
+
+  if (input.overview.coverageGapCount > 0) {
+    recommendedTopics.push({
+      kind: 'coverage_gap',
+      label: coverageGapMemory?.displayLabel ?? coverageGapMemory?.memoryKey ?? 'coverage_gap',
+      reason: 'Coverage gaps mark areas where more evidence would help.'
+    })
+  }
+
+  if (input.overview.latestStrategyChange) {
+    recommendedTopics.push({
+      kind: 'strategy_change',
+      label: 'strategy_profile',
+      reason: 'Recent strategy changes may affect how this person agent should be consulted.'
+    })
+  }
+
+  if (input.overview.pendingRefreshCount > 0) {
+    return {
+      attentionLevel: 'high',
+      nextBestAction: 'wait_for_refresh',
+      blockingReason: 'pending_refresh',
+      suggestedQuestion: '等刷新完成后，再确认 school_name 的冲突来源是什么？',
+      recommendedTopics
+    } satisfies PersonAgentInspectionRecommendations
+  }
+
+  if (input.overview.openConflictCount > 0) {
+    return {
+      attentionLevel: 'high',
+      nextBestAction: 'resolve_conflict',
+      blockingReason: 'open_conflict',
+      suggestedQuestion: '这条冲突信息里，哪一个来源更可信？',
+      recommendedTopics
+    } satisfies PersonAgentInspectionRecommendations
+  }
+
+  if (input.overview.coverageGapCount > 0) {
+    return {
+      attentionLevel: 'medium',
+      nextBestAction: 'fill_coverage_gap',
+      blockingReason: 'coverage_gap',
+      suggestedQuestion: '关于这个人，还有哪一类资料最值得补充？',
+      recommendedTopics
+    } satisfies PersonAgentInspectionRecommendations
+  }
+
+  if (interactionTopic && interactionTopic.questionCount >= 2) {
+    return {
+      attentionLevel: 'medium',
+      nextBestAction: 'expand_topic',
+      blockingReason: null,
+      suggestedQuestion: `要不要继续追问 ${interactionTopic.topicLabel} 的细节？`,
+      recommendedTopics
+    } satisfies PersonAgentInspectionRecommendations
+  }
+
+  if (input.overview.latestStrategyChange) {
+    return {
+      attentionLevel: 'medium',
+      nextBestAction: 'review_strategy_change',
+      blockingReason: null,
+      suggestedQuestion: '这次策略调整是否需要同步到前端展示方式？',
+      recommendedTopics
+    } satisfies PersonAgentInspectionRecommendations
+  }
+
+  return {
+    attentionLevel: 'steady',
+    nextBestAction: 'monitor',
+    blockingReason: null,
+    suggestedQuestion: null,
+    recommendedTopics
+  } satisfies PersonAgentInspectionRecommendations
+}
+
 async function selectDirectory(envKey: string) {
   const envValue = process.env[envKey]
   if (envValue) {
@@ -284,6 +396,15 @@ export function createWorkspaceModule(appPaths: AppPaths) {
             memorySummary,
             refreshQueue,
             auditEvents
+          }),
+          recommendations: buildPersonAgentInspectionRecommendations({
+            overview: buildPersonAgentInspectionOverview({
+              state,
+              memorySummary,
+              refreshQueue,
+              auditEvents
+            }),
+            memorySummary
           }),
           highlights: buildPersonAgentInspectionHighlights({
             refreshQueue,

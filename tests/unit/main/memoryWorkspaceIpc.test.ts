@@ -529,7 +529,25 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
       facts: [],
       timeline: [],
       relationships: [],
-      conflicts: [],
+      conflicts: [
+        {
+          memoryId: 'fm-conflict-1',
+          personAgentId: 'agent-1',
+          canonicalPersonId: 'cp-1',
+          memoryKey: 'conflict.school_name',
+          sectionKey: 'conflict',
+          displayLabel: 'school_name',
+          summaryValue: 'Two approved-school candidates disagree.',
+          memoryKind: 'conflict',
+          confidence: null,
+          conflictState: 'open',
+          freshnessAt: '2026-04-08T01:00:00.000Z',
+          sourceRefs: [],
+          sourceHash: 'hash-conflict-1',
+          createdAt: '2026-04-08T01:00:00.000Z',
+          updatedAt: '2026-04-08T01:00:00.000Z'
+        }
+      ],
       coverageGaps: []
     })
     listPersonAgentInteractionMemories.mockReturnValue([
@@ -614,6 +632,24 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
           source: 'refresh_rebuild',
           changedFields: ['conflictBehavior']
         })
+      }),
+      recommendations: expect.objectContaining({
+        attentionLevel: 'high',
+        nextBestAction: 'wait_for_refresh',
+        blockingReason: 'pending_refresh',
+        suggestedQuestion: '等刷新完成后，再确认 school_name 的冲突来源是什么？',
+        recommendedTopics: expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'conflict',
+            label: 'school_name',
+            reason: 'Open conflict needs review after refresh completes.'
+          }),
+          expect.objectContaining({
+            kind: 'interaction_topic',
+            label: 'Profile facts',
+            reason: 'Repeated questions suggest a stable follow-up topic.'
+          })
+        ])
       }),
       highlights: [
         expect.objectContaining({

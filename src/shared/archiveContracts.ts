@@ -767,6 +767,7 @@ export type PersonAgentMemorySummary = {
 export type PersonAgentInspectionBundle = {
   canonicalPersonId: string
   overview: PersonAgentInspectionOverview
+  recommendations: PersonAgentInspectionRecommendations
   highlights: PersonAgentInspectionHighlight[]
   state: PersonAgentRecord | null
   memorySummary: PersonAgentMemorySummary | null
@@ -795,6 +796,24 @@ export type PersonAgentInspectionHighlight = {
   title: string
   summary: string
   emphasis: 'high' | 'medium'
+}
+
+export type PersonAgentInspectionRecommendations = {
+  attentionLevel: 'high' | 'medium' | 'steady'
+  nextBestAction:
+    | 'wait_for_refresh'
+    | 'resolve_conflict'
+    | 'fill_coverage_gap'
+    | 'expand_topic'
+    | 'review_strategy_change'
+    | 'monitor'
+  blockingReason: 'pending_refresh' | 'open_conflict' | 'coverage_gap' | null
+  suggestedQuestion: string | null
+  recommendedTopics: Array<{
+    kind: 'conflict' | 'coverage_gap' | 'interaction_topic' | 'strategy_change'
+    label: string
+    reason: string
+  }>
 }
 
 export type PersonAgentAnswerPack = {
