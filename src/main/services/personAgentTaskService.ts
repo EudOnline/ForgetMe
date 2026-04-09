@@ -33,7 +33,7 @@ export function executePersonAgentTask(db: ArchiveDatabase, input: {
   now?: string
 }) {
   const result = runPersonAgentRuntime(db, {
-    operationKind: 'execute_task',
+    operationKind: 'task_run',
     taskId: input.taskId,
     source: input.source,
     now: input.now
@@ -58,7 +58,7 @@ export function processPersonAgentTaskQueue(db: ArchiveDatabase, input: {
     },
     (taskId): PersonAgentTaskRunRecord | null => {
       const result = runPersonAgentRuntime(db, {
-        operationKind: 'execute_task',
+        operationKind: 'task_run',
         taskId,
         source: input.source ?? 'background_queue',
         now: input.now

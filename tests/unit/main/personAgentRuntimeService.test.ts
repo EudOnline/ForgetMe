@@ -242,4 +242,40 @@ describe('personAgentRuntimeService', () => {
 
     db.close()
   })
+
+  it('returns not_found when no active capsule runtime is materialized', () => {
+    const { db } = setupDatabase()
+    seedCanonicalPerson(db, {
+      canonicalPersonId: 'cp-2',
+      displayName: 'Bob Li',
+      anchorPersonId: 'p-2'
+    })
+
+    upsertPersonAgent(db, {
+      canonicalPersonId: 'cp-2',
+      status: 'active',
+      promotionTier: 'high_signal',
+      promotionScore: 66,
+      promotionReasonSummary: 'Ready once a capsule exists.',
+      strategyProfile: {
+        profileVersion: 1,
+        responseStyle: 'contextual',
+        evidencePreference: 'quote_first',
+        conflictBehavior: 'balanced'
+      },
+      factsVersion: 1,
+      interactionVersion: 1
+    })
+
+    expect(runPersonAgentRuntime(db, {
+      operationKind: 'consultation',
+      canonicalPersonId: 'cp-2',
+      question: '他的生日是什么？',
+      now: NOW
+    })).toEqual({
+      resultKind: 'not_found'
+    })
+
+    db.close()
+  })
 })

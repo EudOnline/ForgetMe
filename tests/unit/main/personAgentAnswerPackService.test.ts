@@ -17,6 +17,7 @@ import {
   appendPersonAgentCapsuleActivityEvent,
   syncPersonAgentCapsuleRuntimeArtifacts
 } from '../../../src/main/services/personAgentCapsuleRuntimeArtifactsService'
+import { buildPersonAgentCapsuleRuntimePromptArtifacts } from '../../../src/main/services/personAgentCapsulePromptBundleService'
 
 const NOW = '2026-04-06T12:00:00.000Z'
 
@@ -241,9 +242,16 @@ describe('personAgentAnswerPackService', () => {
     const db = setupDatabase()
     const personAgent = seedPersonAgentMemoryFixture(db)
 
+    const promptArtifacts = buildPersonAgentCapsuleRuntimePromptArtifacts(db, {
+      canonicalPersonId: 'cp-1',
+      operationKind: 'consultation',
+      promptInput: '她的生日是什么？'
+    })
     const pack = buildPersonAgentAnswerPack(db, {
       canonicalPersonId: 'cp-1',
-      question: '她的生日是什么？'
+      question: '她的生日是什么？',
+      capsulePromptBundle: promptArtifacts.promptBundle,
+      capsuleRuntimeContext: promptArtifacts.runtimeContext
     })
 
     expect(pack).toMatchObject({
@@ -357,9 +365,16 @@ describe('personAgentAnswerPackService', () => {
     const db = setupDatabase()
     seedPersonAgentMemoryFixture(db)
 
+    const promptArtifacts = buildPersonAgentCapsuleRuntimePromptArtifacts(db, {
+      canonicalPersonId: 'cp-1',
+      operationKind: 'consultation',
+      promptInput: '她的生日是什么？'
+    })
     const pack = buildPersonAgentAnswerPack(db, {
       canonicalPersonId: 'cp-1',
-      question: '她的生日是什么？'
+      question: '她的生日是什么？',
+      capsulePromptBundle: promptArtifacts.promptBundle,
+      capsuleRuntimeContext: promptArtifacts.runtimeContext
     })
 
     expect(pack?.candidateAnswer).toContain('Open conflicts remain on school_name')
@@ -419,9 +434,17 @@ describe('personAgentAnswerPackService', () => {
       }
     })
 
+    const promptArtifacts = buildPersonAgentCapsuleRuntimePromptArtifacts(db, {
+      personAgentId: personAgent.personAgentId,
+      canonicalPersonId: 'cp-1',
+      operationKind: 'consultation',
+      promptInput: '她的生日是什么？'
+    })
     const pack = buildPersonAgentAnswerPack(db, {
       canonicalPersonId: 'cp-1',
-      question: '她的生日是什么？'
+      question: '她的生日是什么？',
+      capsulePromptBundle: promptArtifacts.promptBundle,
+      capsuleRuntimeContext: promptArtifacts.runtimeContext
     })
 
     expect(pack?.capsuleRuntimeContext).toMatchObject({

@@ -6,6 +6,7 @@ import type {
 } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
 import { listPersonAgents } from './governancePersistenceService'
+import { buildPersonAgentCapsuleRuntimePromptArtifacts } from './personAgentCapsulePromptBundleService'
 import { createCard } from './memoryWorkspaceResponseHelperService'
 import { buildPersonAgentAnswerPack } from './personAgentAnswerPackService'
 
@@ -250,9 +251,16 @@ function resolveGlobalPersonAgent(db: ArchiveDatabase, question: string) {
   }
 
   const matchedAgent = matchedAgents[0]!
+  const promptArtifacts = buildPersonAgentCapsuleRuntimePromptArtifacts(db, {
+    canonicalPersonId: matchedAgent.canonicalPersonId,
+    operationKind: 'consultation',
+    promptInput: question
+  })
   const answerPack = buildPersonAgentAnswerPack(db, {
     canonicalPersonId: matchedAgent.canonicalPersonId,
-    question
+    question,
+    capsulePromptBundle: promptArtifacts.promptBundle,
+    capsuleRuntimeContext: promptArtifacts.runtimeContext
   })
 
   return answerPack
@@ -268,9 +276,16 @@ export function resolvePersonAgentRoute(
   }
 ): PersonAgentRouteDecoration | null {
   if (input.scope.kind === 'person') {
+    const promptArtifacts = buildPersonAgentCapsuleRuntimePromptArtifacts(db, {
+      canonicalPersonId: input.scope.canonicalPersonId,
+      operationKind: 'consultation',
+      promptInput: input.question
+    })
     const answerPack = buildPersonAgentAnswerPack(db, {
       canonicalPersonId: input.scope.canonicalPersonId,
-      question: input.question
+      question: input.question,
+      capsulePromptBundle: promptArtifacts.promptBundle,
+      capsuleRuntimeContext: promptArtifacts.runtimeContext
     })
 
     return answerPack

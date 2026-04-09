@@ -217,7 +217,7 @@ describe('personAgentTaskService', () => {
     expect(runtimeSpy).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        operationKind: 'execute_task',
+        operationKind: 'task_run',
         taskId: 'task-1',
         source: 'workspace_ui',
         now: NOW

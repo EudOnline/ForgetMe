@@ -2,7 +2,7 @@ import type {
   PersonAgentCapsuleRecord,
   PersonAgentCapsulePromptBundle,
   PersonAgentTaskRecord,
-  RunPersonAgentCapsuleRuntimeInput,
+  PersonAgentTaskStatus,
   RunPersonAgentCapsuleRuntimeResult
 } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
@@ -30,6 +30,29 @@ import {
   syncPersonAgentTasks,
   transitionPersonAgentTaskState
 } from './personAgentTaskStateService'
+
+type PersonAgentRuntimeInput =
+  | {
+      operationKind: 'consultation'
+      canonicalPersonId: string
+      question: string
+      sessionId?: string
+      now?: string
+    }
+  | {
+      operationKind: 'transition_task'
+      taskId: string
+      status: Exclude<PersonAgentTaskStatus, 'pending'>
+      source?: string
+      reason?: string
+      now?: string
+    }
+  | {
+      operationKind: 'task_run'
+      taskId: string
+      source?: string
+      now?: string
+    }
 
 function resolveSessionTitle(db: ArchiveDatabase, canonicalPersonId: string) {
   const row = db.prepare(
@@ -99,12 +122,23 @@ function runConsultationRuntime(db: ArchiveDatabase, input: {
     return { resultKind: 'not_found' }
   }
 
+  const capsule = getPersonAgentCapsule(db, {
+    personAgentId: personAgent.personAgentId,
+    canonicalPersonId: input.canonicalPersonId
+  })
+  if (!capsule) {
+    return { resultKind: 'not_found' }
+  }
+
   const promptArtifacts = prepareRuntimePromptArtifacts(db, {
     personAgentId: personAgent.personAgentId,
     canonicalPersonId: input.canonicalPersonId,
     operationKind: 'consultation',
     promptInput: input.question
   })
+  if (!promptArtifacts.runtimeContext || !promptArtifacts.promptBundle) {
+    return { resultKind: 'not_found' }
+  }
   const answerPack = buildPersonAgentAnswerPack(db, {
     canonicalPersonId: input.canonicalPersonId,
     question: input.question,
@@ -179,10 +213,6 @@ function runConsultationRuntime(db: ArchiveDatabase, input: {
     }
   )
 
-  const capsule = getPersonAgentCapsule(db, {
-    personAgentId: personAgent.personAgentId,
-    canonicalPersonId: input.canonicalPersonId
-  })
   finalizeRuntimeArtifacts(db, {
     capsule,
     canonicalPersonId: input.canonicalPersonId,
@@ -223,6 +253,14 @@ function runTaskRuntime(db: ArchiveDatabase, input: {
   }
 
   const now = input.now ?? new Date().toISOString()
+  const capsule = getPersonAgentCapsule(db, {
+    personAgentId: task.personAgentId,
+    canonicalPersonId: task.canonicalPersonId
+  })
+  if (!capsule) {
+    return { resultKind: 'not_found' }
+  }
+
   const runDraft = buildPersonAgentTaskExecutionRunDraft(task)
   const promptArtifacts = prepareRuntimePromptArtifacts(db, {
     personAgentId: task.personAgentId,
@@ -232,6 +270,9 @@ function runTaskRuntime(db: ArchiveDatabase, input: {
     taskKind: runDraft.taskKind,
     suggestedQuestion: runDraft.suggestedQuestion
   })
+  if (!promptArtifacts.runtimeContext || !promptArtifacts.promptBundle) {
+    return { resultKind: 'not_found' }
+  }
   const run = appendPersonAgentTaskRun(db, {
     ...runDraft,
     promptBundle: promptArtifacts.promptBundle,
@@ -253,11 +294,6 @@ function runTaskRuntime(db: ArchiveDatabase, input: {
       now
     })
   }
-
-  const capsule = getPersonAgentCapsule(db, {
-    personAgentId: task.personAgentId,
-    canonicalPersonId: task.canonicalPersonId
-  })
 
   appendPersonAgentAuditEvent(db, {
     personAgentId: task.personAgentId,
@@ -302,7 +338,7 @@ function runTaskRuntime(db: ArchiveDatabase, input: {
 
 export function runPersonAgentRuntime(
   db: ArchiveDatabase,
-  input: RunPersonAgentCapsuleRuntimeInput & { now?: string }
+  input: PersonAgentRuntimeInput
 ): RunPersonAgentCapsuleRuntimeResult {
   if (input.operationKind === 'consultation') {
     return runConsultationRuntime(db, input)
@@ -320,5 +356,11 @@ export function runPersonAgentRuntime(
         }
   }
 
-  return runTaskRuntime(db, input)
+  if (input.operationKind === 'task_run') {
+    return runTaskRuntime(db, input)
+  }
+
+  return {
+    resultKind: 'not_found'
+  }
 }

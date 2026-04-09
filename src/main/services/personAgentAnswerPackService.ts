@@ -17,7 +17,6 @@ import {
   classifyPersonAgentQuestion,
   createCitation
 } from './memoryWorkspaceResponseHelperService'
-import { buildPersonAgentCapsuleRuntimePromptArtifacts } from './personAgentCapsulePromptBundleService'
 import { createDefaultPersonAgentStrategyProfile } from './personAgentStrategyService'
 
 function normalizeQuestion(question: string) {
@@ -201,17 +200,10 @@ export function buildPersonAgentAnswerPack(db: ArchiveDatabase, input: {
     gapKey: record.memoryKey.replace(/^coverage\./, ''),
     summary: record.summaryValue
   }))
-  const runtimePromptArtifacts = input.capsulePromptBundle !== undefined || input.capsuleRuntimeContext !== undefined
-    ? {
-        runtimeContext: input.capsuleRuntimeContext ?? null,
-        promptBundle: input.capsulePromptBundle ?? null
-      }
-    : buildPersonAgentCapsuleRuntimePromptArtifacts(db, {
-        personAgentId: personAgent.personAgentId,
-        canonicalPersonId: input.canonicalPersonId,
-        operationKind: 'consultation',
-        promptInput: input.question
-      })
+  const runtimePromptArtifacts = {
+    runtimeContext: input.capsuleRuntimeContext ?? null,
+    promptBundle: input.capsulePromptBundle ?? null
+  }
   const capsuleRuntimeContext = runtimePromptArtifacts.runtimeContext
   const capsulePromptBundle = runtimePromptArtifacts.promptBundle
 
