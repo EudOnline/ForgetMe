@@ -627,11 +627,21 @@ export type PersonAgentPromotionScore = {
   signals: {
     approvedFactCount: number
     evidenceSourceCount: number
+    communicationFileCount: number
+    linkedImportBatchCount: number
     relationshipDegree: number
+    relationshipDensity: number
     recentQuestionCount: number
     recentCitationCount: number
   }
   evaluatedAt: string
+}
+
+export type PersonAgentStrategyProfile = {
+  profileVersion: number
+  responseStyle: 'concise' | 'contextual'
+  evidencePreference: 'balanced' | 'quote_first'
+  conflictBehavior: 'balanced' | 'conflict_forward'
 }
 
 export type PersonAgentRecord = {
@@ -641,12 +651,80 @@ export type PersonAgentRecord = {
   promotionTier: PersonAgentPromotionTier
   promotionScore: number
   promotionReasonSummary: string
+  strategyProfile?: PersonAgentStrategyProfile | null
   factsVersion: number
   interactionVersion: number
   lastRefreshedAt: string | null
   lastActivatedAt: string | null
   createdAt: string
   updatedAt: string
+}
+
+export type PersonAgentCapsuleStatus =
+  | 'ready'
+  | 'stale'
+
+export type PersonAgentCapsuleActivationSource =
+  | 'import_batch'
+  | 'refresh_rebuild'
+  | 'interaction_promotion'
+  | 'manual_backfill'
+
+export type PersonAgentCapsuleCheckpointKind =
+  | 'activation'
+  | 'refresh'
+  | 'consultation'
+  | 'task_sync'
+  | 'backfill'
+
+export type PersonAgentCapsuleIdentityProfile = {
+  primaryDisplayName: string
+  normalizedName: string
+  promotionTier: PersonAgentPromotionTier
+  strategyProfileVersion: number | null
+  factsVersion: number
+  interactionVersion: number
+}
+
+export type PersonAgentCapsuleRecord = {
+  capsuleId: string
+  personAgentId: string
+  canonicalPersonId: string
+  capsuleStatus: PersonAgentCapsuleStatus
+  activationSource: PersonAgentCapsuleActivationSource
+  sessionNamespace: string
+  workspaceRoot: string
+  stateRoot: string
+  identityProfile: PersonAgentCapsuleIdentityProfile
+  latestCheckpointId: string | null
+  latestCheckpointAt: string | null
+  activatedAt: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type PersonAgentCapsuleMemoryCheckpointRecord = {
+  checkpointId: string
+  capsuleId: string
+  personAgentId: string
+  canonicalPersonId: string
+  checkpointKind: PersonAgentCapsuleCheckpointKind
+  factsVersion: number
+  interactionVersion: number
+  strategyProfileVersion: number | null
+  taskSnapshotAt: string | null
+  summary: string
+  summaryPayload: Record<string, unknown>
+  createdAt: string
+}
+
+export type PersonAgentAuditEventRecord = {
+  auditEventId: string
+  personAgentId: string | null
+  canonicalPersonId: string
+  eventKind: string
+  payload: Record<string, unknown>
+  createdAt: string
 }
 
 export type PersonAgentMemoryRef = {
@@ -708,6 +786,137 @@ export type PersonAgentInteractionMemoryRecord = {
   updatedAt: string
 }
 
+export type PersonAgentConsultationSessionSummary = {
+  sessionId: string
+  personAgentId: string
+  canonicalPersonId: string
+  title: string
+  latestQuestion: string | null
+  turnCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type PersonAgentConsultationTurnRecord = {
+  turnId: string
+  sessionId: string
+  personAgentId: string
+  canonicalPersonId: string
+  ordinal: number
+  question: string
+  answerPack: PersonAgentAnswerPack
+  createdAt: string
+}
+
+export type PersonAgentConsultationSessionDetail = PersonAgentConsultationSessionSummary & {
+  turns: PersonAgentConsultationTurnRecord[]
+}
+
+export type PersonAgentRuntimeStateRecord = {
+  personAgentId: string
+  canonicalPersonId: string
+  activeSessionId: string | null
+  sessionCount: number
+  totalTurnCount: number
+  latestQuestion: string | null
+  latestQuestionClassification: PersonAgentAnswerPack['questionClassification'] | null
+  lastAnswerDigest: string | null
+  lastConsultedAt: string | null
+  capsuleId?: string | null
+  capsuleStatus?: PersonAgentCapsuleStatus | null
+  capsuleSessionNamespace?: string | null
+  capsuleCheckpointId?: string | null
+  capsuleCheckpointAt?: string | null
+  updatedAt: string
+}
+
+export type PersonAgentTaskQueueRunnerStatus =
+  | 'idle'
+  | 'running'
+  | 'error'
+
+export type PersonAgentTaskQueueRunnerStateRecord = {
+  runnerName: string
+  status: PersonAgentTaskQueueRunnerStatus
+  lastStartedAt: string | null
+  lastCompletedAt: string | null
+  lastFailedAt: string | null
+  lastProcessedTaskCount: number
+  totalProcessedTaskCount: number
+  lastError: string | null
+  lastProcessedTaskId?: string | null
+  lastProcessedPersonAgentId?: string | null
+  lastProcessedCanonicalPersonId?: string | null
+  lastProcessedCapsuleId?: string | null
+  lastProcessedCapsuleSessionNamespace?: string | null
+  updatedAt: string
+}
+
+export type PersonAgentTaskKind =
+  | 'await_refresh'
+  | 'resolve_conflict'
+  | 'fill_coverage_gap'
+  | 'expand_topic'
+  | 'review_strategy_change'
+
+export type PersonAgentTaskStatus =
+  | 'pending'
+  | 'processing'
+  | 'completed'
+  | 'dismissed'
+
+export type PersonAgentTaskRunStatus =
+  | 'completed'
+  | 'blocked'
+  | 'failed'
+
+export type PersonAgentTaskRunAction = {
+  kind:
+    | 'wait_for_refresh'
+    | 'review_conflict'
+    | 'collect_evidence'
+    | 'ask_follow_up'
+    | 'review_strategy'
+  label: string
+  payload: Record<string, unknown>
+}
+
+export type PersonAgentTaskRecord = {
+  taskId: string
+  taskKey: string
+  personAgentId: string
+  canonicalPersonId: string
+  taskKind: PersonAgentTaskKind
+  status: PersonAgentTaskStatus
+  priority: 'high' | 'medium'
+  title: string
+  summary: string
+  sourceRef: Record<string, unknown>
+  statusChangedAt: string
+  statusSource: string | null
+  statusReason: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type PersonAgentTaskRunRecord = {
+  runId: string
+  taskId: string
+  taskKey: string
+  personAgentId: string
+  canonicalPersonId: string
+  taskKind: PersonAgentTaskKind
+  runStatus: PersonAgentTaskRunStatus
+  summary: string
+  suggestedQuestion: string | null
+  actionItems: PersonAgentTaskRunAction[]
+  source: string | null
+  capsuleId?: string | null
+  capsuleSessionNamespace?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export type PersonAgentRefreshQueueRecord = {
   refreshId: string
   canonicalPersonId: string
@@ -746,9 +955,78 @@ export type PersonAgentMemorySummary = {
   interactionMemories: PersonAgentInteractionMemoryRecord[]
 }
 
+export type PersonAgentInspectionBundle = {
+  canonicalPersonId: string
+  overview: PersonAgentInspectionOverview
+  recommendations: PersonAgentInspectionRecommendations
+  highlights: PersonAgentInspectionHighlight[]
+  capsule: PersonAgentCapsuleRecord | null
+  capsuleCheckpoint: PersonAgentCapsuleMemoryCheckpointRecord | null
+  runnerState: PersonAgentTaskQueueRunnerStateRecord | null
+  tasks: PersonAgentTaskRecord[]
+  state: PersonAgentRecord | null
+  memorySummary: PersonAgentMemorySummary | null
+  refreshQueue: PersonAgentRefreshQueueRecord[]
+  auditEvents: PersonAgentAuditEventRecord[]
+}
+
+export type PersonAgentInspectionOverview = {
+  hasActiveAgent: boolean
+  pendingRefreshCount: number
+  openConflictCount: number
+  coverageGapCount: number
+  interactionTopicCount: number
+  totalQuestionCount: number
+  latestRefreshRequestedAt: string | null
+  latestStrategyChange: {
+    createdAt: string
+    source: string | null
+    changedFields: string[]
+  } | null
+  capsuleStatus: PersonAgentCapsuleStatus | 'missing'
+  activationSource: PersonAgentCapsuleActivationSource | null
+  taskQueueRunner: {
+    status: 'healthy' | 'stalled' | 'error' | 'missing'
+    stalled: boolean
+    thresholdMinutes: number
+    reason: string | null
+    lastHeartbeatAt: string | null
+    lastProcessedTaskCount: number
+    totalProcessedTaskCount: number
+    lastError: string | null
+  }
+}
+
+export type PersonAgentInspectionHighlight = {
+  kind: 'refresh_pending' | 'refresh_failed' | 'strategy_change' | 'interaction_hotspot' | 'runner_stalled' | 'runner_error'
+  createdAt: string
+  title: string
+  summary: string
+  emphasis: 'high' | 'medium'
+}
+
+export type PersonAgentInspectionRecommendations = {
+  attentionLevel: 'high' | 'medium' | 'steady'
+  nextBestAction:
+    | 'wait_for_refresh'
+    | 'resolve_conflict'
+    | 'fill_coverage_gap'
+    | 'expand_topic'
+    | 'review_strategy_change'
+    | 'monitor'
+  blockingReason: 'pending_refresh' | 'open_conflict' | 'coverage_gap' | null
+  suggestedQuestion: string | null
+  recommendedTopics: Array<{
+    kind: 'conflict' | 'coverage_gap' | 'interaction_topic' | 'strategy_change'
+    label: string
+    reason: string
+  }>
+}
+
 export type PersonAgentAnswerPack = {
   personAgentId: string
   canonicalPersonId: string
+  strategyProfile?: PersonAgentStrategyProfile | null
   question: string
   questionClassification:
     | 'profile_fact'
@@ -791,6 +1069,7 @@ export type MemoryWorkspacePersonAgentContext = {
     canonicalPersonId: string
     reason: 'scope_person' | 'global_resolved_person'
   }>
+  strategyProfile?: PersonAgentStrategyProfile | null
   archiveRouting?: {
     strategy: 'person_agent' | 'archive_fallback'
     reason: 'agent_consulted' | 'no_active_person_agent' | 'unresolved_target_person'
@@ -899,12 +1178,80 @@ export type GetPersonAgentStateInput = {
   canonicalPersonId: string
 }
 
+export type GetPersonAgentCapsuleInput = {
+  capsuleId?: string
+  personAgentId?: string
+  canonicalPersonId?: string
+}
+
+export type ListPersonAgentCapsuleMemoryCheckpointsInput = {
+  capsuleId?: string
+  personAgentId?: string
+  canonicalPersonId?: string
+  limit?: number
+}
+
 export type GetPersonAgentMemorySummaryInput = {
+  canonicalPersonId: string
+}
+
+export type GetPersonAgentInspectionBundleInput = {
+  canonicalPersonId: string
+}
+
+export type AskPersonAgentConsultationInput = {
+  canonicalPersonId: string
+  question: string
+  sessionId?: string
+}
+
+export type ListPersonAgentConsultationSessionsInput = {
+  personAgentId?: string
+  canonicalPersonId?: string
+}
+
+export type GetPersonAgentConsultationSessionInput = {
+  sessionId: string
+}
+
+export type GetPersonAgentRuntimeStateInput = {
   canonicalPersonId: string
 }
 
 export type ListPersonAgentRefreshQueueInput = {
   status?: 'pending' | 'processing' | 'completed' | 'failed'
+}
+
+export type ListPersonAgentAuditEventsInput = {
+  personAgentId?: string
+  canonicalPersonId?: string
+  eventKind?: string
+}
+
+export type ListPersonAgentTasksInput = {
+  personAgentId?: string
+  canonicalPersonId?: string
+  status?: PersonAgentTaskStatus
+}
+
+export type TransitionPersonAgentTaskInput = {
+  taskId: string
+  status: Exclude<PersonAgentTaskStatus, 'pending'>
+  source?: string
+  reason?: string
+}
+
+export type ListPersonAgentTaskRunsInput = {
+  taskId?: string
+  personAgentId?: string
+  canonicalPersonId?: string
+  taskKind?: PersonAgentTaskKind
+  runStatus?: PersonAgentTaskRunStatus
+}
+
+export type ExecutePersonAgentTaskInput = {
+  taskId: string
+  source?: string
 }
 
 export type GetPersonaDraftReviewByTurnInput = {
@@ -1847,9 +2194,24 @@ export interface ArchiveApi {
   listMemoryWorkspaceSessions: (input?: { scope?: MemoryWorkspaceScope }) => Promise<MemoryWorkspaceSessionSummary[]>
   getMemoryWorkspaceSession: (sessionId: string) => Promise<MemoryWorkspaceSessionDetail | null>
   askMemoryWorkspacePersisted: (input: AskMemoryWorkspacePersistedInput) => Promise<MemoryWorkspaceTurnRecord | null>
+  askPersonAgentConsultation: (input: AskPersonAgentConsultationInput) => Promise<PersonAgentConsultationTurnRecord | null>
+  listPersonAgentConsultationSessions: (input?: ListPersonAgentConsultationSessionsInput) => Promise<PersonAgentConsultationSessionSummary[]>
+  getPersonAgentConsultationSession: (input: GetPersonAgentConsultationSessionInput) => Promise<PersonAgentConsultationSessionDetail | null>
+  getPersonAgentRuntimeState: (input: GetPersonAgentRuntimeStateInput) => Promise<PersonAgentRuntimeStateRecord | null>
+  getPersonAgentTaskQueueRunnerState: () => Promise<PersonAgentTaskQueueRunnerStateRecord | null>
   getPersonAgentState: (input: GetPersonAgentStateInput) => Promise<PersonAgentRecord | null>
+  getPersonAgentCapsule: (input: GetPersonAgentCapsuleInput) => Promise<PersonAgentCapsuleRecord | null>
+  listPersonAgentCapsuleMemoryCheckpoints: (
+    input: ListPersonAgentCapsuleMemoryCheckpointsInput
+  ) => Promise<PersonAgentCapsuleMemoryCheckpointRecord[]>
   listPersonAgentRefreshQueue: (input?: ListPersonAgentRefreshQueueInput) => Promise<PersonAgentRefreshQueueRecord[]>
+  listPersonAgentAuditEvents: (input?: ListPersonAgentAuditEventsInput) => Promise<PersonAgentAuditEventRecord[]>
+  listPersonAgentTasks: (input?: ListPersonAgentTasksInput) => Promise<PersonAgentTaskRecord[]>
+  transitionPersonAgentTask: (input: TransitionPersonAgentTaskInput) => Promise<PersonAgentTaskRecord | null>
+  listPersonAgentTaskRuns: (input?: ListPersonAgentTaskRunsInput) => Promise<PersonAgentTaskRunRecord[]>
+  executePersonAgentTask: (input: ExecutePersonAgentTaskInput) => Promise<PersonAgentTaskRunRecord | null>
   getPersonAgentMemorySummary: (input: GetPersonAgentMemorySummaryInput) => Promise<PersonAgentMemorySummary | null>
+  getPersonAgentInspectionBundle: (input: GetPersonAgentInspectionBundleInput) => Promise<PersonAgentInspectionBundle | null>
   runMemoryWorkspaceCompare: (input: RunMemoryWorkspaceCompareInput) => Promise<MemoryWorkspaceCompareSessionDetail | null>
   listMemoryWorkspaceCompareSessions: (input?: { scope?: MemoryWorkspaceScope }) => Promise<MemoryWorkspaceCompareSessionSummary[]>
   getMemoryWorkspaceCompareSession: (compareSessionId: string) => Promise<MemoryWorkspaceCompareSessionDetail | null>

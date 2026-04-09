@@ -272,6 +272,104 @@ function seedActivePersonAgent(db: ReturnType<typeof openDatabase>, canonicalPer
   })
 }
 
+function seedCommunicationOnlyPromotionScenario() {
+  const db = setupDatabase()
+  const createdAt = '2026-03-13T00:00:00.000Z'
+
+  db.prepare('insert into import_batches (id, source_label, status, created_at) values (?, ?, ?, ?)').run(
+    'b-comm-only',
+    'memory-session-communication-only',
+    'ready',
+    createdAt
+  )
+
+  for (const [fileId, fileName, hash] of [
+    ['f-comm-1', 'chat-comm-1.json', 'comm-hash-1'],
+    ['f-comm-2', 'chat-comm-2.json', 'comm-hash-2']
+  ] as const) {
+    db.prepare('insert into vault_files (id, batch_id, source_path, frozen_path, file_name, extension, mime_type, file_size, sha256, duplicate_class, parser_status, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+      fileId,
+      'b-comm-only',
+      `/tmp/${fileName}`,
+      `/tmp/${fileName}`,
+      fileName,
+      '.json',
+      'application/json',
+      1,
+      hash,
+      'unique',
+      'parsed',
+      createdAt
+    )
+  }
+
+  db.prepare('insert into people (id, display_name, source_type, confidence, created_at) values (?, ?, ?, ?, ?)').run(
+    'p-comm-1',
+    'Alice Chen',
+    'chat_participant',
+    1,
+    createdAt
+  )
+
+  db.prepare('insert into canonical_people (id, primary_display_name, normalized_name, alias_count, first_seen_at, last_seen_at, evidence_count, manual_labels_json, status, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+    'cp-comm-1',
+    'Alice Chen',
+    'alice chen',
+    1,
+    createdAt,
+    createdAt,
+    2,
+    '[]',
+    'approved',
+    createdAt,
+    createdAt
+  )
+
+  db.prepare('insert into person_memberships (id, canonical_person_id, anchor_person_id, status, created_at, updated_at) values (?, ?, ?, ?, ?, ?)').run(
+    'pm-comm-1',
+    'cp-comm-1',
+    'p-comm-1',
+    'active',
+    createdAt,
+    createdAt
+  )
+
+  for (const [relationId, targetId] of [
+    ['rel-comm-1', 'f-comm-1'],
+    ['rel-comm-2', 'f-comm-2']
+  ] as const) {
+    db.prepare('insert into relations (id, source_id, source_type, target_id, target_type, relation_type, confidence, created_at) values (?, ?, ?, ?, ?, ?, ?, ?)').run(
+      relationId,
+      'p-comm-1',
+      'person',
+      targetId,
+      'file',
+      'mentioned_in_file',
+      1,
+      createdAt
+    )
+  }
+
+  for (const [evidenceId, fileId, text] of [
+    ['ce-comm-1', 'f-comm-1', '先把这些记录收进归档。'],
+    ['ce-comm-2', 'f-comm-2', '后面继续补关键细节。']
+  ] as const) {
+    db.prepare(
+      'insert into communication_evidence (id, file_id, ordinal, speaker_display_name, speaker_anchor_person_id, excerpt_text, created_at) values (?, ?, ?, ?, ?, ?, ?)'
+    ).run(
+      evidenceId,
+      fileId,
+      1,
+      'Alice Chen',
+      'p-comm-1',
+      text,
+      createdAt
+    )
+  }
+
+  return db
+}
+
 describe('memoryWorkspaceSessionService', () => {
   it('creates a new session and first turn for a persisted ask', () => {
     const db = seedConversationScenario()
@@ -505,6 +603,38 @@ describe('memoryWorkspaceSessionService', () => {
     expect(interactionMemories[0]?.summary).toContain('chat-1.json')
     expect(interactionMemories[0]?.summary).not.toContain('她以前怎么说记录这件事的？给我看原话。')
     expect(refreshedAgent?.interactionVersion).toBe(2)
+
+    db.close()
+  })
+
+  it('promotes communication-backed people once persisted asks touch real multi-file communication evidence', () => {
+    const db = seedCommunicationOnlyPromotionScenario()
+
+    askMemoryWorkspacePersisted(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-comm-1' },
+      question: '她目前有哪些资料可以回看？',
+      expressionMode: 'grounded'
+    })
+
+    expect(getPersonAgentByCanonicalPersonId(db, {
+      canonicalPersonId: 'cp-comm-1'
+    })).toMatchObject({
+      status: 'active',
+      promotionTier: expect.stringMatching(/active|high_signal/)
+    })
+
+    askMemoryWorkspacePersisted(db, {
+      scope: { kind: 'person', canonicalPersonId: 'cp-comm-1' },
+      question: '这些资料里最值得先看什么？',
+      expressionMode: 'grounded'
+    })
+
+    expect(getPersonAgentByCanonicalPersonId(db, {
+      canonicalPersonId: 'cp-comm-1'
+    })).toMatchObject({
+      status: 'active',
+      promotionTier: expect.stringMatching(/active|high_signal/)
+    })
 
     db.close()
   })

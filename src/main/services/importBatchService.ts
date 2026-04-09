@@ -17,7 +17,10 @@ import { enqueueEnrichmentJobs } from './enrichmentDispatchService'
 import { openDatabase, runMigrations } from './db'
 import { parseFrozenFile } from './parserRegistry'
 import { collectPeopleAnchors, persistPeopleAnchors } from './peopleService'
-import { enqueuePersonAgentRefreshesForBatch } from './personAgentRefreshService'
+import {
+  enqueuePersonAgentRefreshesForBatch,
+  processPendingPersonAgentRefreshes
+} from './personAgentRefreshService'
 import { persistFileBatchRelations, persistPeopleFileRelations } from './relationService'
 import { freezeOriginal } from './vaultService'
 
@@ -156,6 +159,10 @@ export async function createImportBatch(input: {
     batchId,
     reason: 'import_batch',
     requestedAt: createdAt
+  })
+  processPendingPersonAgentRefreshes(db, {
+    appPaths: input.appPaths,
+    now: createdAt
   })
 
   if (process.env.FORGETME_E2E_MULTIMODAL_FIXTURE === '1' && files.length > 0 && anchors.length > 0) {

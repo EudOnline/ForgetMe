@@ -371,7 +371,11 @@ describe('askMemoryWorkspace', () => {
         reason: 'agent_consulted'
       },
       activeCanonicalPersonId: 'cp-1',
-      usedAnswerPack: true
+      usedAnswerPack: true,
+      strategyProfile: expect.objectContaining({
+        evidencePreference: 'quote_first',
+        conflictBehavior: 'conflict_forward'
+      })
     })
     expect(result?.answer.citations.some((citation) => citation.kind === 'file')).toBe(true)
 

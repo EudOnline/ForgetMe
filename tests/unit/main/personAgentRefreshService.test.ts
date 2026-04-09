@@ -2,8 +2,19 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { ensureAppPaths } from '../../../src/main/services/appPaths'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
-import { listPersonAgentFactMemories, listPersonAgentRefreshQueue } from '../../../src/main/services/governancePersistenceService'
+import {
+  getPersonAgentByCanonicalPersonId,
+  listPersonAgentAuditEvents,
+  getPersonAgentCapsule,
+  listPersonAgentCapsuleMemoryCheckpoints,
+  listPersonAgentFactMemories,
+  listPersonAgentInteractionMemories,
+  listPersonAgentRefreshQueue,
+  listPersonAgentTaskRuns,
+  listPersonAgentTasks
+} from '../../../src/main/services/governancePersistenceService'
 import { approveProfileAttributeCandidate } from '../../../src/main/services/profileCandidateReviewService'
 import {
   enqueuePersonAgentRefreshForCanonicalPeople,
@@ -15,9 +26,14 @@ const NOW = '2026-04-06T12:00:00.000Z'
 
 function setupDatabase() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-person-agent-refresh-'))
+  const appPaths = ensureAppPaths(root)
   const db = openDatabase(path.join(root, 'archive.sqlite'))
   runMigrations(db)
-  return db
+  return {
+    root,
+    appPaths,
+    db
+  }
 }
 
 function seedCanonicalPerson(db: ReturnType<typeof openDatabase>, input: {
@@ -191,6 +207,17 @@ function seedPromotionReadyPerson(db: ReturnType<typeof openDatabase>) {
     ) values (?, ?, ?, ?, ?, ?, ?, ?)`
   ).run('rel-peer', 'p-2', 'person', 'f-shared-1', 'file', 'mentioned_in_file', 1, NOW)
 
+  db.prepare(
+    `insert into communication_evidence (
+      id, file_id, ordinal, speaker_display_name, speaker_anchor_person_id, excerpt_text, created_at
+    ) values (?, ?, ?, ?, ?, ?, ?)`
+  ).run('ce-1', 'f-10', 1, 'Alice Chen', 'p-1', '先把关键记录留在归档里。', NOW)
+  db.prepare(
+    `insert into communication_evidence (
+      id, file_id, ordinal, speaker_display_name, speaker_anchor_person_id, excerpt_text, created_at
+    ) values (?, ?, ?, ?, ?, ?, ?)`
+  ).run('ce-2', 'f-11', 1, 'Alice Chen', 'p-1', '后面继续补充关键细节。', NOW)
+
   for (const [id, key, value, fileId, evidenceId] of [
     ['attr-1', 'birthday', '1997-02-03', 'f-10', 'ee-10'],
     ['attr-2', 'school_name', '北京大学', 'f-11', 'ee-11'],
@@ -352,9 +379,56 @@ function seedReviewApprovalFixture(db: ReturnType<typeof openDatabase>) {
   )
 }
 
+function seedPendingConflictProfileCandidates(db: ReturnType<typeof openDatabase>, input: {
+  canonicalPersonId: string
+  createdAt: string
+}) {
+  for (const [suffix, value, fileId, evidenceId] of [
+    ['1', '北京大学', 'f-12', 'ee-12'],
+    ['2', '清华大学', 'f-13', 'ee-13']
+  ] as const) {
+    db.prepare(
+      `insert into profile_attribute_candidates (
+        id, proposed_canonical_person_id, source_file_id, source_evidence_id, source_candidate_id,
+        attribute_group, attribute_key, value_json, proposal_basis_json, reason_code,
+        confidence, status, created_at
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      `pac-conflict-${suffix}`,
+      input.canonicalPersonId,
+      fileId,
+      evidenceId,
+      `fc-conflict-${suffix}`,
+      'education',
+      'school_name',
+      JSON.stringify({ value }),
+      JSON.stringify({ reason: 'refresh-strategy-test' }),
+      'projection_conflict',
+      0.95,
+      'pending',
+      input.createdAt
+    )
+
+    db.prepare(
+      `insert into review_queue (
+        id, item_type, candidate_id, status, priority, confidence, summary_json, created_at
+      ) values (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      `rq-conflict-${suffix}`,
+      'profile_attribute_candidate',
+      `pac-conflict-${suffix}`,
+      'pending',
+      0,
+      0.95,
+      JSON.stringify({ attributeKey: 'school_name' }),
+      input.createdAt
+    )
+  }
+}
+
 describe('personAgentRefreshService', () => {
   it('enqueues import-linked refreshes and coalesces repeated pending reasons', () => {
-    const db = setupDatabase()
+    const { db } = setupDatabase()
     seedBatchLinkedPerson(db)
 
     enqueuePersonAgentRefreshesForBatch(db, {
@@ -383,7 +457,7 @@ describe('personAgentRefreshService', () => {
   })
 
   it('enqueues refreshes after approved review decisions', () => {
-    const db = setupDatabase()
+    const { db } = setupDatabase()
     seedReviewApprovalFixture(db)
 
     approveProfileAttributeCandidate(db, {
@@ -405,7 +479,7 @@ describe('personAgentRefreshService', () => {
   })
 
   it('processes a pending refresh by recomputing promotion and refreshing fact memory', () => {
-    const db = setupDatabase()
+    const { appPaths, db } = setupDatabase()
     seedPromotionReadyPerson(db)
 
     enqueuePersonAgentRefreshForCanonicalPeople(db, {
@@ -415,11 +489,26 @@ describe('personAgentRefreshService', () => {
     })
 
     const processed = processNextPersonAgentRefresh(db, {
+      appPaths,
       now: NOW
     })
 
     const queue = listPersonAgentRefreshQueue(db, {})
     const memories = listPersonAgentFactMemories(db, {
+      canonicalPersonId: 'cp-1'
+    })
+    const refreshedAgent = getPersonAgentByCanonicalPersonId(db, {
+      canonicalPersonId: 'cp-1'
+    })
+    const interactionMemories = processed?.personAgentId
+      ? listPersonAgentInteractionMemories(db, {
+          personAgentId: processed.personAgentId
+        })
+      : []
+    const capsule = getPersonAgentCapsule(db, {
+      canonicalPersonId: 'cp-1'
+    })
+    const checkpoints = listPersonAgentCapsuleMemoryCheckpoints(db, {
       canonicalPersonId: 'cp-1'
     })
 
@@ -429,6 +518,142 @@ describe('personAgentRefreshService', () => {
     })
     expect(queue[0]?.status).toBe('completed')
     expect(memories.length).toBeGreaterThan(0)
+    expect(refreshedAgent?.strategyProfile).toEqual({
+      profileVersion: 1,
+      responseStyle: 'contextual',
+      evidencePreference: 'quote_first',
+      conflictBehavior: 'balanced'
+    })
+    expect(interactionMemories).toEqual([
+      expect.objectContaining({
+        memoryKey: 'topic.profile_facts',
+        questionCount: 2,
+        supportingTurnIds: ['turn-1', 'turn-2']
+      })
+    ])
+    expect(capsule).toEqual(expect.objectContaining({
+      capsuleStatus: 'ready',
+      activationSource: 'refresh_rebuild'
+    }))
+    expect(checkpoints[0]).toEqual(expect.objectContaining({
+      checkpointKind: 'refresh',
+      factsVersion: refreshedAgent?.factsVersion ?? 0,
+      interactionVersion: refreshedAgent?.interactionVersion ?? 0
+    }))
+
+    db.close()
+  })
+
+  it('increments strategy profile version and records an audit event when refresh changes the strategy', () => {
+    const { appPaths, db } = setupDatabase()
+    seedPromotionReadyPerson(db)
+
+    enqueuePersonAgentRefreshForCanonicalPeople(db, {
+      canonicalPersonIds: ['cp-1'],
+      reason: 'relationship_changed',
+      requestedAt: NOW
+    })
+
+    processNextPersonAgentRefresh(db, {
+      appPaths,
+      now: NOW
+    })
+
+    const initialAgent = getPersonAgentByCanonicalPersonId(db, {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(initialAgent?.strategyProfile).toEqual({
+      profileVersion: 1,
+      responseStyle: 'contextual',
+      evidencePreference: 'quote_first',
+      conflictBehavior: 'balanced'
+    })
+    expect(listPersonAgentAuditEvents(db, {
+      canonicalPersonId: 'cp-1'
+    }).filter((event) => event.eventKind === 'strategy_profile_updated')).toEqual([])
+
+    seedPendingConflictProfileCandidates(db, {
+      canonicalPersonId: 'cp-1',
+      createdAt: '2026-04-06T12:10:00.000Z'
+    })
+
+    enqueuePersonAgentRefreshForCanonicalPeople(db, {
+      canonicalPersonIds: ['cp-1'],
+      reason: 'review_conflict_changed',
+      requestedAt: '2026-04-06T12:15:00.000Z'
+    })
+
+    processNextPersonAgentRefresh(db, {
+      appPaths,
+      now: '2026-04-06T12:15:00.000Z'
+    })
+
+    const refreshedAgent = getPersonAgentByCanonicalPersonId(db, {
+      canonicalPersonId: 'cp-1'
+    })
+    const auditEvents = listPersonAgentAuditEvents(db, {
+      canonicalPersonId: 'cp-1'
+    }).filter((event) => event.eventKind === 'strategy_profile_updated')
+
+    expect(refreshedAgent?.strategyProfile).toEqual({
+      profileVersion: 2,
+      responseStyle: 'contextual',
+      evidencePreference: 'quote_first',
+      conflictBehavior: 'conflict_forward'
+    })
+    expect(auditEvents).toEqual([
+      expect.objectContaining({
+        eventKind: 'strategy_profile_updated',
+        payload: expect.objectContaining({
+          source: 'refresh_rebuild',
+          reasons: ['review_conflict_changed'],
+          changedFields: ['conflictBehavior'],
+          previousProfile: expect.objectContaining({
+            profileVersion: 1,
+            conflictBehavior: 'balanced'
+          }),
+          nextProfile: expect.objectContaining({
+            profileVersion: 2,
+            conflictBehavior: 'conflict_forward'
+          })
+        })
+      })
+    ])
+
+    db.close()
+  })
+
+  it('resyncs and auto-processes person-agent tasks after refresh completion', () => {
+    const { appPaths, db } = setupDatabase()
+    seedPromotionReadyPerson(db)
+
+    enqueuePersonAgentRefreshForCanonicalPeople(db, {
+      canonicalPersonIds: ['cp-1'],
+      reason: 'relationship_changed',
+      requestedAt: NOW
+    })
+
+    processNextPersonAgentRefresh(db, {
+      appPaths,
+      now: NOW
+    })
+
+    const tasks = listPersonAgentTasks(db, {
+      canonicalPersonId: 'cp-1'
+    })
+    const expandTask = tasks.find((task) => task.taskKind === 'expand_topic')
+
+    expect(expandTask).toMatchObject({
+      taskKind: 'expand_topic',
+      taskKey: 'expand_topic:topic.profile_facts:2:4',
+      status: 'completed'
+    })
+    expect(listPersonAgentTaskRuns(db, {
+      canonicalPersonId: 'cp-1'
+    }).map((run) => run.taskKind).sort()).toEqual([
+      'expand_topic',
+      'fill_coverage_gap'
+    ])
 
     db.close()
   })

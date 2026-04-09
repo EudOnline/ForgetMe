@@ -77,6 +77,9 @@ app.whenReady().then(() => {
   const appPaths = ensureAppPaths(resolveAppDataRoot())
   const serviceContainer = createServiceContainer(appPaths)
   registerIpc(serviceContainer)
+  void Promise.resolve(serviceContainer.runStartupRepairs()).catch((error) => {
+    console.error('person-agent capsule startup repair failed', error)
+  })
   backgroundRunners = serviceContainer.startBackgroundRunners()
   createWindow()
 
@@ -90,6 +93,7 @@ app.whenReady().then(() => {
 app.on('before-quit', () => {
   backgroundRunners?.enrichmentRunner.stop()
   backgroundRunners?.approvedDraftProviderSendRetryRunner.stop()
+  backgroundRunners?.personAgentTaskQueueRunner.stop()
 })
 
 app.on('window-all-closed', () => {

@@ -103,17 +103,97 @@ export const askMemoryWorkspacePersistedInputSchema = z.object({
   sessionId: z.string().min(1).optional()
 })
 
+export const askPersonAgentConsultationInputSchema = z.object({
+  canonicalPersonId: z.string().min(1),
+  question: z.string().min(1),
+  sessionId: z.string().min(1).optional()
+})
+
 export const getPersonAgentStateInputSchema = z.object({
   canonicalPersonId: z.string().min(1)
 })
 
+export const getPersonAgentCapsuleInputSchema = z.object({
+  capsuleId: z.string().min(1).optional(),
+  personAgentId: z.string().min(1).optional(),
+  canonicalPersonId: z.string().min(1).optional()
+}).refine(
+  (value) => Boolean(value.capsuleId || value.personAgentId || value.canonicalPersonId),
+  { message: 'one person-agent capsule identifier is required' }
+)
+
+export const listPersonAgentCapsuleMemoryCheckpointsInputSchema = z.object({
+  capsuleId: z.string().min(1).optional(),
+  personAgentId: z.string().min(1).optional(),
+  canonicalPersonId: z.string().min(1).optional(),
+  limit: z.number().int().positive().max(20).optional()
+}).refine(
+  (value) => Boolean(value.capsuleId || value.personAgentId || value.canonicalPersonId),
+  { message: 'one person-agent capsule identifier is required' }
+)
+
 export const getPersonAgentMemorySummaryInputSchema = z.object({
+  canonicalPersonId: z.string().min(1)
+})
+
+export const getPersonAgentInspectionBundleInputSchema = z.object({
+  canonicalPersonId: z.string().min(1)
+})
+
+export const listPersonAgentConsultationSessionsInputSchema = z.object({
+  personAgentId: z.string().min(1).optional(),
+  canonicalPersonId: z.string().min(1).optional()
+}).optional().default({})
+
+export const getPersonAgentConsultationSessionInputSchema = z.object({
+  sessionId: z.string().min(1)
+})
+
+export const getPersonAgentRuntimeStateInputSchema = z.object({
   canonicalPersonId: z.string().min(1)
 })
 
 export const listPersonAgentRefreshQueueInputSchema = z.object({
   status: z.enum(['pending', 'processing', 'completed', 'failed']).optional()
 }).optional().default({})
+
+export const listPersonAgentAuditEventsInputSchema = z.object({
+  personAgentId: z.string().min(1).optional(),
+  canonicalPersonId: z.string().min(1).optional(),
+  eventKind: z.string().min(1).optional()
+}).optional().default({})
+
+export const listPersonAgentTasksInputSchema = z.object({
+  personAgentId: z.string().min(1).optional(),
+  canonicalPersonId: z.string().min(1).optional(),
+  status: z.enum(['pending', 'processing', 'completed', 'dismissed']).optional()
+}).optional().default({})
+
+export const transitionPersonAgentTaskInputSchema = z.object({
+  taskId: z.string().min(1),
+  status: z.enum(['processing', 'completed', 'dismissed']),
+  source: z.string().min(1).optional(),
+  reason: z.string().min(1).optional()
+})
+
+export const listPersonAgentTaskRunsInputSchema = z.object({
+  taskId: z.string().min(1).optional(),
+  personAgentId: z.string().min(1).optional(),
+  canonicalPersonId: z.string().min(1).optional(),
+  taskKind: z.enum([
+    'await_refresh',
+    'resolve_conflict',
+    'fill_coverage_gap',
+    'expand_topic',
+    'review_strategy_change'
+  ]).optional(),
+  runStatus: z.enum(['completed', 'blocked', 'failed']).optional()
+}).optional().default({})
+
+export const executePersonAgentTaskInputSchema = z.object({
+  taskId: z.string().min(1),
+  source: z.string().min(1).optional()
+})
 
 export const getPersonaDraftReviewByTurnInputSchema = z.object({
   turnId: z.string().min(1)

@@ -401,6 +401,12 @@ export function seedMemoryWorkspacePersonAgentScenario() {
     promotionTier: 'high_signal',
     promotionScore: 74,
     promotionReasonSummary: 'High signal person.',
+    strategyProfile: {
+      profileVersion: 1,
+      responseStyle: 'contextual',
+      evidencePreference: 'quote_first',
+      conflictBehavior: 'conflict_forward'
+    },
     factsVersion: 2,
     interactionVersion: 3
   })

@@ -24,8 +24,20 @@ const {
   listApprovedPersonaDraftProviderSends,
   retryApprovedPersonaDraftProviderSend,
   sendApprovedPersonaDraftToProvider,
+  askPersonAgentConsultationPersisted,
+  getPersonAgentConsultationRuntimeState,
+  getPersonAgentConsultationSession,
+  listPersonAgentConsultationSessions,
+  executePersonAgentTask,
+  transitionPersonAgentTask,
   getPersonAgentByCanonicalPersonId,
+  listPersonAgentAuditEvents,
+  getPersonAgentCapsule,
+  listPersonAgentCapsuleMemoryCheckpoints,
+  getPersonAgentTaskQueueRunnerState,
   listPersonAgentRefreshQueue,
+  listPersonAgentTaskRuns,
+  listPersonAgentTasks,
   getPersonAgentFactMemorySummary,
   listPersonAgentInteractionMemories
 } = vi.hoisted(() => ({
@@ -48,8 +60,20 @@ const {
   listApprovedPersonaDraftProviderSends: vi.fn(),
   retryApprovedPersonaDraftProviderSend: vi.fn(),
   sendApprovedPersonaDraftToProvider: vi.fn(),
+  askPersonAgentConsultationPersisted: vi.fn(),
+  getPersonAgentConsultationRuntimeState: vi.fn(),
+  getPersonAgentConsultationSession: vi.fn(),
+  listPersonAgentConsultationSessions: vi.fn(),
+  executePersonAgentTask: vi.fn(),
+  transitionPersonAgentTask: vi.fn(),
   getPersonAgentByCanonicalPersonId: vi.fn(),
+  listPersonAgentAuditEvents: vi.fn(),
+  getPersonAgentCapsule: vi.fn(),
+  listPersonAgentCapsuleMemoryCheckpoints: vi.fn(),
+  getPersonAgentTaskQueueRunnerState: vi.fn(),
   listPersonAgentRefreshQueue: vi.fn(),
+  listPersonAgentTaskRuns: vi.fn(),
+  listPersonAgentTasks: vi.fn(),
   getPersonAgentFactMemorySummary: vi.fn(),
   listPersonAgentInteractionMemories: vi.fn()
 }))
@@ -116,12 +140,38 @@ vi.mock('../../../src/main/services/approvedDraftProviderSendService', () => ({
   sendApprovedPersonaDraftToProvider
 }))
 
+vi.mock('../../../src/main/services/personAgentConsultationService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/main/services/personAgentConsultationService')>()
+  return {
+    ...actual,
+    askPersonAgentConsultationPersisted,
+    getPersonAgentConsultationRuntimeState,
+    getPersonAgentConsultationSession,
+    listPersonAgentConsultationSessions
+  }
+})
+
+vi.mock('../../../src/main/services/personAgentTaskService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/main/services/personAgentTaskService')>()
+  return {
+    ...actual,
+    executePersonAgentTask,
+    transitionPersonAgentTask
+  }
+})
+
 vi.mock('../../../src/main/services/governancePersistenceService', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../src/main/services/governancePersistenceService')>()
   return {
     ...actual,
     getPersonAgentByCanonicalPersonId,
+    listPersonAgentAuditEvents,
+    getPersonAgentCapsule,
+    getPersonAgentTaskQueueRunnerState,
+    listPersonAgentCapsuleMemoryCheckpoints,
     listPersonAgentRefreshQueue,
+    listPersonAgentTaskRuns,
+    listPersonAgentTasks,
     listPersonAgentInteractionMemories
   }
 })
@@ -185,8 +235,20 @@ describe('registerWorkspaceIpc session handlers', () => {
     openDatabase.mockReset()
     runMigrations.mockReset()
     askMemoryWorkspacePersistedService.mockReset()
+    askPersonAgentConsultationPersisted.mockReset()
+    getPersonAgentConsultationRuntimeState.mockReset()
+    getPersonAgentConsultationSession.mockReset()
+    listPersonAgentConsultationSessions.mockReset()
+    executePersonAgentTask.mockReset()
+    transitionPersonAgentTask.mockReset()
     getPersonAgentByCanonicalPersonId.mockReset()
+    listPersonAgentAuditEvents.mockReset()
+    getPersonAgentCapsule.mockReset()
+    getPersonAgentTaskQueueRunnerState.mockReset()
+    listPersonAgentCapsuleMemoryCheckpoints.mockReset()
     listPersonAgentRefreshQueue.mockReset()
+    listPersonAgentTaskRuns.mockReset()
+    listPersonAgentTasks.mockReset()
     getPersonAgentFactMemorySummary.mockReset()
     listPersonAgentInteractionMemories.mockReset()
   })
@@ -262,6 +324,130 @@ describe('registerWorkspaceIpc session handlers', () => {
     expect((result as { response: { contextCards: Array<{ title: string }> } }).response.contextCards[0]?.title).toBe('Conversation Context')
     expect(close).toHaveBeenCalled()
   })
+
+  it('persists person-agent consultation turns through ipc', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    askPersonAgentConsultationPersisted.mockReturnValue({
+      turnId: 'pct-1',
+      sessionId: 'pcs-1',
+      personAgentId: 'agent-1',
+      canonicalPersonId: 'cp-1',
+      ordinal: 1,
+      question: '她的生日是什么？',
+      answerPack: {
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        question: '她的生日是什么？',
+        questionClassification: 'profile_fact',
+        candidateAnswer: 'Birthday: 1997-02-03.',
+        supportingFacts: [],
+        supportingCitations: [],
+        conflicts: [],
+        coverageGaps: [],
+        recentInteractionTopics: [],
+        generationReason: 'Resolved through active person-agent fact memory.',
+        memoryVersions: {
+          factsVersion: 2,
+          interactionVersion: 3
+        }
+      },
+      createdAt: '2026-04-08T12:00:00.000Z'
+    })
+
+    registerWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:askPersonAgentConsultation')
+    const result = await handler?.({}, {
+      canonicalPersonId: 'cp-1',
+      question: '她的生日是什么？',
+      sessionId: 'pcs-1'
+    })
+
+    expect(askPersonAgentConsultationPersisted).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1',
+      question: '她的生日是什么？',
+      sessionId: 'pcs-1'
+    })
+    expect(result).toEqual(expect.objectContaining({
+      sessionId: 'pcs-1',
+      ordinal: 1
+    }))
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('returns person-agent consultation sessions and runtime state through ipc', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    listPersonAgentConsultationSessions.mockReturnValue([
+      {
+        sessionId: 'pcs-1',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        title: 'Person Agent · Alice Chen',
+        latestQuestion: '她的生日是什么？',
+        turnCount: 1,
+        createdAt: '2026-04-08T12:00:00.000Z',
+        updatedAt: '2026-04-08T12:00:00.000Z'
+      }
+    ])
+    getPersonAgentConsultationRuntimeState.mockReturnValue({
+      personAgentId: 'agent-1',
+      canonicalPersonId: 'cp-1',
+      activeSessionId: 'pcs-1',
+      sessionCount: 1,
+      totalTurnCount: 1,
+      latestQuestion: '她的生日是什么？',
+      latestQuestionClassification: 'profile_fact',
+      lastAnswerDigest: 'Birthday: 1997-02-03.',
+      lastConsultedAt: '2026-04-08T12:00:00.000Z',
+      updatedAt: '2026-04-08T12:00:00.000Z'
+    })
+    getPersonAgentConsultationSession.mockReturnValue({
+      sessionId: 'pcs-1',
+      personAgentId: 'agent-1',
+      canonicalPersonId: 'cp-1',
+      title: 'Person Agent · Alice Chen',
+      latestQuestion: '她的生日是什么？',
+      turnCount: 1,
+      createdAt: '2026-04-08T12:00:00.000Z',
+      updatedAt: '2026-04-08T12:00:00.000Z',
+      turns: []
+    })
+
+    registerWorkspaceIpc(appPathsFixture())
+
+    const listHandler = handlerMap.get('archive:listPersonAgentConsultationSessions')
+    const runtimeHandler = handlerMap.get('archive:getPersonAgentRuntimeState')
+    const detailHandler = handlerMap.get('archive:getPersonAgentConsultationSession')
+
+    const sessions = await listHandler?.({}, { canonicalPersonId: 'cp-1' })
+    const runtimeState = await runtimeHandler?.({}, { canonicalPersonId: 'cp-1' })
+    const detail = await detailHandler?.({}, { sessionId: 'pcs-1' })
+
+    expect(listPersonAgentConsultationSessions).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(getPersonAgentConsultationRuntimeState).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(getPersonAgentConsultationSession).toHaveBeenCalledWith(expect.anything(), {
+      sessionId: 'pcs-1'
+    })
+    expect(sessions).toEqual([
+      expect.objectContaining({
+        sessionId: 'pcs-1'
+      })
+    ])
+    expect(runtimeState).toEqual(expect.objectContaining({
+      activeSessionId: 'pcs-1',
+      totalTurnCount: 1
+    }))
+    expect(detail).toEqual(expect.objectContaining({
+      sessionId: 'pcs-1'
+    }))
+    expect(close).toHaveBeenCalled()
+  })
 })
 
 describe('registerWorkspaceIpc person-agent inspection handlers', () => {
@@ -270,6 +456,12 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
     openDatabase.mockReset()
     runMigrations.mockReset()
     getPersonAgentByCanonicalPersonId.mockReset()
+    listPersonAgentAuditEvents.mockReset()
+    getPersonAgentCapsule.mockReset()
+    listPersonAgentCapsuleMemoryCheckpoints.mockReset()
+    getPersonAgentTaskQueueRunnerState.mockReset()
+    listPersonAgentTaskRuns.mockReset()
+    listPersonAgentTasks.mockReset()
     listPersonAgentRefreshQueue.mockReset()
     getPersonAgentFactMemorySummary.mockReset()
     listPersonAgentInteractionMemories.mockReset()
@@ -444,6 +636,749 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
     }))
     expect(close).toHaveBeenCalled()
   })
+
+  it('returns person-agent audit events through ipc', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    listPersonAgentAuditEvents.mockReturnValue([
+      {
+        auditEventId: 'audit-1',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        eventKind: 'strategy_profile_updated',
+        payload: {
+          source: 'refresh_rebuild',
+          reasons: ['review_conflict_changed'],
+          changedFields: ['conflictBehavior']
+        },
+        createdAt: '2026-04-08T00:00:00.000Z'
+      }
+    ])
+    listPersonAgentTasks.mockReturnValue([
+      {
+        taskId: 'task-1',
+        taskKey: 'await_refresh:refresh-1',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        taskKind: 'await_refresh',
+        status: 'pending',
+        priority: 'high',
+        title: 'Await queued refresh',
+        summary: 'Wait for refresh to finish before acting on: review_conflict_changed.',
+        sourceRef: {
+          refreshId: 'refresh-1'
+        },
+        statusChangedAt: '2026-04-08T01:10:00.000Z',
+        statusSource: null,
+        statusReason: null,
+        createdAt: '2026-04-08T01:10:00.000Z',
+        updatedAt: '2026-04-08T01:10:00.000Z'
+      }
+    ])
+
+    registerWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:listPersonAgentAuditEvents')
+    const result = await handler?.({}, {
+      canonicalPersonId: 'cp-1',
+      eventKind: 'strategy_profile_updated'
+    })
+
+    expect(listPersonAgentAuditEvents).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1',
+      eventKind: 'strategy_profile_updated'
+    })
+    expect(result).toEqual([
+      expect.objectContaining({
+        auditEventId: 'audit-1',
+        eventKind: 'strategy_profile_updated',
+        payload: expect.objectContaining({
+          source: 'refresh_rebuild'
+        })
+      })
+    ])
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('returns person-agent task queue runner state through ipc', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    getPersonAgentTaskQueueRunnerState.mockReturnValue({
+      runnerName: 'person_agent_task_queue',
+      status: 'idle',
+      lastStartedAt: '2026-04-08T01:15:00.000Z',
+      lastCompletedAt: '2026-04-08T01:15:02.000Z',
+      lastFailedAt: null,
+      lastProcessedTaskCount: 4,
+      totalProcessedTaskCount: 7,
+      lastError: null,
+      updatedAt: '2026-04-08T01:15:02.000Z'
+    })
+
+    registerWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:getPersonAgentTaskQueueRunnerState')
+    const result = await handler?.({}, undefined)
+
+    expect(getPersonAgentTaskQueueRunnerState).toHaveBeenCalledWith(expect.anything(), {})
+    expect(result).toEqual(expect.objectContaining({
+      runnerName: 'person_agent_task_queue',
+      status: 'idle',
+      lastProcessedTaskCount: 4,
+      totalProcessedTaskCount: 7,
+      lastError: null
+    }))
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('returns a bundled person-agent inspection payload through ipc', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    getPersonAgentByCanonicalPersonId.mockReturnValue({
+      personAgentId: 'agent-1',
+      canonicalPersonId: 'cp-1',
+      status: 'active',
+      promotionTier: 'high_signal',
+      promotionScore: 81,
+      promotionReasonSummary: 'High-signal person agent.',
+      strategyProfile: {
+        profileVersion: 2,
+        responseStyle: 'contextual',
+        evidencePreference: 'quote_first',
+        conflictBehavior: 'conflict_forward'
+      },
+      factsVersion: 3,
+      interactionVersion: 4,
+      lastRefreshedAt: '2026-04-08T01:00:00.000Z',
+      lastActivatedAt: '2026-04-08T00:30:00.000Z',
+      createdAt: '2026-04-07T00:00:00.000Z',
+      updatedAt: '2026-04-08T01:00:00.000Z'
+    })
+    getPersonAgentFactMemorySummary.mockReturnValue({
+      personAgentId: 'agent-1',
+      canonicalPersonId: 'cp-1',
+      factsVersion: 3,
+      counts: {
+        facts: 1,
+        timeline: 0,
+        relationships: 0,
+        conflicts: 1,
+        coverageGaps: 0
+      },
+      facts: [],
+      timeline: [],
+      relationships: [],
+      conflicts: [
+        {
+          memoryId: 'fm-conflict-1',
+          personAgentId: 'agent-1',
+          canonicalPersonId: 'cp-1',
+          memoryKey: 'conflict.school_name',
+          sectionKey: 'conflict',
+          displayLabel: 'school_name',
+          summaryValue: 'Two approved-school candidates disagree.',
+          memoryKind: 'conflict',
+          confidence: null,
+          conflictState: 'open',
+          freshnessAt: '2026-04-08T01:00:00.000Z',
+          sourceRefs: [],
+          sourceHash: 'hash-conflict-1',
+          createdAt: '2026-04-08T01:00:00.000Z',
+          updatedAt: '2026-04-08T01:00:00.000Z'
+        }
+      ],
+      coverageGaps: []
+    })
+    listPersonAgentInteractionMemories.mockReturnValue([
+      {
+        memoryId: 'im-1',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        memoryKey: 'topic.profile_facts',
+        topicLabel: 'Profile facts',
+        summary: 'Birthday asked 3 times.',
+        questionCount: 3,
+        citationCount: 1,
+        outcomeKinds: ['answered'],
+        supportingTurnIds: ['turn-1'],
+        lastQuestionAt: '2026-04-08T00:00:00.000Z',
+        lastCitationAt: '2026-04-08T00:00:00.000Z',
+        createdAt: '2026-04-08T00:00:00.000Z',
+        updatedAt: '2026-04-08T00:00:00.000Z'
+      }
+    ])
+    listPersonAgentRefreshQueue.mockReturnValue([
+      {
+        refreshId: 'refresh-1',
+        canonicalPersonId: 'cp-1',
+        personAgentId: 'agent-1',
+        status: 'pending',
+        reasons: ['review_conflict_changed'],
+        requestedAt: '2026-04-08T01:10:00.000Z',
+        startedAt: null,
+        completedAt: null,
+        lastError: null,
+        createdAt: '2026-04-08T01:10:00.000Z',
+        updatedAt: '2026-04-08T01:10:00.000Z'
+      }
+    ])
+    listPersonAgentAuditEvents.mockReturnValue([
+      {
+        auditEventId: 'audit-1',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        eventKind: 'strategy_profile_updated',
+        payload: {
+          source: 'refresh_rebuild',
+          changedFields: ['conflictBehavior']
+        },
+        createdAt: '2026-04-08T01:00:00.000Z'
+      }
+    ])
+    getPersonAgentCapsule.mockReturnValue({
+      capsuleId: 'capsule-1',
+      personAgentId: 'agent-1',
+      canonicalPersonId: 'cp-1',
+      capsuleStatus: 'ready',
+      activationSource: 'import_batch',
+      sessionNamespace: 'person-agent:agent-1',
+      workspaceRoot: '/tmp/forgetme/person-agents/workspaces/agent-1',
+      stateRoot: '/tmp/forgetme/person-agents/state/agent-1',
+      identityProfile: {
+        primaryDisplayName: 'Alice Chen',
+        normalizedName: 'alice chen',
+        promotionTier: 'high_signal',
+        strategyProfileVersion: 2,
+        factsVersion: 3,
+        interactionVersion: 4
+      },
+      latestCheckpointId: 'checkpoint-1',
+      latestCheckpointAt: '2026-04-08T01:11:00.000Z',
+      activatedAt: '2026-04-08T00:30:00.000Z',
+      createdAt: '2026-04-08T00:30:00.000Z',
+      updatedAt: '2026-04-08T01:11:00.000Z'
+    })
+    listPersonAgentCapsuleMemoryCheckpoints.mockReturnValue([
+      {
+        checkpointId: 'checkpoint-1',
+        capsuleId: 'capsule-1',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        checkpointKind: 'refresh',
+        factsVersion: 3,
+        interactionVersion: 4,
+        strategyProfileVersion: 2,
+        taskSnapshotAt: '2026-04-08T01:10:30.000Z',
+        summary: 'Capsule refreshed after the latest import-backed rebuild.',
+        summaryPayload: {
+          source: 'refresh_rebuild'
+        },
+        createdAt: '2026-04-08T01:11:00.000Z'
+      }
+    ])
+    getPersonAgentTaskQueueRunnerState.mockReturnValue({
+      runnerName: 'person_agent_task_queue',
+      status: 'idle',
+      lastStartedAt: '2026-04-08T01:11:00.000Z',
+      lastCompletedAt: '2026-04-08T01:11:02.000Z',
+      lastFailedAt: null,
+      lastProcessedTaskCount: 4,
+      totalProcessedTaskCount: 9,
+      lastError: null,
+      updatedAt: '2026-04-08T01:11:02.000Z'
+    })
+    listPersonAgentTasks.mockReturnValue([
+      {
+        taskId: 'task-1',
+        taskKey: 'await_refresh:refresh-1',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        taskKind: 'await_refresh',
+        status: 'pending',
+        priority: 'high',
+        title: 'Await queued refresh',
+        summary: 'Wait for refresh to finish before acting on: review_conflict_changed.',
+        sourceRef: {
+          refreshId: 'refresh-1'
+        },
+        statusChangedAt: '2026-04-08T01:10:00.000Z',
+        statusSource: null,
+        statusReason: null,
+        createdAt: '2026-04-08T01:10:00.000Z',
+        updatedAt: '2026-04-08T01:10:00.000Z'
+      }
+    ])
+
+    registerWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:getPersonAgentInspectionBundle')
+    const result = await handler?.({}, { canonicalPersonId: 'cp-1' })
+
+    expect(getPersonAgentByCanonicalPersonId).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(getPersonAgentFactMemorySummary).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(listPersonAgentInteractionMemories).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(listPersonAgentRefreshQueue).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(listPersonAgentAuditEvents).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(getPersonAgentCapsule).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(listPersonAgentCapsuleMemoryCheckpoints).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1',
+      limit: 1
+    })
+    expect(getPersonAgentTaskQueueRunnerState).toHaveBeenCalledWith(expect.anything(), {})
+    expect(listPersonAgentTasks).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(result).toEqual(expect.objectContaining({
+      canonicalPersonId: 'cp-1',
+      overview: expect.objectContaining({
+        hasActiveAgent: true,
+        pendingRefreshCount: 1,
+        openConflictCount: 1,
+        coverageGapCount: 0,
+        interactionTopicCount: 1,
+        totalQuestionCount: 3,
+        latestRefreshRequestedAt: '2026-04-08T01:10:00.000Z',
+        latestStrategyChange: expect.objectContaining({
+          createdAt: '2026-04-08T01:00:00.000Z',
+          source: 'refresh_rebuild',
+          changedFields: ['conflictBehavior']
+        }),
+        taskQueueRunner: expect.objectContaining({
+          status: 'healthy',
+          stalled: false,
+          thresholdMinutes: 15,
+          lastHeartbeatAt: '2026-04-08T01:11:02.000Z',
+          lastProcessedTaskCount: 4,
+          totalProcessedTaskCount: 9,
+          lastError: null
+        }),
+        capsuleStatus: 'ready',
+        activationSource: 'import_batch'
+      }),
+      recommendations: expect.objectContaining({
+        attentionLevel: 'high',
+        nextBestAction: 'wait_for_refresh',
+        blockingReason: 'pending_refresh',
+        suggestedQuestion: '等刷新完成后，再确认 school_name 的冲突来源是什么？',
+        recommendedTopics: expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'conflict',
+            label: 'school_name',
+            reason: 'Open conflict needs review after refresh completes.'
+          }),
+          expect.objectContaining({
+            kind: 'interaction_topic',
+            label: 'Profile facts',
+            reason: 'Repeated questions suggest a stable follow-up topic.'
+          })
+        ])
+      }),
+      highlights: [
+        expect.objectContaining({
+          kind: 'refresh_pending',
+          createdAt: '2026-04-08T01:10:00.000Z',
+          title: 'Pending refresh queued'
+        }),
+        expect.objectContaining({
+          kind: 'strategy_change',
+          createdAt: '2026-04-08T01:00:00.000Z',
+          title: 'Strategy profile updated'
+        }),
+        expect.objectContaining({
+          kind: 'interaction_hotspot',
+          createdAt: '2026-04-08T00:00:00.000Z',
+          title: 'Recurring interaction topic'
+        })
+      ],
+      runnerState: expect.objectContaining({
+        runnerName: 'person_agent_task_queue',
+        status: 'idle',
+        totalProcessedTaskCount: 9
+      }),
+      capsule: expect.objectContaining({
+        capsuleId: 'capsule-1',
+        capsuleStatus: 'ready',
+        activationSource: 'import_batch'
+      }),
+      capsuleCheckpoint: expect.objectContaining({
+        checkpointId: 'checkpoint-1',
+        checkpointKind: 'refresh'
+      }),
+      tasks: [
+        expect.objectContaining({
+          taskId: 'task-1',
+          taskKey: 'await_refresh:refresh-1',
+          taskKind: 'await_refresh'
+        })
+      ],
+      state: expect.objectContaining({
+        personAgentId: 'agent-1',
+        status: 'active'
+      }),
+      memorySummary: expect.objectContaining({
+        interactionMemories: [
+          expect.objectContaining({
+            memoryKey: 'topic.profile_facts'
+          })
+        ]
+      }),
+      refreshQueue: [
+        expect.objectContaining({
+          refreshId: 'refresh-1'
+        })
+      ],
+      auditEvents: [
+        expect.objectContaining({
+          auditEventId: 'audit-1'
+        })
+      ]
+    }))
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('provides standalone person-agent capsule reads through ipc', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    getPersonAgentCapsule.mockReturnValue({
+      capsuleId: 'capsule-1',
+      personAgentId: 'agent-1',
+      canonicalPersonId: 'cp-1',
+      capsuleStatus: 'ready',
+      activationSource: 'import_batch',
+      sessionNamespace: 'person-agent:agent-1',
+      workspaceRoot: '/tmp/forgetme/person-agents/workspaces/agent-1',
+      stateRoot: '/tmp/forgetme/person-agents/state/agent-1',
+      identityProfile: {
+        primaryDisplayName: 'Alice Chen',
+        normalizedName: 'alice chen',
+        promotionTier: 'high_signal',
+        strategyProfileVersion: 2,
+        factsVersion: 3,
+        interactionVersion: 4
+      },
+      latestCheckpointId: 'checkpoint-2',
+      latestCheckpointAt: '2026-04-08T02:00:00.000Z',
+      activatedAt: '2026-04-08T00:30:00.000Z',
+      createdAt: '2026-04-08T00:30:00.000Z',
+      updatedAt: '2026-04-08T02:00:00.000Z'
+    })
+    listPersonAgentCapsuleMemoryCheckpoints.mockReturnValue([
+      {
+        checkpointId: 'checkpoint-2',
+        capsuleId: 'capsule-1',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        checkpointKind: 'refresh',
+        factsVersion: 4,
+        interactionVersion: 5,
+        strategyProfileVersion: 2,
+        taskSnapshotAt: '2026-04-08T01:59:00.000Z',
+        summary: 'Refresh snapshot.',
+        summaryPayload: {
+          source: 'refresh_rebuild'
+        },
+        createdAt: '2026-04-08T02:00:00.000Z'
+      },
+      {
+        checkpointId: 'checkpoint-1',
+        capsuleId: 'capsule-1',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        checkpointKind: 'activation',
+        factsVersion: 3,
+        interactionVersion: 4,
+        strategyProfileVersion: 2,
+        taskSnapshotAt: '2026-04-08T00:30:00.000Z',
+        summary: 'Initial activation snapshot.',
+        summaryPayload: {
+          source: 'import_batch'
+        },
+        createdAt: '2026-04-08T00:30:00.000Z'
+      }
+    ])
+
+    registerWorkspaceIpc(appPathsFixture())
+
+    const capsuleHandler = handlerMap.get('archive:getPersonAgentCapsule')
+    const checkpointHandler = handlerMap.get('archive:listPersonAgentCapsuleMemoryCheckpoints')
+
+    const capsule = await capsuleHandler?.({}, { canonicalPersonId: 'cp-1' })
+    const checkpoints = await checkpointHandler?.({}, { canonicalPersonId: 'cp-1', limit: 2 })
+
+    expect(getPersonAgentCapsule).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(listPersonAgentCapsuleMemoryCheckpoints).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1',
+      limit: 2
+    })
+    expect(capsule).toEqual(expect.objectContaining({
+      capsuleId: 'capsule-1',
+      capsuleStatus: 'ready',
+      activationSource: 'import_batch'
+    }))
+    expect(checkpoints).toEqual([
+      expect.objectContaining({
+        checkpointId: 'checkpoint-2',
+        checkpointKind: 'refresh'
+      }),
+      expect.objectContaining({
+        checkpointId: 'checkpoint-1',
+        checkpointKind: 'activation'
+      })
+    ])
+    expect(close).toHaveBeenCalledTimes(2)
+  })
+
+  it('surfaces stalled person-agent task queue runner alerts in inspection bundles', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-08T01:20:00.000Z'))
+    try {
+      const close = vi.fn()
+      openDatabase.mockReturnValue({ close })
+      getPersonAgentByCanonicalPersonId.mockReturnValue({
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        status: 'active',
+        promotionTier: 'high_signal',
+        promotionScore: 81,
+        promotionReasonSummary: 'High-signal person agent.',
+        strategyProfile: null,
+        factsVersion: 3,
+        interactionVersion: 4,
+        lastRefreshedAt: '2026-04-08T01:00:00.000Z',
+        lastActivatedAt: '2026-04-08T00:30:00.000Z',
+        createdAt: '2026-04-07T00:00:00.000Z',
+        updatedAt: '2026-04-08T01:00:00.000Z'
+      })
+      getPersonAgentFactMemorySummary.mockReturnValue(null)
+      listPersonAgentInteractionMemories.mockReturnValue([])
+      listPersonAgentRefreshQueue.mockReturnValue([])
+      listPersonAgentAuditEvents.mockReturnValue([])
+      listPersonAgentTasks.mockReturnValue([])
+      getPersonAgentTaskQueueRunnerState.mockReturnValue({
+        runnerName: 'person_agent_task_queue',
+        status: 'running',
+        lastStartedAt: '2026-04-08T01:00:00.000Z',
+        lastCompletedAt: '2026-04-08T00:40:00.000Z',
+        lastFailedAt: null,
+        lastProcessedTaskCount: 0,
+        totalProcessedTaskCount: 9,
+        lastError: null,
+        updatedAt: '2026-04-08T01:00:00.000Z'
+      })
+      listPersonAgentCapsuleMemoryCheckpoints.mockReturnValue([])
+      listPersonAgentTasks.mockReturnValue([])
+
+      registerWorkspaceIpc(appPathsFixture())
+
+      const handler = handlerMap.get('archive:getPersonAgentInspectionBundle')
+      const result = await handler?.({}, { canonicalPersonId: 'cp-1' })
+
+      expect(result).toEqual(expect.objectContaining({
+        overview: expect.objectContaining({
+          taskQueueRunner: expect.objectContaining({
+            status: 'stalled',
+            stalled: true,
+            thresholdMinutes: 15,
+            lastHeartbeatAt: '2026-04-08T01:00:00.000Z'
+          })
+        }),
+        highlights: expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'runner_stalled',
+            createdAt: '2026-04-08T01:00:00.000Z',
+            title: 'Task queue runner stalled',
+            emphasis: 'high'
+          })
+        ])
+      }))
+      expect(close).toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('lists and transitions person-agent tasks through ipc', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    listPersonAgentTasks.mockReturnValue([
+      {
+        taskId: 'task-1',
+        taskKey: 'resolve_conflict:conflict.school_name:hash-conflict',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        taskKind: 'resolve_conflict',
+        status: 'pending',
+        priority: 'high',
+        title: 'Resolve school_name',
+        summary: 'Pending values: 北京大学 / 清华大学 (2 pending)',
+        sourceRef: {
+          memoryKey: 'conflict.school_name'
+        },
+        statusChangedAt: '2026-04-08T01:10:00.000Z',
+        statusSource: null,
+        statusReason: null,
+        createdAt: '2026-04-08T01:10:00.000Z',
+        updatedAt: '2026-04-08T01:10:00.000Z'
+      }
+    ])
+    transitionPersonAgentTask.mockReturnValue({
+      taskId: 'task-1',
+      taskKey: 'resolve_conflict:conflict.school_name:hash-conflict',
+      personAgentId: 'agent-1',
+      canonicalPersonId: 'cp-1',
+      taskKind: 'resolve_conflict',
+      status: 'dismissed',
+      priority: 'high',
+      title: 'Resolve school_name',
+      summary: 'Pending values: 北京大学 / 清华大学 (2 pending)',
+      sourceRef: {
+        memoryKey: 'conflict.school_name'
+      },
+      statusChangedAt: '2026-04-08T01:12:00.000Z',
+      statusSource: 'workspace_ui',
+      statusReason: 'handled externally',
+      createdAt: '2026-04-08T01:10:00.000Z',
+      updatedAt: '2026-04-08T01:12:00.000Z'
+    })
+
+    registerWorkspaceIpc(appPathsFixture())
+
+    const listHandler = handlerMap.get('archive:listPersonAgentTasks')
+    const transitionHandler = handlerMap.get('archive:transitionPersonAgentTask')
+    const listed = await listHandler?.({}, {
+      canonicalPersonId: 'cp-1',
+      status: 'pending'
+    })
+    const transitioned = await transitionHandler?.({}, {
+      taskId: 'task-1',
+      status: 'dismissed',
+      source: 'workspace_ui',
+      reason: 'handled externally'
+    })
+
+    expect(listPersonAgentTasks).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1',
+      status: 'pending'
+    })
+    expect(transitionPersonAgentTask).toHaveBeenCalledWith(expect.anything(), {
+      taskId: 'task-1',
+      status: 'dismissed',
+      source: 'workspace_ui',
+      reason: 'handled externally'
+    })
+    expect(listed).toEqual([
+      expect.objectContaining({
+        taskKey: 'resolve_conflict:conflict.school_name:hash-conflict',
+        status: 'pending'
+      })
+    ])
+    expect(transitioned).toEqual(expect.objectContaining({
+      taskId: 'task-1',
+      status: 'dismissed',
+      statusSource: 'workspace_ui',
+      statusReason: 'handled externally'
+    }))
+    expect(close).toHaveBeenCalledTimes(2)
+  })
+
+  it('lists task runs and executes person-agent tasks through ipc', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    listPersonAgentTaskRuns.mockReturnValue([
+      {
+        runId: 'run-1',
+        taskId: 'task-1',
+        taskKey: 'resolve_conflict:conflict.school_name:hash-conflict',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        taskKind: 'resolve_conflict',
+        runStatus: 'completed',
+        summary: 'Review the conflicting evidence for school_name before answering with a single value.',
+        suggestedQuestion: '这条冲突信息里，哪一个来源更可信？',
+        actionItems: [
+          {
+            kind: 'review_conflict',
+            label: 'Review conflicting memory',
+            payload: {
+              memoryKey: 'conflict.school_name'
+            }
+          }
+        ],
+        source: 'workspace_ui',
+        createdAt: '2026-04-08T01:13:00.000Z',
+        updatedAt: '2026-04-08T01:13:00.000Z'
+      }
+    ])
+    executePersonAgentTask.mockReturnValue({
+      runId: 'run-2',
+      taskId: 'task-2',
+      taskKey: 'expand_topic:topic.profile_facts:3:1',
+      personAgentId: 'agent-1',
+      canonicalPersonId: 'cp-1',
+      taskKind: 'expand_topic',
+      runStatus: 'completed',
+      summary: 'Prepare a follow-up question for the recurring topic Profile facts.',
+      suggestedQuestion: '要不要继续追问 Profile facts 的细节？',
+      actionItems: [
+        {
+          kind: 'ask_follow_up',
+          label: 'Ask suggested follow-up',
+          payload: {
+            question: '要不要继续追问 Profile facts 的细节？'
+          }
+        }
+      ],
+      source: 'workspace_ui',
+      createdAt: '2026-04-08T01:14:00.000Z',
+      updatedAt: '2026-04-08T01:14:00.000Z'
+    })
+
+    registerWorkspaceIpc(appPathsFixture())
+
+    const listHandler = handlerMap.get('archive:listPersonAgentTaskRuns')
+    const executeHandler = handlerMap.get('archive:executePersonAgentTask')
+    const listed = await listHandler?.({}, {
+      canonicalPersonId: 'cp-1'
+    })
+    const executed = await executeHandler?.({}, {
+      taskId: 'task-2',
+      source: 'workspace_ui'
+    })
+
+    expect(listPersonAgentTaskRuns).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(executePersonAgentTask).toHaveBeenCalledWith(expect.anything(), {
+      taskId: 'task-2',
+      source: 'workspace_ui'
+    })
+    expect(listed).toEqual([
+      expect.objectContaining({
+        runId: 'run-1',
+        runStatus: 'completed'
+      })
+    ])
+    expect(executed).toEqual(expect.objectContaining({
+      runId: 'run-2',
+      taskKind: 'expand_topic',
+      runStatus: 'completed'
+    }))
+    expect(close).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe('registerWorkspaceIpc approved handoff handlers', () => {
@@ -464,6 +1399,11 @@ describe('registerWorkspaceIpc approved handoff handlers', () => {
     createApprovedPersonaDraftHostedShareLink.mockReset()
     revokeApprovedPersonaDraftHostedShareLink.mockReset()
     askMemoryWorkspacePersistedService.mockReset()
+    askPersonAgentConsultationPersisted.mockReset()
+    getPersonAgentConsultationRuntimeState.mockReset()
+    getPersonAgentConsultationSession.mockReset()
+    listPersonAgentConsultationSessions.mockReset()
+    listPersonAgentTasks.mockReset()
     listApprovedPersonaDraftProviderSends.mockReset()
     retryApprovedPersonaDraftProviderSend.mockReset()
     sendApprovedPersonaDraftToProvider.mockReset()

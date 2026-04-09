@@ -9,8 +9,20 @@ export function ensureAppPaths(root: string) {
   const importReportsDir = path.join(root, 'reports')
   const preservationReportsDir = path.join(root, 'preservation-reports')
   const sqliteDir = path.join(root, 'sqlite')
+  const personAgentRootDir = path.join(root, 'person-agents')
+  const personAgentWorkspaceDir = path.join(personAgentRootDir, 'workspaces')
+  const personAgentStateDir = path.join(personAgentRootDir, 'state')
 
-  for (const dir of [vaultDir, vaultOriginalsDir, importReportsDir, preservationReportsDir, sqliteDir]) {
+  for (const dir of [
+    vaultDir,
+    vaultOriginalsDir,
+    importReportsDir,
+    preservationReportsDir,
+    sqliteDir,
+    personAgentRootDir,
+    personAgentWorkspaceDir,
+    personAgentStateDir
+  ]) {
     fs.mkdirSync(dir, { recursive: true })
   }
 
@@ -20,6 +32,9 @@ export function ensureAppPaths(root: string) {
     vaultOriginalsDir,
     importReportsDir,
     preservationReportsDir,
-    sqliteDir
+    sqliteDir,
+    personAgentRootDir,
+    personAgentWorkspaceDir,
+    personAgentStateDir
   }
 }

@@ -1,17 +1,28 @@
 import { ipcMain } from 'electron'
 import {
+  askPersonAgentConsultationInputSchema,
   askMemoryWorkspaceInputSchema,
   askMemoryWorkspacePersistedInputSchema,
   approvedPersonaDraftReviewIdSchema,
   exportApprovedPersonaDraftInputSchema,
+  getPersonAgentConsultationSessionInputSchema,
+  getPersonAgentCapsuleInputSchema,
+  getPersonAgentInspectionBundleInputSchema,
   listApprovedPersonaDraftHandoffsInputSchema,
+  listPersonAgentCapsuleMemoryCheckpointsInputSchema,
+  listPersonAgentConsultationSessionsInputSchema,
+  listPersonAgentAuditEventsInputSchema,
   listApprovedPersonaDraftHostedShareLinksInputSchema,
   listApprovedPersonaDraftPublicationsInputSchema,
   listApprovedPersonaDraftProviderSendsInputSchema,
   createPersonaDraftReviewFromTurnInputSchema,
   getPersonAgentMemorySummaryInputSchema,
+  getPersonAgentRuntimeStateInputSchema,
   getPersonAgentStateInputSchema,
   getPersonaDraftReviewByTurnInputSchema,
+  executePersonAgentTaskInputSchema,
+  listPersonAgentTasksInputSchema,
+  listPersonAgentTaskRunsInputSchema,
   listPersonAgentRefreshQueueInputSchema,
   memoryWorkspaceCompareMatrixIdSchema,
   memoryWorkspaceCompareSessionFilterSchema,
@@ -26,6 +37,7 @@ import {
   openApprovedDraftPublicationEntryInputSchema,
   publishApprovedPersonaDraftInputSchema,
   sendApprovedPersonaDraftToProviderInputSchema,
+  transitionPersonAgentTaskInputSchema,
   transitionPersonaDraftReviewInputSchema,
   updatePersonaDraftReviewInputSchema
 } from '../../../shared/schemas/workspace'
@@ -38,9 +50,22 @@ export function registerWorkspaceIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:listMemoryWorkspaceSessions')
   ipcMain.removeHandler('archive:getMemoryWorkspaceSession')
   ipcMain.removeHandler('archive:askMemoryWorkspacePersisted')
+  ipcMain.removeHandler('archive:askPersonAgentConsultation')
+  ipcMain.removeHandler('archive:listPersonAgentConsultationSessions')
+  ipcMain.removeHandler('archive:getPersonAgentConsultationSession')
+  ipcMain.removeHandler('archive:getPersonAgentRuntimeState')
+  ipcMain.removeHandler('archive:getPersonAgentTaskQueueRunnerState')
   ipcMain.removeHandler('archive:getPersonAgentState')
+  ipcMain.removeHandler('archive:getPersonAgentCapsule')
+  ipcMain.removeHandler('archive:listPersonAgentCapsuleMemoryCheckpoints')
   ipcMain.removeHandler('archive:listPersonAgentRefreshQueue')
+  ipcMain.removeHandler('archive:listPersonAgentAuditEvents')
+  ipcMain.removeHandler('archive:listPersonAgentTasks')
+  ipcMain.removeHandler('archive:transitionPersonAgentTask')
+  ipcMain.removeHandler('archive:listPersonAgentTaskRuns')
+  ipcMain.removeHandler('archive:executePersonAgentTask')
   ipcMain.removeHandler('archive:getPersonAgentMemorySummary')
+  ipcMain.removeHandler('archive:getPersonAgentInspectionBundle')
   ipcMain.removeHandler('archive:runMemoryWorkspaceCompare')
   ipcMain.removeHandler('archive:listMemoryWorkspaceCompareSessions')
   ipcMain.removeHandler('archive:getMemoryWorkspaceCompareSession')
@@ -88,9 +113,43 @@ export function registerWorkspaceIpc(appPaths: AppPaths) {
     return workspaceModule.askPersisted(input)
   })
 
+  ipcMain.handle('archive:askPersonAgentConsultation', async (_event, payload) => {
+    const input = askPersonAgentConsultationInputSchema.parse(payload)
+    return workspaceModule.askPersonAgentConsultation(input)
+  })
+
+  ipcMain.handle('archive:listPersonAgentConsultationSessions', async (_event, payload) => {
+    const input = listPersonAgentConsultationSessionsInputSchema.parse(payload)
+    return workspaceModule.listPersonAgentConsultationSessions(input)
+  })
+
+  ipcMain.handle('archive:getPersonAgentConsultationSession', async (_event, payload) => {
+    const input = getPersonAgentConsultationSessionInputSchema.parse(payload)
+    return workspaceModule.getPersonAgentConsultationSession(input)
+  })
+
+  ipcMain.handle('archive:getPersonAgentRuntimeState', async (_event, payload) => {
+    const input = getPersonAgentRuntimeStateInputSchema.parse(payload)
+    return workspaceModule.getPersonAgentRuntimeState(input)
+  })
+
+  ipcMain.handle('archive:getPersonAgentTaskQueueRunnerState', async () => {
+    return workspaceModule.getPersonAgentTaskQueueRunnerState()
+  })
+
   ipcMain.handle('archive:getPersonAgentState', async (_event, payload) => {
     const input = getPersonAgentStateInputSchema.parse(payload)
     return workspaceModule.getPersonAgentState(input)
+  })
+
+  ipcMain.handle('archive:getPersonAgentCapsule', async (_event, payload) => {
+    const input = getPersonAgentCapsuleInputSchema.parse(payload)
+    return workspaceModule.getPersonAgentCapsule(input)
+  })
+
+  ipcMain.handle('archive:listPersonAgentCapsuleMemoryCheckpoints', async (_event, payload) => {
+    const input = listPersonAgentCapsuleMemoryCheckpointsInputSchema.parse(payload)
+    return workspaceModule.listPersonAgentCapsuleMemoryCheckpoints(input)
   })
 
   ipcMain.handle('archive:listPersonAgentRefreshQueue', async (_event, payload) => {
@@ -98,9 +157,39 @@ export function registerWorkspaceIpc(appPaths: AppPaths) {
     return workspaceModule.listPersonAgentRefreshQueue(input)
   })
 
+  ipcMain.handle('archive:listPersonAgentAuditEvents', async (_event, payload) => {
+    const input = listPersonAgentAuditEventsInputSchema.parse(payload)
+    return workspaceModule.listPersonAgentAuditEvents(input)
+  })
+
+  ipcMain.handle('archive:listPersonAgentTasks', async (_event, payload) => {
+    const input = listPersonAgentTasksInputSchema.parse(payload)
+    return workspaceModule.listPersonAgentTasks(input)
+  })
+
+  ipcMain.handle('archive:transitionPersonAgentTask', async (_event, payload) => {
+    const input = transitionPersonAgentTaskInputSchema.parse(payload)
+    return workspaceModule.transitionPersonAgentTask(input)
+  })
+
+  ipcMain.handle('archive:listPersonAgentTaskRuns', async (_event, payload) => {
+    const input = listPersonAgentTaskRunsInputSchema.parse(payload)
+    return workspaceModule.listPersonAgentTaskRuns(input)
+  })
+
+  ipcMain.handle('archive:executePersonAgentTask', async (_event, payload) => {
+    const input = executePersonAgentTaskInputSchema.parse(payload)
+    return workspaceModule.executePersonAgentTask(input)
+  })
+
   ipcMain.handle('archive:getPersonAgentMemorySummary', async (_event, payload) => {
     const input = getPersonAgentMemorySummaryInputSchema.parse(payload)
     return workspaceModule.getPersonAgentMemorySummary(input)
+  })
+
+  ipcMain.handle('archive:getPersonAgentInspectionBundle', async (_event, payload) => {
+    const input = getPersonAgentInspectionBundleInputSchema.parse(payload)
+    return workspaceModule.getPersonAgentInspectionBundle(input)
   })
 
   ipcMain.handle('archive:runMemoryWorkspaceCompare', async (_event, payload) => {

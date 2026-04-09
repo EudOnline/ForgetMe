@@ -197,6 +197,7 @@ function buildConsultedContext(
         canonicalPersonId: answerPack.canonicalPersonId,
         reason
       }],
+      strategyProfile: answerPack.strategyProfile ?? null,
       archiveRouting: {
         strategy: 'person_agent',
         reason: 'agent_consulted'

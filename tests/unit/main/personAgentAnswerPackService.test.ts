@@ -120,6 +120,12 @@ function seedPersonAgentMemoryFixture(db: ReturnType<typeof openDatabase>) {
     promotionTier: 'high_signal',
     promotionScore: 74,
     promotionReasonSummary: 'High signal person.',
+    strategyProfile: {
+      profileVersion: 1,
+      responseStyle: 'contextual',
+      evidencePreference: 'quote_first',
+      conflictBehavior: 'conflict_forward'
+    },
     factsVersion: 2,
     interactionVersion: 3
   })
@@ -238,6 +244,12 @@ describe('personAgentAnswerPackService', () => {
       questionClassification: 'profile_fact',
       candidateAnswer: expect.stringContaining('1997-02-03'),
       generationReason: expect.stringContaining('fact memory'),
+      strategyProfile: {
+        profileVersion: 1,
+        responseStyle: 'contextual',
+        evidencePreference: 'quote_first',
+        conflictBehavior: 'conflict_forward'
+      },
       memoryVersions: {
         factsVersion: 2,
         interactionVersion: 3
@@ -313,6 +325,7 @@ describe('personAgentAnswerPackService', () => {
       candidateAnswer: expect.stringContaining('Direct excerpts'),
       generationReason: expect.stringContaining('communication evidence')
     })
+    expect(quotePack?.generationReason).toContain('quote-first')
     expect(quotePack?.supportingCitations).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'file', targetId: 'f-1' }),
       expect.objectContaining({ kind: 'file', targetId: 'f-2' })
@@ -328,6 +341,20 @@ describe('personAgentAnswerPackService', () => {
         gapKey: 'communication.quote_evidence'
       })
     ]))
+
+    db.close()
+  })
+
+  it('surfaces conflict-forward strategy hints in profile answers', () => {
+    const db = setupDatabase()
+    seedPersonAgentMemoryFixture(db)
+
+    const pack = buildPersonAgentAnswerPack(db, {
+      canonicalPersonId: 'cp-1',
+      question: '她的生日是什么？'
+    })
+
+    expect(pack?.candidateAnswer).toContain('Open conflicts remain on school_name')
 
     db.close()
   })

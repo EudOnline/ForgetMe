@@ -1,0 +1,138 @@
+import path from 'node:path'
+import type { AppPaths } from './appPaths'
+import { openDatabase, runMigrations } from './db'
+import { getPersonAgentTaskQueueRunnerState, upsertPersonAgentTaskQueueRunnerState } from './governancePersistenceService'
+import { processPersonAgentTaskQueue } from './personAgentTaskService'
+
+const DEFAULT_PERSON_AGENT_TASK_QUEUE_RUNNER_INTERVAL_MS = 5_000
+const DEFAULT_PERSON_AGENT_TASK_QUEUE_RUNNER_BATCH_LIMIT = 4
+export const PERSON_AGENT_TASK_QUEUE_RUNNER_NAME = 'person_agent_task_queue'
+
+function parsePositiveInteger(value: string | undefined, fallback: number) {
+  const parsed = Number.parseInt(value ?? '', 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function databasePath(appPaths: AppPaths) {
+  return path.join(appPaths.sqliteDir, 'archive.sqlite')
+}
+
+export function runPersonAgentTaskQueueCycle(
+  db: Parameters<typeof processPersonAgentTaskQueue>[0],
+  input: {
+    limit?: number
+    source?: string
+    now?: string
+    runnerName?: string
+    processQueue?: typeof processPersonAgentTaskQueue
+  } = {}
+) {
+  const now = input.now ?? new Date().toISOString()
+  const runnerName = input.runnerName ?? PERSON_AGENT_TASK_QUEUE_RUNNER_NAME
+  const processQueue = input.processQueue ?? processPersonAgentTaskQueue
+  const existingState = getPersonAgentTaskQueueRunnerState(db, {
+    runnerName
+  })
+
+  upsertPersonAgentTaskQueueRunnerState(db, {
+    runnerName,
+    status: 'running',
+    lastStartedAt: now,
+    lastCompletedAt: existingState?.lastCompletedAt ?? null,
+    lastFailedAt: existingState?.lastFailedAt ?? null,
+    lastProcessedTaskCount: existingState?.lastProcessedTaskCount ?? 0,
+    totalProcessedTaskCount: existingState?.totalProcessedTaskCount ?? 0,
+    lastError: null,
+    updatedAt: now
+  })
+
+  try {
+    const runs = processQueue(db, {
+      limit: input.limit,
+      source: input.source ?? 'background_runner',
+      now
+    })
+    const processedTaskCount = runs.length
+
+    upsertPersonAgentTaskQueueRunnerState(db, {
+      runnerName,
+      status: 'idle',
+      lastStartedAt: now,
+      lastCompletedAt: now,
+      lastFailedAt: existingState?.lastFailedAt ?? null,
+      lastProcessedTaskCount: processedTaskCount,
+      totalProcessedTaskCount: (existingState?.totalProcessedTaskCount ?? 0) + processedTaskCount,
+      lastError: null,
+      updatedAt: now
+    })
+
+    return processedTaskCount > 0
+  } catch (error) {
+    upsertPersonAgentTaskQueueRunnerState(db, {
+      runnerName,
+      status: 'error',
+      lastStartedAt: now,
+      lastCompletedAt: existingState?.lastCompletedAt ?? null,
+      lastFailedAt: now,
+      lastProcessedTaskCount: 0,
+      totalProcessedTaskCount: existingState?.totalProcessedTaskCount ?? 0,
+      lastError: error instanceof Error ? error.message : String(error),
+      updatedAt: now
+    })
+    throw error
+  }
+}
+
+export function createPersonAgentTaskQueueRunner(input: {
+  appPaths: AppPaths
+  intervalMs?: number
+  limit?: number
+  runCycle?: () => Promise<boolean>
+}) {
+  const intervalMs = input.intervalMs ?? parsePositiveInteger(
+    process.env.FORGETME_PERSON_AGENT_TASK_QUEUE_RUNNER_INTERVAL_MS,
+    DEFAULT_PERSON_AGENT_TASK_QUEUE_RUNNER_INTERVAL_MS
+  )
+  const limit = input.limit ?? parsePositiveInteger(
+    process.env.FORGETME_PERSON_AGENT_TASK_QUEUE_RUNNER_BATCH_LIMIT,
+    DEFAULT_PERSON_AGENT_TASK_QUEUE_RUNNER_BATCH_LIMIT
+  )
+
+  const defaultRunCycle = async () => {
+    const db = openDatabase(databasePath(input.appPaths))
+    runMigrations(db)
+
+    try {
+      return runPersonAgentTaskQueueCycle(db, {
+        limit,
+        source: 'background_runner'
+      })
+    } finally {
+      db.close()
+    }
+  }
+
+  const runCycle = input.runCycle ?? defaultRunCycle
+  let stopped = false
+  let activeRun = false
+
+  const timer = setInterval(() => {
+    if (stopped || activeRun) {
+      return
+    }
+
+    activeRun = true
+    Promise.resolve(runCycle())
+      .catch(() => false)
+      .finally(() => {
+        activeRun = false
+      })
+  }, intervalMs)
+
+  return {
+    stop() {
+      stopped = true
+      clearInterval(timer)
+    }
+  }
+}

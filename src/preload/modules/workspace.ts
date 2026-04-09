@@ -8,9 +8,22 @@ type WorkspacePreloadModule = Pick<
   | 'listMemoryWorkspaceSessions'
   | 'getMemoryWorkspaceSession'
   | 'askMemoryWorkspacePersisted'
+  | 'askPersonAgentConsultation'
+  | 'listPersonAgentConsultationSessions'
+  | 'getPersonAgentConsultationSession'
+  | 'getPersonAgentRuntimeState'
+  | 'getPersonAgentTaskQueueRunnerState'
   | 'getPersonAgentState'
+  | 'getPersonAgentCapsule'
+  | 'listPersonAgentCapsuleMemoryCheckpoints'
   | 'listPersonAgentRefreshQueue'
+  | 'listPersonAgentAuditEvents'
+  | 'listPersonAgentTasks'
+  | 'transitionPersonAgentTask'
+  | 'listPersonAgentTaskRuns'
+  | 'executePersonAgentTask'
   | 'getPersonAgentMemorySummary'
+  | 'getPersonAgentInspectionBundle'
   | 'runMemoryWorkspaceCompare'
   | 'listMemoryWorkspaceCompareSessions'
   | 'getMemoryWorkspaceCompareSession'
@@ -45,9 +58,22 @@ export function createWorkspacePreloadModule(ipcRenderer: IpcRenderer): Workspac
     listMemoryWorkspaceSessions: invokeWith(ipcRenderer, 'archive:listMemoryWorkspaceSessions'),
     getMemoryWorkspaceSession: (sessionId) => ipcRenderer.invoke('archive:getMemoryWorkspaceSession', { sessionId }),
     askMemoryWorkspacePersisted: invokeWith(ipcRenderer, 'archive:askMemoryWorkspacePersisted'),
+    askPersonAgentConsultation: invokeWith(ipcRenderer, 'archive:askPersonAgentConsultation'),
+    listPersonAgentConsultationSessions: invokeWith(ipcRenderer, 'archive:listPersonAgentConsultationSessions'),
+    getPersonAgentConsultationSession: (sessionId) => ipcRenderer.invoke('archive:getPersonAgentConsultationSession', { sessionId }),
+    getPersonAgentRuntimeState: invokeWith(ipcRenderer, 'archive:getPersonAgentRuntimeState'),
+    getPersonAgentTaskQueueRunnerState: invokeWithout(ipcRenderer, 'archive:getPersonAgentTaskQueueRunnerState'),
     getPersonAgentState: invokeWith(ipcRenderer, 'archive:getPersonAgentState'),
+    getPersonAgentCapsule: invokeWith(ipcRenderer, 'archive:getPersonAgentCapsule'),
+    listPersonAgentCapsuleMemoryCheckpoints: invokeWith(ipcRenderer, 'archive:listPersonAgentCapsuleMemoryCheckpoints'),
     listPersonAgentRefreshQueue: invokeWith(ipcRenderer, 'archive:listPersonAgentRefreshQueue'),
+    listPersonAgentAuditEvents: invokeWith(ipcRenderer, 'archive:listPersonAgentAuditEvents'),
+    listPersonAgentTasks: invokeWith(ipcRenderer, 'archive:listPersonAgentTasks'),
+    transitionPersonAgentTask: invokeWith(ipcRenderer, 'archive:transitionPersonAgentTask'),
+    listPersonAgentTaskRuns: invokeWith(ipcRenderer, 'archive:listPersonAgentTaskRuns'),
+    executePersonAgentTask: invokeWith(ipcRenderer, 'archive:executePersonAgentTask'),
     getPersonAgentMemorySummary: invokeWith(ipcRenderer, 'archive:getPersonAgentMemorySummary'),
+    getPersonAgentInspectionBundle: invokeWith(ipcRenderer, 'archive:getPersonAgentInspectionBundle'),
     runMemoryWorkspaceCompare: invokeWith(ipcRenderer, 'archive:runMemoryWorkspaceCompare'),
     listMemoryWorkspaceCompareSessions: invokeWith(ipcRenderer, 'archive:listMemoryWorkspaceCompareSessions'),
     getMemoryWorkspaceCompareSession: (compareSessionId) => ipcRenderer.invoke('archive:getMemoryWorkspaceCompareSession', { compareSessionId }),

@@ -10,6 +10,10 @@ import type {
 import type { ArchiveDatabase } from './db'
 import { recordPersistedPersonAgentInteractionIfEligible } from './personAgentInteractionMemoryService'
 import { askMemoryWorkspace } from './memoryWorkspaceService'
+import {
+  enqueuePersonAgentRefreshForCanonicalPeople,
+  processPendingPersonAgentRefreshes
+} from './personAgentRefreshService'
 
 type SessionRow = {
   id: string
@@ -104,6 +108,24 @@ function mapTurnRow(row: TurnRow): MemoryWorkspaceTurnRecord {
     contextHash: row.contextHash,
     createdAt: row.createdAt
   }
+}
+
+function refreshPersonAgentIfPersonScope(db: ArchiveDatabase, input: {
+  scope: MemoryWorkspaceScope
+  createdAt: string
+}) {
+  if (input.scope.kind !== 'person') {
+    return
+  }
+
+  enqueuePersonAgentRefreshForCanonicalPeople(db, {
+    canonicalPersonIds: [input.scope.canonicalPersonId],
+    reason: 'memory_workspace_turn',
+    requestedAt: input.createdAt
+  })
+  processPendingPersonAgentRefreshes(db, {
+    now: input.createdAt
+  })
 }
 
 function loadSessionRow(db: ArchiveDatabase, sessionId: string) {
@@ -284,19 +306,24 @@ export function askMemoryWorkspacePersisted(
       sessionId
     )
 
-    recordPersistedPersonAgentInteractionIfEligible(db, {
-      scope: input.scope,
-      turnId,
-      question: input.question,
-      response,
-      createdAt
-    })
-
     db.exec('commit')
   } catch (error) {
     db.exec('rollback')
     throw error
   }
+
+  refreshPersonAgentIfPersonScope(db, {
+    scope: input.scope,
+    createdAt
+  })
+
+  recordPersistedPersonAgentInteractionIfEligible(db, {
+    scope: input.scope,
+    turnId,
+    question: input.question,
+    response,
+    createdAt
+  })
 
   return {
     turnId,
