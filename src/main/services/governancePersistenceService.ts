@@ -8,6 +8,12 @@ import type {
   ListPersonAgentRefreshQueueInput,
   ListPersonAgentTaskRunsInput,
   PersonAgentAuditEventRecord,
+  PersonAgentCapsuleActivationSource,
+  PersonAgentCapsuleCheckpointKind,
+  PersonAgentCapsuleIdentityProfile,
+  PersonAgentCapsuleMemoryCheckpointRecord,
+  PersonAgentCapsuleRecord,
+  PersonAgentCapsuleStatus,
   PersonAgentConsultationSessionDetail,
   PersonAgentConsultationSessionSummary,
   PersonAgentConsultationTurnRecord,
@@ -62,6 +68,38 @@ type PersonAgentRow = {
   lastActivatedAt: string | null
   createdAt: string
   updatedAt: string
+}
+
+type PersonAgentCapsuleRow = {
+  id: string
+  personAgentId: string
+  canonicalPersonId: string
+  capsuleStatus: PersonAgentCapsuleStatus
+  activationSource: PersonAgentCapsuleActivationSource
+  sessionNamespace: string
+  workspaceRoot: string
+  stateRoot: string
+  identityProfileJson: string
+  latestCheckpointId: string | null
+  latestCheckpointAt: string | null
+  activatedAt: string
+  createdAt: string
+  updatedAt: string
+}
+
+type PersonAgentCapsuleMemoryCheckpointRow = {
+  id: string
+  capsuleId: string
+  personAgentId: string
+  canonicalPersonId: string
+  checkpointKind: PersonAgentCapsuleCheckpointKind
+  factsVersion: number
+  interactionVersion: number
+  strategyProfileVersion: number | null
+  taskSnapshotAt: string | null
+  summary: string
+  summaryJson: string
+  createdAt: string
 }
 
 type PersonAgentFactMemoryRow = {
@@ -287,6 +325,52 @@ function parseStrategyProfile(value: string | null): PersonAgentStrategyProfile 
   return null
 }
 
+function parseCapsuleIdentityProfile(value: string): PersonAgentCapsuleIdentityProfile {
+  try {
+    const parsed = JSON.parse(value) as Partial<PersonAgentCapsuleIdentityProfile>
+    if (
+      typeof parsed.primaryDisplayName === 'string'
+      && typeof parsed.normalizedName === 'string'
+      && (
+        parsed.promotionTier === 'cold'
+        || parsed.promotionTier === 'warming'
+        || parsed.promotionTier === 'active'
+        || parsed.promotionTier === 'high_signal'
+      )
+      && (typeof parsed.strategyProfileVersion === 'number' || parsed.strategyProfileVersion === null || parsed.strategyProfileVersion === undefined)
+      && typeof parsed.factsVersion === 'number'
+      && typeof parsed.interactionVersion === 'number'
+    ) {
+      return {
+        primaryDisplayName: parsed.primaryDisplayName,
+        normalizedName: parsed.normalizedName,
+        promotionTier: parsed.promotionTier,
+        strategyProfileVersion: parsed.strategyProfileVersion ?? null,
+        factsVersion: parsed.factsVersion,
+        interactionVersion: parsed.interactionVersion
+      }
+    }
+  } catch {
+    return {
+      primaryDisplayName: 'unknown',
+      normalizedName: 'unknown',
+      promotionTier: 'cold',
+      strategyProfileVersion: null,
+      factsVersion: 0,
+      interactionVersion: 0
+    }
+  }
+
+  return {
+    primaryDisplayName: 'unknown',
+    normalizedName: 'unknown',
+    promotionTier: 'cold',
+    strategyProfileVersion: null,
+    factsVersion: 0,
+    interactionVersion: 0
+  }
+}
+
 function mapPersonAgentRow(row: PersonAgentRow): PersonAgentRecord {
   return {
     personAgentId: row.id,
@@ -302,6 +386,44 @@ function mapPersonAgentRow(row: PersonAgentRow): PersonAgentRecord {
     lastActivatedAt: row.lastActivatedAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt
+  }
+}
+
+function mapPersonAgentCapsuleRow(row: PersonAgentCapsuleRow): PersonAgentCapsuleRecord {
+  return {
+    capsuleId: row.id,
+    personAgentId: row.personAgentId,
+    canonicalPersonId: row.canonicalPersonId,
+    capsuleStatus: row.capsuleStatus,
+    activationSource: row.activationSource,
+    sessionNamespace: row.sessionNamespace,
+    workspaceRoot: row.workspaceRoot,
+    stateRoot: row.stateRoot,
+    identityProfile: parseCapsuleIdentityProfile(row.identityProfileJson),
+    latestCheckpointId: row.latestCheckpointId,
+    latestCheckpointAt: row.latestCheckpointAt,
+    activatedAt: row.activatedAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt
+  }
+}
+
+function mapPersonAgentCapsuleMemoryCheckpointRow(
+  row: PersonAgentCapsuleMemoryCheckpointRow
+): PersonAgentCapsuleMemoryCheckpointRecord {
+  return {
+    checkpointId: row.id,
+    capsuleId: row.capsuleId,
+    personAgentId: row.personAgentId,
+    canonicalPersonId: row.canonicalPersonId,
+    checkpointKind: row.checkpointKind,
+    factsVersion: row.factsVersion,
+    interactionVersion: row.interactionVersion,
+    strategyProfileVersion: row.strategyProfileVersion,
+    taskSnapshotAt: row.taskSnapshotAt,
+    summary: row.summary,
+    summaryPayload: parseJsonObject(row.summaryJson),
+    createdAt: row.createdAt
   }
 }
 
@@ -394,6 +516,91 @@ function mapPersonAgentConsultationTurnRow(row: PersonAgentConsultationTurnRow):
     question: row.question,
     answerPack: JSON.parse(row.answerPackJson),
     createdAt: row.createdAt
+  }
+}
+
+function resolvePersonAgentCapsuleRuntimeMetadata(db: ArchiveDatabase, input: {
+  personAgentId?: string
+  canonicalPersonId?: string
+}) {
+  const capsule = getPersonAgentCapsule(db, input)
+
+  return {
+    capsuleId: capsule?.capsuleId ?? null,
+    capsuleStatus: capsule?.capsuleStatus ?? null,
+    capsuleSessionNamespace: capsule?.sessionNamespace ?? null,
+    capsuleCheckpointId: capsule?.latestCheckpointId ?? null,
+    capsuleCheckpointAt: capsule?.latestCheckpointAt ?? null
+  }
+}
+
+function decoratePersonAgentRuntimeStateRecord(
+  db: ArchiveDatabase,
+  record: PersonAgentRuntimeStateRecord
+): PersonAgentRuntimeStateRecord {
+  return {
+    ...record,
+    ...resolvePersonAgentCapsuleRuntimeMetadata(db, {
+      personAgentId: record.personAgentId,
+      canonicalPersonId: record.canonicalPersonId
+    })
+  }
+}
+
+function decoratePersonAgentTaskRunRecord(
+  db: ArchiveDatabase,
+  record: PersonAgentTaskRunRecord
+): PersonAgentTaskRunRecord {
+  const metadata = resolvePersonAgentCapsuleRuntimeMetadata(db, {
+    personAgentId: record.personAgentId,
+    canonicalPersonId: record.canonicalPersonId
+  })
+
+  return {
+    ...record,
+    capsuleId: metadata.capsuleId,
+    capsuleSessionNamespace: metadata.capsuleSessionNamespace
+  }
+}
+
+function decoratePersonAgentTaskQueueRunnerStateRecord(
+  db: ArchiveDatabase,
+  record: PersonAgentTaskQueueRunnerStateRecord
+): PersonAgentTaskQueueRunnerStateRecord {
+  const latestBackgroundRunRow = db.prepare(
+    `select
+      id,
+      task_id as taskId,
+      task_key as taskKey,
+      person_agent_id as personAgentId,
+      canonical_person_id as canonicalPersonId,
+      task_kind as taskKind,
+      run_status as runStatus,
+      summary,
+      suggested_question as suggestedQuestion,
+      action_items_json as actionItemsJson,
+      source,
+      created_at as createdAt,
+      updated_at as updatedAt
+     from person_agent_task_runs
+     where source = 'background_runner'
+     order by created_at desc, id desc
+     limit 1`
+  ).get() as PersonAgentTaskRunRow | undefined
+
+  if (!latestBackgroundRunRow) {
+    return record
+  }
+
+  const latestRun = decoratePersonAgentTaskRunRecord(db, mapPersonAgentTaskRunRow(latestBackgroundRunRow))
+
+  return {
+    ...record,
+    lastProcessedTaskId: latestRun.taskId,
+    lastProcessedPersonAgentId: latestRun.personAgentId,
+    lastProcessedCanonicalPersonId: latestRun.canonicalPersonId,
+    lastProcessedCapsuleId: latestRun.capsuleId ?? null,
+    lastProcessedCapsuleSessionNamespace: latestRun.capsuleSessionNamespace ?? null
   }
 }
 
@@ -725,6 +932,223 @@ export function listPersonAgents(db: ArchiveDatabase, input: {
       return true
     })
     .map(mapPersonAgentRow)
+}
+
+export function getPersonAgentCapsule(db: ArchiveDatabase, input: {
+  capsuleId?: string
+  personAgentId?: string
+  canonicalPersonId?: string
+}): PersonAgentCapsuleRecord | null {
+  const rows = db.prepare(
+    `select
+      id,
+      person_agent_id as personAgentId,
+      canonical_person_id as canonicalPersonId,
+      capsule_status as capsuleStatus,
+      activation_source as activationSource,
+      session_namespace as sessionNamespace,
+      workspace_root as workspaceRoot,
+      state_root as stateRoot,
+      identity_profile_json as identityProfileJson,
+      latest_checkpoint_id as latestCheckpointId,
+      latest_checkpoint_at as latestCheckpointAt,
+      activated_at as activatedAt,
+      created_at as createdAt,
+      updated_at as updatedAt
+     from person_agent_capsules
+     order by updated_at desc, id asc`
+  ).all() as PersonAgentCapsuleRow[]
+
+  const matched = rows.find((row) => {
+    if (input.capsuleId && row.id !== input.capsuleId) {
+      return false
+    }
+    if (input.personAgentId && row.personAgentId !== input.personAgentId) {
+      return false
+    }
+    if (input.canonicalPersonId && row.canonicalPersonId !== input.canonicalPersonId) {
+      return false
+    }
+    return true
+  })
+
+  return matched ? mapPersonAgentCapsuleRow(matched) : null
+}
+
+export function upsertPersonAgentCapsule(db: ArchiveDatabase, input: {
+  capsuleId?: string
+  personAgentId: string
+  canonicalPersonId: string
+  capsuleStatus: PersonAgentCapsuleStatus
+  activationSource: PersonAgentCapsuleActivationSource
+  sessionNamespace: string
+  workspaceRoot: string
+  stateRoot: string
+  identityProfile: PersonAgentCapsuleIdentityProfile
+  latestCheckpointId?: string | null
+  latestCheckpointAt?: string | null
+  activatedAt: string
+  createdAt?: string
+  updatedAt?: string
+}) {
+  const now = new Date().toISOString()
+  const createdAt = input.createdAt ?? now
+  const updatedAt = input.updatedAt ?? now
+  const capsuleId = input.capsuleId ?? crypto.randomUUID()
+
+  db.prepare(
+    `insert into person_agent_capsules (
+      id,
+      person_agent_id,
+      canonical_person_id,
+      capsule_status,
+      activation_source,
+      session_namespace,
+      workspace_root,
+      state_root,
+      identity_profile_json,
+      latest_checkpoint_id,
+      latest_checkpoint_at,
+      activated_at,
+      created_at,
+      updated_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    on conflict(person_agent_id) do update set
+      canonical_person_id = excluded.canonical_person_id,
+      capsule_status = excluded.capsule_status,
+      activation_source = excluded.activation_source,
+      session_namespace = excluded.session_namespace,
+      workspace_root = excluded.workspace_root,
+      state_root = excluded.state_root,
+      identity_profile_json = excluded.identity_profile_json,
+      latest_checkpoint_id = coalesce(excluded.latest_checkpoint_id, person_agent_capsules.latest_checkpoint_id),
+      latest_checkpoint_at = coalesce(excluded.latest_checkpoint_at, person_agent_capsules.latest_checkpoint_at),
+      activated_at = excluded.activated_at,
+      updated_at = excluded.updated_at`
+  ).run(
+    capsuleId,
+    input.personAgentId,
+    input.canonicalPersonId,
+    input.capsuleStatus,
+    input.activationSource,
+    input.sessionNamespace,
+    input.workspaceRoot,
+    input.stateRoot,
+    JSON.stringify(input.identityProfile),
+    input.latestCheckpointId ?? null,
+    input.latestCheckpointAt ?? null,
+    input.activatedAt,
+    createdAt,
+    updatedAt
+  )
+
+  return getPersonAgentCapsule(db, {
+    personAgentId: input.personAgentId
+  })
+}
+
+export function appendPersonAgentCapsuleMemoryCheckpoint(db: ArchiveDatabase, input: {
+  checkpointId?: string
+  capsuleId: string
+  personAgentId: string
+  canonicalPersonId: string
+  checkpointKind: PersonAgentCapsuleCheckpointKind
+  factsVersion: number
+  interactionVersion: number
+  strategyProfileVersion?: number | null
+  taskSnapshotAt?: string | null
+  summary: string
+  summaryPayload?: Record<string, unknown>
+  createdAt?: string
+}) {
+  const checkpointId = input.checkpointId ?? crypto.randomUUID()
+  const createdAt = input.createdAt ?? new Date().toISOString()
+
+  db.prepare(
+    `insert into person_agent_capsule_memory_checkpoints (
+      id,
+      capsule_id,
+      person_agent_id,
+      canonical_person_id,
+      checkpoint_kind,
+      facts_version,
+      interaction_version,
+      strategy_profile_version,
+      task_snapshot_at,
+      summary,
+      summary_json,
+      created_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    checkpointId,
+    input.capsuleId,
+    input.personAgentId,
+    input.canonicalPersonId,
+    input.checkpointKind,
+    input.factsVersion,
+    input.interactionVersion,
+    input.strategyProfileVersion ?? null,
+    input.taskSnapshotAt ?? null,
+    input.summary,
+    JSON.stringify(input.summaryPayload ?? {}),
+    createdAt
+  )
+
+  db.prepare(
+    `update person_agent_capsules
+     set latest_checkpoint_id = ?, latest_checkpoint_at = ?, updated_at = ?
+     where id = ?`
+  ).run(
+    checkpointId,
+    createdAt,
+    createdAt,
+    input.capsuleId
+  )
+
+  return listPersonAgentCapsuleMemoryCheckpoints(db, {
+    capsuleId: input.capsuleId
+  }).find((checkpoint) => checkpoint.checkpointId === checkpointId) ?? null
+}
+
+export function listPersonAgentCapsuleMemoryCheckpoints(db: ArchiveDatabase, input: {
+  capsuleId?: string
+  personAgentId?: string
+  canonicalPersonId?: string
+  limit?: number
+} = {}): PersonAgentCapsuleMemoryCheckpointRecord[] {
+  const rows = db.prepare(
+    `select
+      id,
+      capsule_id as capsuleId,
+      person_agent_id as personAgentId,
+      canonical_person_id as canonicalPersonId,
+      checkpoint_kind as checkpointKind,
+      facts_version as factsVersion,
+      interaction_version as interactionVersion,
+      strategy_profile_version as strategyProfileVersion,
+      task_snapshot_at as taskSnapshotAt,
+      summary,
+      summary_json as summaryJson,
+      created_at as createdAt
+     from person_agent_capsule_memory_checkpoints
+     order by created_at desc, id desc`
+  ).all() as PersonAgentCapsuleMemoryCheckpointRow[]
+
+  const filtered = rows.filter((row) => {
+    if (input.capsuleId && row.capsuleId !== input.capsuleId) {
+      return false
+    }
+    if (input.personAgentId && row.personAgentId !== input.personAgentId) {
+      return false
+    }
+    if (input.canonicalPersonId && row.canonicalPersonId !== input.canonicalPersonId) {
+      return false
+    }
+    return true
+  })
+
+  const limited = input.limit && input.limit > 0 ? filtered.slice(0, input.limit) : filtered
+  return limited.map(mapPersonAgentCapsuleMemoryCheckpointRow)
 }
 
 export function replacePersonAgentFactMemories(db: ArchiveDatabase, input: {
@@ -1369,7 +1793,7 @@ export function getPersonAgentRuntimeState(db: ArchiveDatabase, input: {
     return true
   })
 
-  return matched ? mapPersonAgentRuntimeStateRow(matched) : null
+  return matched ? decoratePersonAgentRuntimeStateRecord(db, mapPersonAgentRuntimeStateRow(matched)) : null
 }
 
 export function replacePersonAgentTasks(db: ArchiveDatabase, input: {
@@ -1720,7 +2144,7 @@ export function listPersonAgentTaskRuns(
       }
       return true
     })
-    .map(mapPersonAgentTaskRunRow)
+    .map((row) => decoratePersonAgentTaskRunRecord(db, mapPersonAgentTaskRunRow(row)))
 }
 
 export function getPersonAgentTaskQueueRunnerState(
@@ -1745,7 +2169,7 @@ export function getPersonAgentTaskQueueRunnerState(
   ).all() as PersonAgentTaskQueueRunnerStateRow[]
 
   const matched = rows.find((row) => !input.runnerName || row.runnerName === input.runnerName)
-  return matched ? mapPersonAgentTaskQueueRunnerStateRow(matched) : null
+  return matched ? decoratePersonAgentTaskQueueRunnerStateRecord(db, mapPersonAgentTaskQueueRunnerStateRow(matched)) : null
 }
 
 export function enqueuePersonAgentRefresh(db: ArchiveDatabase, input: {

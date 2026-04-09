@@ -113,6 +113,25 @@ export const getPersonAgentStateInputSchema = z.object({
   canonicalPersonId: z.string().min(1)
 })
 
+export const getPersonAgentCapsuleInputSchema = z.object({
+  capsuleId: z.string().min(1).optional(),
+  personAgentId: z.string().min(1).optional(),
+  canonicalPersonId: z.string().min(1).optional()
+}).refine(
+  (value) => Boolean(value.capsuleId || value.personAgentId || value.canonicalPersonId),
+  { message: 'one person-agent capsule identifier is required' }
+)
+
+export const listPersonAgentCapsuleMemoryCheckpointsInputSchema = z.object({
+  capsuleId: z.string().min(1).optional(),
+  personAgentId: z.string().min(1).optional(),
+  canonicalPersonId: z.string().min(1).optional(),
+  limit: z.number().int().positive().max(20).optional()
+}).refine(
+  (value) => Boolean(value.capsuleId || value.personAgentId || value.canonicalPersonId),
+  { message: 'one person-agent capsule identifier is required' }
+)
+
 export const getPersonAgentMemorySummaryInputSchema = z.object({
   canonicalPersonId: z.string().min(1)
 })

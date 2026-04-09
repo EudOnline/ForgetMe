@@ -136,17 +136,30 @@ describe('createImportBatch', () => {
     ).get('Alice Chen') as { id: string } | undefined
     const personAgentRow = personRow
       ? db.prepare(
-          `select status, promotion_tier as promotionTier
+          `select status, promotion_tier as promotionTier, promotion_reason_summary as promotionReasonSummary
            from person_agents
            where canonical_person_id = ?
            limit 1`
-        ).get(personRow.id) as { status: string; promotionTier: string } | undefined
+        ).get(personRow.id) as { status: string; promotionTier: string; promotionReasonSummary: string } | undefined
+      : undefined
+    const capsuleRow = personAgentRow
+      ? db.prepare(
+          `select activation_source as activationSource, capsule_status as capsuleStatus
+           from person_agent_capsules
+           where canonical_person_id = ?
+           limit 1`
+        ).get(personRow!.id) as { activationSource: string; capsuleStatus: string } | undefined
       : undefined
 
     expect(personRow).toBeTruthy()
     expect(personAgentRow).toMatchObject({
       status: 'active',
       promotionTier: expect.stringMatching(/active|high_signal/)
+    })
+    expect(personAgentRow?.promotionReasonSummary).toContain('importBatches=')
+    expect(capsuleRow).toMatchObject({
+      activationSource: 'import_batch',
+      capsuleStatus: 'ready'
     })
 
     db.close()

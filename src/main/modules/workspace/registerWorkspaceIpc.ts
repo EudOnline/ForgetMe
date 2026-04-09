@@ -6,8 +6,10 @@ import {
   approvedPersonaDraftReviewIdSchema,
   exportApprovedPersonaDraftInputSchema,
   getPersonAgentConsultationSessionInputSchema,
+  getPersonAgentCapsuleInputSchema,
   getPersonAgentInspectionBundleInputSchema,
   listApprovedPersonaDraftHandoffsInputSchema,
+  listPersonAgentCapsuleMemoryCheckpointsInputSchema,
   listPersonAgentConsultationSessionsInputSchema,
   listPersonAgentAuditEventsInputSchema,
   listApprovedPersonaDraftHostedShareLinksInputSchema,
@@ -54,6 +56,8 @@ export function registerWorkspaceIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:getPersonAgentRuntimeState')
   ipcMain.removeHandler('archive:getPersonAgentTaskQueueRunnerState')
   ipcMain.removeHandler('archive:getPersonAgentState')
+  ipcMain.removeHandler('archive:getPersonAgentCapsule')
+  ipcMain.removeHandler('archive:listPersonAgentCapsuleMemoryCheckpoints')
   ipcMain.removeHandler('archive:listPersonAgentRefreshQueue')
   ipcMain.removeHandler('archive:listPersonAgentAuditEvents')
   ipcMain.removeHandler('archive:listPersonAgentTasks')
@@ -136,6 +140,16 @@ export function registerWorkspaceIpc(appPaths: AppPaths) {
   ipcMain.handle('archive:getPersonAgentState', async (_event, payload) => {
     const input = getPersonAgentStateInputSchema.parse(payload)
     return workspaceModule.getPersonAgentState(input)
+  })
+
+  ipcMain.handle('archive:getPersonAgentCapsule', async (_event, payload) => {
+    const input = getPersonAgentCapsuleInputSchema.parse(payload)
+    return workspaceModule.getPersonAgentCapsule(input)
+  })
+
+  ipcMain.handle('archive:listPersonAgentCapsuleMemoryCheckpoints', async (_event, payload) => {
+    const input = listPersonAgentCapsuleMemoryCheckpointsInputSchema.parse(payload)
+    return workspaceModule.listPersonAgentCapsuleMemoryCheckpoints(input)
   })
 
   ipcMain.handle('archive:listPersonAgentRefreshQueue', async (_event, payload) => {

@@ -261,6 +261,8 @@ describe('personAgentPromotionService', () => {
     expect(result.promotionTier).toBe('cold')
     expect(result.promotionScore.signals.approvedFactCount).toBe(0)
     expect(result.promotionScore.signals.evidenceSourceCount).toBe(0)
+    expect(result.promotionScore.signals.linkedImportBatchCount).toBe(0)
+    expect(result.promotionScore.signals.relationshipDensity).toBe(0)
 
     db.close()
   })
@@ -360,7 +362,9 @@ describe('personAgentPromotionService', () => {
         approvedFactCount: 0,
         evidenceSourceCount: 0,
         communicationFileCount: 0,
+        linkedImportBatchCount: 0,
         relationshipDegree: 0,
+        relationshipDensity: 0,
         recentQuestionCount: 0,
         recentCitationCount: 0
       }
@@ -457,6 +461,8 @@ describe('personAgentPromotionService', () => {
     expect(result.decision).toBe('active')
     expect(result.shouldActivate).toBe(true)
     expect(result.reasonSummary).not.toContain('promotion disabled')
+    expect(result.promotionScore.signals.linkedImportBatchCount).toBe(1)
+    expect(result.promotionScore.signals.relationshipDensity).toBe(1)
 
     db.close()
   })

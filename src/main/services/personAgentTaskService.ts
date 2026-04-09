@@ -8,6 +8,7 @@ import {
   appendPersonAgentTaskRun,
   appendPersonAgentAuditEvent,
   getPersonAgentByCanonicalPersonId,
+  getPersonAgentCapsule,
   getPersonAgentTaskById,
   listPersonAgentAuditEvents,
   listPersonAgentInteractionMemories,
@@ -397,6 +398,11 @@ export function executePersonAgentTask(db: ArchiveDatabase, input: {
     })
   }
 
+  const capsule = getPersonAgentCapsule(db, {
+    personAgentId: task.personAgentId,
+    canonicalPersonId: task.canonicalPersonId
+  })
+
   appendPersonAgentAuditEvent(db, {
     personAgentId: task.personAgentId,
     canonicalPersonId: task.canonicalPersonId,
@@ -407,7 +413,9 @@ export function executePersonAgentTask(db: ArchiveDatabase, input: {
       taskKey: task.taskKey,
       taskKind: task.taskKind,
       runStatus: run.runStatus,
-      source: input.source ?? null
+      source: input.source ?? null,
+      capsuleId: capsule?.capsuleId ?? null,
+      capsuleSessionNamespace: capsule?.sessionNamespace ?? null
     },
     createdAt: now
   })

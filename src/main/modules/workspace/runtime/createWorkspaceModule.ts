@@ -31,7 +31,9 @@ import {
 } from '../../../services/personAgentTaskService'
 import {
   getPersonAgentByCanonicalPersonId,
+  getPersonAgentCapsule,
   listPersonAgentAuditEvents,
+  listPersonAgentCapsuleMemoryCheckpoints,
   listPersonAgentInteractionMemories,
   listPersonAgentRefreshQueue,
   getPersonAgentTaskQueueRunnerState,
@@ -68,6 +70,7 @@ import {
 import { listApprovedDraftSendDestinations } from '../../../services/approvedDraftSendDestinationService'
 import type {
   PersonAgentAuditEventRecord,
+  PersonAgentCapsuleRecord,
   PersonAgentInspectionHighlight,
   PersonAgentInspectionRecommendations,
   PersonAgentMemorySummary,
@@ -107,6 +110,7 @@ function buildPersonAgentMemorySummary(input: {
 
 function buildPersonAgentInspectionOverview(input: {
   state: PersonAgentRecord | null
+  capsule: PersonAgentCapsuleRecord | null
   memorySummary: PersonAgentMemorySummary | null
   refreshQueue: PersonAgentRefreshQueueRecord[]
   auditEvents: PersonAgentAuditEventRecord[]
@@ -138,6 +142,8 @@ function buildPersonAgentInspectionOverview(input: {
           changedFields
         }
       : null,
+    capsuleStatus: input.capsule?.capsuleStatus ?? 'missing',
+    activationSource: input.capsule?.activationSource ?? null,
     taskQueueRunner: runnerHealth
   }
 }
@@ -472,6 +478,21 @@ export function createWorkspaceModule(appPaths: AppPaths) {
     async getPersonAgentState(input: { canonicalPersonId: string }) {
       return this.withArchiveDatabase((db) => getPersonAgentByCanonicalPersonId(db, input))
     },
+    async getPersonAgentCapsule(input: {
+      capsuleId?: string
+      personAgentId?: string
+      canonicalPersonId?: string
+    }) {
+      return this.withArchiveDatabase((db) => getPersonAgentCapsule(db, input))
+    },
+    async listPersonAgentCapsuleMemoryCheckpoints(input: {
+      capsuleId?: string
+      personAgentId?: string
+      canonicalPersonId?: string
+      limit?: number
+    }) {
+      return this.withArchiveDatabase((db) => listPersonAgentCapsuleMemoryCheckpoints(db, input))
+    },
     async listPersonAgentRefreshQueue(input: { status?: 'pending' | 'processing' | 'completed' | 'failed' } = {}) {
       return this.withArchiveDatabase((db) => listPersonAgentRefreshQueue(db, input))
     },
@@ -529,6 +550,11 @@ export function createWorkspaceModule(appPaths: AppPaths) {
       return this.withArchiveDatabase((db) => {
         const now = new Date().toISOString()
         const state = getPersonAgentByCanonicalPersonId(db, input)
+        const capsule = getPersonAgentCapsule(db, input)
+        const capsuleCheckpoint = listPersonAgentCapsuleMemoryCheckpoints(db, {
+          canonicalPersonId: input.canonicalPersonId,
+          limit: 1
+        })[0] ?? null
         const factSummary = getPersonAgentFactMemorySummary(db, input)
         const interactionMemories = listPersonAgentInteractionMemories(db, {
           canonicalPersonId: input.canonicalPersonId
@@ -550,6 +576,7 @@ export function createWorkspaceModule(appPaths: AppPaths) {
         })
         const overview = buildPersonAgentInspectionOverview({
           state,
+          capsule,
           memorySummary,
           refreshQueue,
           auditEvents,
@@ -557,7 +584,14 @@ export function createWorkspaceModule(appPaths: AppPaths) {
           now
         })
 
-        if (!state && !memorySummary && refreshQueue.length === 0 && auditEvents.length === 0 && tasks.length === 0) {
+        if (
+          !state
+          && !capsule
+          && !memorySummary
+          && refreshQueue.length === 0
+          && auditEvents.length === 0
+          && tasks.length === 0
+        ) {
           return null
         }
 
@@ -575,6 +609,8 @@ export function createWorkspaceModule(appPaths: AppPaths) {
             runnerState,
             now
           }),
+          capsule,
+          capsuleCheckpoint,
           runnerState,
           tasks,
           state,

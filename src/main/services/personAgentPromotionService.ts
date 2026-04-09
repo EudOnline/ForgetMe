@@ -186,6 +186,46 @@ function countRelationshipDegree(db: ArchiveDatabase, canonicalPersonId: string)
   return row?.count ?? 0
 }
 
+function countRelationshipOverlapFileCount(db: ArchiveDatabase, canonicalPersonId: string) {
+  const anchorRows = db.prepare(
+    `select anchor_person_id as anchorPersonId
+     from person_memberships
+     where canonical_person_id = ?
+       and status = 'active'`
+  ).all(canonicalPersonId) as Array<{ anchorPersonId: string }>
+
+  if (anchorRows.length === 0) {
+    return 0
+  }
+
+  const anchorPlaceholders = anchorRows.map(() => '?').join(', ')
+  const row = db.prepare(
+    `select count(distinct person_rel.target_id) as count
+     from relations person_rel
+     where person_rel.source_type = 'person'
+       and person_rel.target_type = 'file'
+       and person_rel.relation_type = 'mentioned_in_file'
+       and person_rel.source_id in (${anchorPlaceholders})
+       and exists (
+         select 1
+         from relations peer_rel
+         join person_memberships peer_membership
+           on peer_membership.anchor_person_id = peer_rel.source_id
+          and peer_membership.status = 'active'
+         where peer_rel.source_type = 'person'
+           and peer_rel.target_type = 'file'
+           and peer_rel.relation_type = 'mentioned_in_file'
+           and peer_rel.target_id = person_rel.target_id
+           and peer_membership.canonical_person_id != ?
+       )`
+  ).get(
+    ...anchorRows.map((row) => row.anchorPersonId),
+    canonicalPersonId
+  ) as { count: number } | undefined
+
+  return row?.count ?? 0
+}
+
 function countCommunicationLinkedFileCount(db: ArchiveDatabase, canonicalPersonId: string) {
   const anchorRows = db.prepare(
     `select anchor_person_id as anchorPersonId
@@ -203,6 +243,34 @@ function countCommunicationLinkedFileCount(db: ArchiveDatabase, canonicalPersonI
     `select count(distinct file_id) as count
      from communication_evidence
      where speaker_anchor_person_id in (${anchorPlaceholders})`
+  ).get(...anchorRows.map((row) => row.anchorPersonId)) as { count: number } | undefined
+
+  return row?.count ?? 0
+}
+
+function countLinkedImportBatchCount(db: ArchiveDatabase, canonicalPersonId: string) {
+  const anchorRows = db.prepare(
+    `select anchor_person_id as anchorPersonId
+     from person_memberships
+     where canonical_person_id = ?
+       and status = 'active'`
+  ).all(canonicalPersonId) as Array<{ anchorPersonId: string }>
+
+  if (anchorRows.length === 0) {
+    return 0
+  }
+
+  const anchorPlaceholders = anchorRows.map(() => '?').join(', ')
+  const row = db.prepare(
+    `select count(distinct vault.batch_id) as count
+     from relations person_rel
+     join vault_files vault
+       on vault.id = person_rel.target_id
+     where person_rel.source_type = 'person'
+       and person_rel.target_type = 'file'
+       and person_rel.relation_type = 'mentioned_in_file'
+       and vault.batch_id is not null
+       and person_rel.source_id in (${anchorPlaceholders})`
   ).get(...anchorRows.map((row) => row.anchorPersonId)) as { count: number } | undefined
 
   return row?.count ?? 0
@@ -240,11 +308,20 @@ function scoreSignals(signals: PersonAgentPromotionSignals) {
   const communicationScore = signals.communicationFileCount >= MIN_COMMUNICATION_PROMOTION_FILE_COUNT
     ? Math.min(40, signals.communicationFileCount * 20)
     : 0
+  const importBatchScore = Math.min(20, signals.linkedImportBatchCount * 6)
   const relationshipScore = Math.min(20, signals.relationshipDegree * 5)
+  const relationshipDensityScore = Math.min(10, Math.round(signals.relationshipDensity * 10))
   const questionScore = Math.min(20, signals.recentQuestionCount * 3)
   const citationScore = Math.min(10, signals.recentCitationCount)
 
-  return approvedFactScore + evidenceScore + communicationScore + relationshipScore + questionScore + citationScore
+  return approvedFactScore
+    + evidenceScore
+    + communicationScore
+    + importBatchScore
+    + relationshipScore
+    + relationshipDensityScore
+    + questionScore
+    + citationScore
 }
 
 function resolveTier(score: number, thresholds: PromotionThresholds): PersonAgentPromotionTier {
@@ -270,10 +347,10 @@ function buildReasonSummary(input: {
   score: number
 }) {
   if (!input.hasPromotionEvidence) {
-    return `No approved evidence or communication breadth available; promotion disabled. Signals: facts=${input.signals.approvedFactCount}, evidence=${input.signals.evidenceSourceCount}, communicationFiles=${input.signals.communicationFileCount}, relationships=${input.signals.relationshipDegree}, recentQuestions=${input.signals.recentQuestionCount}, recentCitations=${input.signals.recentCitationCount}, score=${input.score}.`
+    return `No approved evidence or communication breadth available; promotion disabled. Signals: facts=${input.signals.approvedFactCount}, evidence=${input.signals.evidenceSourceCount}, communicationFiles=${input.signals.communicationFileCount}, importBatches=${input.signals.linkedImportBatchCount}, relationships=${input.signals.relationshipDegree}, relationshipDensity=${input.signals.relationshipDensity}, recentQuestions=${input.signals.recentQuestionCount}, recentCitations=${input.signals.recentCitationCount}, score=${input.score}.`
   }
 
-  return `Promotion decision=${input.decision}; signals: facts=${input.signals.approvedFactCount}, evidence=${input.signals.evidenceSourceCount}, communicationFiles=${input.signals.communicationFileCount}, relationships=${input.signals.relationshipDegree}, recentQuestions=${input.signals.recentQuestionCount}, recentCitations=${input.signals.recentCitationCount}, score=${input.score}.`
+  return `Promotion decision=${input.decision}; signals: facts=${input.signals.approvedFactCount}, evidence=${input.signals.evidenceSourceCount}, communicationFiles=${input.signals.communicationFileCount}, importBatches=${input.signals.linkedImportBatchCount}, relationships=${input.signals.relationshipDegree}, relationshipDensity=${input.signals.relationshipDensity}, recentQuestions=${input.signals.recentQuestionCount}, recentCitations=${input.signals.recentCitationCount}, score=${input.score}.`
 }
 
 export function collectPersonAgentPromotionSignals(db: ArchiveDatabase, input: {
@@ -287,18 +364,27 @@ export function collectPersonAgentPromotionSignals(db: ArchiveDatabase, input: {
   const approvedFactCount = countApprovedFactSignals(db, input.canonicalPersonId)
   const evidenceSourceCount = countEvidenceSources(db, input.canonicalPersonId)
   const communicationFileCount = countCommunicationLinkedFileCount(db, input.canonicalPersonId)
+  const linkedImportBatchCount = countLinkedImportBatchCount(db, input.canonicalPersonId)
   const relationshipDegree = countRelationshipDegree(db, input.canonicalPersonId)
+  const relationshipOverlapFileCount = countRelationshipOverlapFileCount(db, input.canonicalPersonId)
   const interactionCounts = countRecentInteractions(db, {
     canonicalPersonId: input.canonicalPersonId,
     nowIso,
     recentWindowDays
   })
+  const relationshipDensity = communicationFileCount > 0
+    ? Number((relationshipOverlapFileCount / communicationFileCount).toFixed(2))
+    : relationshipDegree > 0
+      ? relationshipDegree
+      : 0
 
   return {
     approvedFactCount,
     evidenceSourceCount,
     communicationFileCount,
+    linkedImportBatchCount,
     relationshipDegree,
+    relationshipDensity,
     recentQuestionCount: interactionCounts.recentQuestionCount,
     recentCitationCount: interactionCounts.recentCitationCount
   }
@@ -345,6 +431,8 @@ export function evaluatePersonAgentPromotion(db: ArchiveDatabase, input: {
     signals.communicationFileCount >= MIN_COMMUNICATION_PROMOTION_FILE_COUNT
     && (
       signals.relationshipDegree > 0
+      || signals.linkedImportBatchCount >= 1
+      || signals.relationshipDensity >= 0.5
       || signals.recentQuestionCount >= MIN_RECENT_QUESTION_COUNT_FOR_COMMUNICATION_PROMOTION
       || signals.recentCitationCount >= MIN_RECENT_CITATION_COUNT_FOR_COMMUNICATION_PROMOTION
     )

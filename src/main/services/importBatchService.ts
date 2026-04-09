@@ -161,6 +161,7 @@ export async function createImportBatch(input: {
     requestedAt: createdAt
   })
   processPendingPersonAgentRefreshes(db, {
+    appPaths: input.appPaths,
     now: createdAt
   })
 

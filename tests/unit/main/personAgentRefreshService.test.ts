@@ -2,10 +2,13 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { ensureAppPaths } from '../../../src/main/services/appPaths'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
 import {
   getPersonAgentByCanonicalPersonId,
   listPersonAgentAuditEvents,
+  getPersonAgentCapsule,
+  listPersonAgentCapsuleMemoryCheckpoints,
   listPersonAgentFactMemories,
   listPersonAgentInteractionMemories,
   listPersonAgentRefreshQueue,
@@ -23,9 +26,14 @@ const NOW = '2026-04-06T12:00:00.000Z'
 
 function setupDatabase() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-person-agent-refresh-'))
+  const appPaths = ensureAppPaths(root)
   const db = openDatabase(path.join(root, 'archive.sqlite'))
   runMigrations(db)
-  return db
+  return {
+    root,
+    appPaths,
+    db
+  }
 }
 
 function seedCanonicalPerson(db: ReturnType<typeof openDatabase>, input: {
@@ -420,7 +428,7 @@ function seedPendingConflictProfileCandidates(db: ReturnType<typeof openDatabase
 
 describe('personAgentRefreshService', () => {
   it('enqueues import-linked refreshes and coalesces repeated pending reasons', () => {
-    const db = setupDatabase()
+    const { db } = setupDatabase()
     seedBatchLinkedPerson(db)
 
     enqueuePersonAgentRefreshesForBatch(db, {
@@ -449,7 +457,7 @@ describe('personAgentRefreshService', () => {
   })
 
   it('enqueues refreshes after approved review decisions', () => {
-    const db = setupDatabase()
+    const { db } = setupDatabase()
     seedReviewApprovalFixture(db)
 
     approveProfileAttributeCandidate(db, {
@@ -471,7 +479,7 @@ describe('personAgentRefreshService', () => {
   })
 
   it('processes a pending refresh by recomputing promotion and refreshing fact memory', () => {
-    const db = setupDatabase()
+    const { appPaths, db } = setupDatabase()
     seedPromotionReadyPerson(db)
 
     enqueuePersonAgentRefreshForCanonicalPeople(db, {
@@ -481,6 +489,7 @@ describe('personAgentRefreshService', () => {
     })
 
     const processed = processNextPersonAgentRefresh(db, {
+      appPaths,
       now: NOW
     })
 
@@ -496,6 +505,12 @@ describe('personAgentRefreshService', () => {
           personAgentId: processed.personAgentId
         })
       : []
+    const capsule = getPersonAgentCapsule(db, {
+      canonicalPersonId: 'cp-1'
+    })
+    const checkpoints = listPersonAgentCapsuleMemoryCheckpoints(db, {
+      canonicalPersonId: 'cp-1'
+    })
 
     expect(processed).toMatchObject({
       canonicalPersonId: 'cp-1',
@@ -516,12 +531,21 @@ describe('personAgentRefreshService', () => {
         supportingTurnIds: ['turn-1', 'turn-2']
       })
     ])
+    expect(capsule).toEqual(expect.objectContaining({
+      capsuleStatus: 'ready',
+      activationSource: 'refresh_rebuild'
+    }))
+    expect(checkpoints[0]).toEqual(expect.objectContaining({
+      checkpointKind: 'refresh',
+      factsVersion: refreshedAgent?.factsVersion ?? 0,
+      interactionVersion: refreshedAgent?.interactionVersion ?? 0
+    }))
 
     db.close()
   })
 
   it('increments strategy profile version and records an audit event when refresh changes the strategy', () => {
-    const db = setupDatabase()
+    const { appPaths, db } = setupDatabase()
     seedPromotionReadyPerson(db)
 
     enqueuePersonAgentRefreshForCanonicalPeople(db, {
@@ -531,6 +555,7 @@ describe('personAgentRefreshService', () => {
     })
 
     processNextPersonAgentRefresh(db, {
+      appPaths,
       now: NOW
     })
 
@@ -559,6 +584,7 @@ describe('personAgentRefreshService', () => {
     })
 
     processNextPersonAgentRefresh(db, {
+      appPaths,
       now: '2026-04-06T12:15:00.000Z'
     })
 
@@ -598,7 +624,7 @@ describe('personAgentRefreshService', () => {
   })
 
   it('resyncs and auto-processes person-agent tasks after refresh completion', () => {
-    const db = setupDatabase()
+    const { appPaths, db } = setupDatabase()
     seedPromotionReadyPerson(db)
 
     enqueuePersonAgentRefreshForCanonicalPeople(db, {
@@ -608,6 +634,7 @@ describe('personAgentRefreshService', () => {
     })
 
     processNextPersonAgentRefresh(db, {
+      appPaths,
       now: NOW
     })
 

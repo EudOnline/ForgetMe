@@ -14,6 +14,8 @@ type WorkspacePreloadModule = Pick<
   | 'getPersonAgentRuntimeState'
   | 'getPersonAgentTaskQueueRunnerState'
   | 'getPersonAgentState'
+  | 'getPersonAgentCapsule'
+  | 'listPersonAgentCapsuleMemoryCheckpoints'
   | 'listPersonAgentRefreshQueue'
   | 'listPersonAgentAuditEvents'
   | 'listPersonAgentTasks'
@@ -62,6 +64,8 @@ export function createWorkspacePreloadModule(ipcRenderer: IpcRenderer): Workspac
     getPersonAgentRuntimeState: invokeWith(ipcRenderer, 'archive:getPersonAgentRuntimeState'),
     getPersonAgentTaskQueueRunnerState: invokeWithout(ipcRenderer, 'archive:getPersonAgentTaskQueueRunnerState'),
     getPersonAgentState: invokeWith(ipcRenderer, 'archive:getPersonAgentState'),
+    getPersonAgentCapsule: invokeWith(ipcRenderer, 'archive:getPersonAgentCapsule'),
+    listPersonAgentCapsuleMemoryCheckpoints: invokeWith(ipcRenderer, 'archive:listPersonAgentCapsuleMemoryCheckpoints'),
     listPersonAgentRefreshQueue: invokeWith(ipcRenderer, 'archive:listPersonAgentRefreshQueue'),
     listPersonAgentAuditEvents: invokeWith(ipcRenderer, 'archive:listPersonAgentAuditEvents'),
     listPersonAgentTasks: invokeWith(ipcRenderer, 'archive:listPersonAgentTasks'),

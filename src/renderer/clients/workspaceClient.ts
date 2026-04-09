@@ -20,6 +20,8 @@ type WorkspaceClient = Pick<
   | 'getPersonAgentRuntimeState'
   | 'getPersonAgentTaskQueueRunnerState'
   | 'getPersonAgentState'
+  | 'getPersonAgentCapsule'
+  | 'listPersonAgentCapsuleMemoryCheckpoints'
   | 'listPersonAgentRefreshQueue'
   | 'listPersonAgentAuditEvents'
   | 'listPersonAgentTasks'
@@ -68,6 +70,8 @@ export function getWorkspaceClient(): WorkspaceClient {
     getPersonAgentRuntimeState: bridgeMethod('getPersonAgentRuntimeState', async () => null),
     getPersonAgentTaskQueueRunnerState: bridgeMethod('getPersonAgentTaskQueueRunnerState', async () => null),
     getPersonAgentState: bridgeMethod('getPersonAgentState', async () => null),
+    getPersonAgentCapsule: bridgeMethod('getPersonAgentCapsule', async () => null),
+    listPersonAgentCapsuleMemoryCheckpoints: bridgeMethod('listPersonAgentCapsuleMemoryCheckpoints', async () => []),
     listPersonAgentRefreshQueue: bridgeMethod('listPersonAgentRefreshQueue', async () => []),
     listPersonAgentAuditEvents: bridgeMethod('listPersonAgentAuditEvents', async () => []),
     listPersonAgentTasks: bridgeMethod('listPersonAgentTasks', async () => []),

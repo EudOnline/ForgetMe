@@ -16,6 +16,7 @@ import {
   getPersonAgentConsultationSession,
   listPersonAgentConsultationSessions
 } from '../../../src/main/services/personAgentConsultationService'
+import { materializePersonAgentCapsule } from '../../../src/main/services/personAgentCapsuleService'
 
 const NOW = '2026-04-08T12:00:00.000Z'
 
@@ -139,6 +140,14 @@ function seedConsultationFixture(db: ReturnType<typeof openDatabase>, status: 'a
     lastCitationAt: NOW
   })
 
+  materializePersonAgentCapsule(db, {
+    personAgent,
+    activationSource: 'import_batch',
+    checkpointKind: 'activation',
+    summary: 'Initial capsule for consultation runtime tests.',
+    now: NOW
+  })
+
   return personAgent
 }
 
@@ -207,9 +216,25 @@ describe('personAgentConsultationService', () => {
       totalTurnCount: 2,
       latestQuestion: '她还有什么冲突？',
       latestQuestionClassification: 'general',
-      lastConsultedAt: '2026-04-08T12:05:00.000Z'
+      lastConsultedAt: '2026-04-08T12:05:00.000Z',
+      capsuleId: expect.any(String),
+      capsuleSessionNamespace: `person-agent:${personAgent.personAgentId}`
     })
     expect(runtimeState?.lastAnswerDigest?.length).toBeGreaterThan(0)
+    expect(listPersonAgentTaskRuns(db, {
+      canonicalPersonId: 'cp-1'
+    })).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        taskKind: 'expand_topic',
+        capsuleId: expect.any(String),
+        capsuleSessionNamespace: `person-agent:${personAgent.personAgentId}`
+      }),
+      expect.objectContaining({
+        taskKind: 'resolve_conflict',
+        capsuleId: expect.any(String),
+        capsuleSessionNamespace: `person-agent:${personAgent.personAgentId}`
+      })
+    ]))
     expect(listPersonAgentTaskRuns(db, {
       canonicalPersonId: 'cp-1'
     }).map((run) => run.taskKind).sort()).toEqual([

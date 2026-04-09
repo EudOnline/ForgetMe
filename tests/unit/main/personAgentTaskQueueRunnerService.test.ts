@@ -7,12 +7,14 @@ import { openDatabase, runMigrations } from '../../../src/main/services/db'
 import {
   appendPersonAgentAuditEvent,
   enqueuePersonAgentRefresh,
+  getPersonAgentTaskQueueRunnerState,
   listPersonAgentTaskRuns,
   listPersonAgentTasks,
   replacePersonAgentFactMemories,
   upsertPersonAgent,
   upsertPersonAgentInteractionMemory
 } from '../../../src/main/services/governancePersistenceService'
+import { materializePersonAgentCapsule } from '../../../src/main/services/personAgentCapsuleService'
 import { syncPersonAgentTasks } from '../../../src/main/services/personAgentTaskService'
 import {
   createPersonAgentTaskQueueRunner,
@@ -152,6 +154,14 @@ function seedExecutableTaskFixture(db: ReturnType<typeof openDatabase>) {
     createdAt: '2026-04-09T01:01:00.000Z'
   })
 
+  materializePersonAgentCapsule(db, {
+    personAgent,
+    activationSource: 'import_batch',
+    checkpointKind: 'activation',
+    summary: 'Initial capsule for task runner tests.',
+    now: NOW
+  })
+
   syncPersonAgentTasks(db, {
     canonicalPersonId: 'cp-1',
     now: NOW
@@ -207,9 +217,32 @@ describe('personAgentTaskQueueRunnerService', () => {
     })
 
     expect(processed).toBe(true)
-    expect(listPersonAgentTaskRuns(db, {
+    const taskRuns = listPersonAgentTaskRuns(db, {
       canonicalPersonId: 'cp-1'
-    }).map((run) => run.taskKind).sort()).toEqual([
+    })
+    expect(taskRuns).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        taskKind: 'review_strategy_change',
+        capsuleId: expect.any(String),
+        capsuleSessionNamespace: expect.stringMatching(/^person-agent:/)
+      }),
+      expect.objectContaining({
+        taskKind: 'expand_topic',
+        capsuleId: expect.any(String),
+        capsuleSessionNamespace: expect.stringMatching(/^person-agent:/)
+      }),
+      expect.objectContaining({
+        taskKind: 'fill_coverage_gap',
+        capsuleId: expect.any(String),
+        capsuleSessionNamespace: expect.stringMatching(/^person-agent:/)
+      }),
+      expect.objectContaining({
+        taskKind: 'resolve_conflict',
+        capsuleId: expect.any(String),
+        capsuleSessionNamespace: expect.stringMatching(/^person-agent:/)
+      })
+    ]))
+    expect(taskRuns.map((run) => run.taskKind).sort()).toEqual([
       'expand_topic',
       'fill_coverage_gap',
       'resolve_conflict',
@@ -250,6 +283,15 @@ describe('personAgentTaskQueueRunnerService', () => {
       lastError: null,
       updatedAt: '2026-04-09T01:05:00.000Z'
     })
+    expect(getPersonAgentTaskQueueRunnerState(db, {
+      runnerName: 'person_agent_task_queue'
+    })).toEqual(expect.objectContaining({
+      runnerName: 'person_agent_task_queue',
+      lastProcessedTaskCount: 4,
+      lastProcessedCanonicalPersonId: 'cp-1',
+      lastProcessedCapsuleId: expect.any(String),
+      lastProcessedCapsuleSessionNamespace: expect.stringMatching(/^person-agent:/)
+    }))
 
     db.close()
   })

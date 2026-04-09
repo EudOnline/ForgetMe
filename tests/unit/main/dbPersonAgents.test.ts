@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { ensureAppPaths } from '../../../src/main/services/appPaths'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
 import {
   appendPersonAgentAuditEvent,
@@ -22,6 +23,7 @@ describe('person-agent persistence migrations', () => {
   it('creates person-agent tables with expected columns and indexes', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-person-agent-db-'))
     const db = openDatabase(path.join(root, 'archive.sqlite'))
+    const appPaths = ensureAppPaths(root)
 
     runMigrations(db)
 
@@ -38,8 +40,16 @@ describe('person-agent persistence migrations', () => {
       'person_agent_consultation_turns',
       'person_agent_runtime_state',
       'person_agent_tasks',
-      'person_agent_task_runs'
+      'person_agent_task_runs',
+      'person_agent_task_queue_runner_state',
+      'person_agent_capsules',
+      'person_agent_capsule_memory_checkpoints'
     ]))
+
+    expect(appPaths.personAgentWorkspaceDir).toBe(path.join(root, 'person-agents', 'workspaces'))
+    expect(appPaths.personAgentStateDir).toBe(path.join(root, 'person-agents', 'state'))
+    expect(fs.existsSync(appPaths.personAgentWorkspaceDir)).toBe(true)
+    expect(fs.existsSync(appPaths.personAgentStateDir)).toBe(true)
 
     const personAgentColumns = db.prepare("pragma table_info('person_agents')").all() as Array<{ name: string }>
     expect(personAgentColumns.map((column) => column.name)).toEqual(expect.arrayContaining([
@@ -145,6 +155,37 @@ describe('person-agent persistence migrations', () => {
     expect(taskRunIndexes.map((row) => row.name)).toEqual(expect.arrayContaining([
       'idx_person_agent_task_runs_task_id',
       'idx_person_agent_task_runs_canonical_person_id'
+    ]))
+
+    const capsuleColumns = db.prepare("pragma table_info('person_agent_capsules')").all() as Array<{ name: string }>
+    expect(capsuleColumns.map((column) => column.name)).toEqual(expect.arrayContaining([
+      'person_agent_id',
+      'canonical_person_id',
+      'capsule_status',
+      'activation_source',
+      'session_namespace',
+      'workspace_root',
+      'state_root',
+      'identity_profile_json',
+      'latest_checkpoint_id',
+      'latest_checkpoint_at',
+      'activated_at'
+    ]))
+
+    const capsuleCheckpointColumns = db.prepare(
+      "pragma table_info('person_agent_capsule_memory_checkpoints')"
+    ).all() as Array<{ name: string }>
+    expect(capsuleCheckpointColumns.map((column) => column.name)).toEqual(expect.arrayContaining([
+      'capsule_id',
+      'person_agent_id',
+      'canonical_person_id',
+      'checkpoint_kind',
+      'facts_version',
+      'interaction_version',
+      'strategy_profile_version',
+      'task_snapshot_at',
+      'summary',
+      'summary_json'
     ]))
 
     db.close()
@@ -457,6 +498,134 @@ describe('person-agent persistence migrations', () => {
       lastError: null,
       updatedAt: '2026-04-09T01:05:03.000Z'
     })
+
+    db.close()
+  })
+
+  it('upserts person-agent capsules and appends memory checkpoints', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-person-agent-capsule-db-'))
+    const appPaths = ensureAppPaths(root)
+    const db = openDatabase(path.join(root, 'archive.sqlite'))
+
+    runMigrations(db)
+
+    db.prepare(
+      `insert into canonical_people (
+        id, primary_display_name, normalized_name, alias_count, evidence_count, manual_labels_json, status, created_at, updated_at
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      'cp-1',
+      'Alice Chen',
+      'alice chen',
+      0,
+      2,
+      '[]',
+      'approved',
+      '2026-04-09T01:00:00.000Z',
+      '2026-04-09T01:00:00.000Z'
+    )
+
+    const personAgent = upsertPersonAgent(db, {
+      canonicalPersonId: 'cp-1',
+      status: 'active',
+      promotionTier: 'high_signal',
+      promotionScore: 81,
+      promotionReasonSummary: 'Strong import and relationship signal.',
+      strategyProfile: {
+        profileVersion: 2,
+        responseStyle: 'contextual',
+        evidencePreference: 'quote_first',
+        conflictBehavior: 'conflict_forward'
+      },
+      factsVersion: 3,
+      interactionVersion: 4,
+      lastActivatedAt: '2026-04-09T01:05:00.000Z'
+    })
+
+    const persistenceModule = await import('../../../src/main/services/governancePersistenceService')
+    const upsertCapsule = Reflect.get(persistenceModule, 'upsertPersonAgentCapsule') as
+      | ((...args: unknown[]) => unknown)
+      | undefined
+    const getCapsule = Reflect.get(persistenceModule, 'getPersonAgentCapsule') as
+      | ((...args: unknown[]) => unknown)
+      | undefined
+    const appendCheckpoint = Reflect.get(persistenceModule, 'appendPersonAgentCapsuleMemoryCheckpoint') as
+      | ((...args: unknown[]) => unknown)
+      | undefined
+    const listCheckpoints = Reflect.get(persistenceModule, 'listPersonAgentCapsuleMemoryCheckpoints') as
+      | ((...args: unknown[]) => unknown)
+      | undefined
+
+    expect(typeof upsertCapsule).toBe('function')
+    expect(typeof getCapsule).toBe('function')
+    expect(typeof appendCheckpoint).toBe('function')
+    expect(typeof listCheckpoints).toBe('function')
+
+    const capsule = upsertCapsule?.(db, {
+      personAgentId: personAgent.personAgentId,
+      canonicalPersonId: 'cp-1',
+      capsuleStatus: 'ready',
+      activationSource: 'import_batch',
+      sessionNamespace: `person-agent:${personAgent.personAgentId}`,
+      workspaceRoot: path.join(appPaths.personAgentWorkspaceDir, personAgent.personAgentId),
+      stateRoot: path.join(appPaths.personAgentStateDir, personAgent.personAgentId),
+      identityProfile: {
+        primaryDisplayName: 'Alice Chen',
+        normalizedName: 'alice chen',
+        promotionTier: 'high_signal',
+        strategyProfileVersion: 2,
+        factsVersion: 3,
+        interactionVersion: 4
+      },
+      activatedAt: '2026-04-09T01:05:00.000Z',
+      updatedAt: '2026-04-09T01:05:00.000Z'
+    }) as {
+      capsuleId: string
+      latestCheckpointId: string | null
+    } | undefined
+
+    expect(capsule).toEqual(expect.objectContaining({
+      personAgentId: personAgent.personAgentId,
+      canonicalPersonId: 'cp-1',
+      capsuleStatus: 'ready',
+      activationSource: 'import_batch',
+      latestCheckpointId: null
+    }))
+
+    const checkpoint = appendCheckpoint?.(db, {
+      capsuleId: capsule?.capsuleId,
+      personAgentId: personAgent.personAgentId,
+      canonicalPersonId: 'cp-1',
+      checkpointKind: 'activation',
+      factsVersion: 3,
+      interactionVersion: 4,
+      strategyProfileVersion: 2,
+      taskSnapshotAt: '2026-04-09T01:05:00.000Z',
+      summary: 'Initial capsule activation snapshot.',
+      summaryPayload: {
+        source: 'import_batch'
+      },
+      createdAt: '2026-04-09T01:05:00.000Z'
+    })
+
+    expect(getCapsule?.(db, {
+      personAgentId: personAgent.personAgentId
+    })).toEqual(expect.objectContaining({
+      capsuleId: capsule?.capsuleId,
+      latestCheckpointId: checkpoint && typeof checkpoint === 'object' ? Reflect.get(checkpoint, 'checkpointId') : null,
+      latestCheckpointAt: '2026-04-09T01:05:00.000Z'
+    }))
+
+    expect(listCheckpoints?.(db, {
+      capsuleId: capsule?.capsuleId
+    })).toEqual([
+      expect.objectContaining({
+        checkpointKind: 'activation',
+        factsVersion: 3,
+        interactionVersion: 4,
+        strategyProfileVersion: 2
+      })
+    ])
 
     db.close()
   })

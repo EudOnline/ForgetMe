@@ -607,7 +607,7 @@ describe('memoryWorkspaceSessionService', () => {
     db.close()
   })
 
-  it('promotes communication-backed people after repeated persisted asks', () => {
+  it('promotes communication-backed people once persisted asks touch real multi-file communication evidence', () => {
     const db = seedCommunicationOnlyPromotionScenario()
 
     askMemoryWorkspacePersisted(db, {
@@ -618,7 +618,10 @@ describe('memoryWorkspaceSessionService', () => {
 
     expect(getPersonAgentByCanonicalPersonId(db, {
       canonicalPersonId: 'cp-comm-1'
-    })).toBeNull()
+    })).toMatchObject({
+      status: 'active',
+      promotionTier: expect.stringMatching(/active|high_signal/)
+    })
 
     askMemoryWorkspacePersisted(db, {
       scope: { kind: 'person', canonicalPersonId: 'cp-comm-1' },

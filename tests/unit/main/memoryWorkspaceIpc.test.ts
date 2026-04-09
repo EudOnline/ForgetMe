@@ -32,6 +32,8 @@ const {
   transitionPersonAgentTask,
   getPersonAgentByCanonicalPersonId,
   listPersonAgentAuditEvents,
+  getPersonAgentCapsule,
+  listPersonAgentCapsuleMemoryCheckpoints,
   getPersonAgentTaskQueueRunnerState,
   listPersonAgentRefreshQueue,
   listPersonAgentTaskRuns,
@@ -66,6 +68,8 @@ const {
   transitionPersonAgentTask: vi.fn(),
   getPersonAgentByCanonicalPersonId: vi.fn(),
   listPersonAgentAuditEvents: vi.fn(),
+  getPersonAgentCapsule: vi.fn(),
+  listPersonAgentCapsuleMemoryCheckpoints: vi.fn(),
   getPersonAgentTaskQueueRunnerState: vi.fn(),
   listPersonAgentRefreshQueue: vi.fn(),
   listPersonAgentTaskRuns: vi.fn(),
@@ -162,7 +166,9 @@ vi.mock('../../../src/main/services/governancePersistenceService', async (import
     ...actual,
     getPersonAgentByCanonicalPersonId,
     listPersonAgentAuditEvents,
+    getPersonAgentCapsule,
     getPersonAgentTaskQueueRunnerState,
+    listPersonAgentCapsuleMemoryCheckpoints,
     listPersonAgentRefreshQueue,
     listPersonAgentTaskRuns,
     listPersonAgentTasks,
@@ -237,7 +243,9 @@ describe('registerWorkspaceIpc session handlers', () => {
     transitionPersonAgentTask.mockReset()
     getPersonAgentByCanonicalPersonId.mockReset()
     listPersonAgentAuditEvents.mockReset()
+    getPersonAgentCapsule.mockReset()
     getPersonAgentTaskQueueRunnerState.mockReset()
+    listPersonAgentCapsuleMemoryCheckpoints.mockReset()
     listPersonAgentRefreshQueue.mockReset()
     listPersonAgentTaskRuns.mockReset()
     listPersonAgentTasks.mockReset()
@@ -449,6 +457,11 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
     runMigrations.mockReset()
     getPersonAgentByCanonicalPersonId.mockReset()
     listPersonAgentAuditEvents.mockReset()
+    getPersonAgentCapsule.mockReset()
+    listPersonAgentCapsuleMemoryCheckpoints.mockReset()
+    getPersonAgentTaskQueueRunnerState.mockReset()
+    listPersonAgentTaskRuns.mockReset()
+    listPersonAgentTasks.mockReset()
     listPersonAgentRefreshQueue.mockReset()
     getPersonAgentFactMemorySummary.mockReset()
     listPersonAgentInteractionMemories.mockReset()
@@ -822,6 +835,47 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
         createdAt: '2026-04-08T01:00:00.000Z'
       }
     ])
+    getPersonAgentCapsule.mockReturnValue({
+      capsuleId: 'capsule-1',
+      personAgentId: 'agent-1',
+      canonicalPersonId: 'cp-1',
+      capsuleStatus: 'ready',
+      activationSource: 'import_batch',
+      sessionNamespace: 'person-agent:agent-1',
+      workspaceRoot: '/tmp/forgetme/person-agents/workspaces/agent-1',
+      stateRoot: '/tmp/forgetme/person-agents/state/agent-1',
+      identityProfile: {
+        primaryDisplayName: 'Alice Chen',
+        normalizedName: 'alice chen',
+        promotionTier: 'high_signal',
+        strategyProfileVersion: 2,
+        factsVersion: 3,
+        interactionVersion: 4
+      },
+      latestCheckpointId: 'checkpoint-1',
+      latestCheckpointAt: '2026-04-08T01:11:00.000Z',
+      activatedAt: '2026-04-08T00:30:00.000Z',
+      createdAt: '2026-04-08T00:30:00.000Z',
+      updatedAt: '2026-04-08T01:11:00.000Z'
+    })
+    listPersonAgentCapsuleMemoryCheckpoints.mockReturnValue([
+      {
+        checkpointId: 'checkpoint-1',
+        capsuleId: 'capsule-1',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        checkpointKind: 'refresh',
+        factsVersion: 3,
+        interactionVersion: 4,
+        strategyProfileVersion: 2,
+        taskSnapshotAt: '2026-04-08T01:10:30.000Z',
+        summary: 'Capsule refreshed after the latest import-backed rebuild.',
+        summaryPayload: {
+          source: 'refresh_rebuild'
+        },
+        createdAt: '2026-04-08T01:11:00.000Z'
+      }
+    ])
     getPersonAgentTaskQueueRunnerState.mockReturnValue({
       runnerName: 'person_agent_task_queue',
       status: 'idle',
@@ -833,6 +887,27 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
       lastError: null,
       updatedAt: '2026-04-08T01:11:02.000Z'
     })
+    listPersonAgentTasks.mockReturnValue([
+      {
+        taskId: 'task-1',
+        taskKey: 'await_refresh:refresh-1',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        taskKind: 'await_refresh',
+        status: 'pending',
+        priority: 'high',
+        title: 'Await queued refresh',
+        summary: 'Wait for refresh to finish before acting on: review_conflict_changed.',
+        sourceRef: {
+          refreshId: 'refresh-1'
+        },
+        statusChangedAt: '2026-04-08T01:10:00.000Z',
+        statusSource: null,
+        statusReason: null,
+        createdAt: '2026-04-08T01:10:00.000Z',
+        updatedAt: '2026-04-08T01:10:00.000Z'
+      }
+    ])
 
     registerWorkspaceIpc(appPathsFixture())
 
@@ -853,6 +928,13 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
     })
     expect(listPersonAgentAuditEvents).toHaveBeenCalledWith(expect.anything(), {
       canonicalPersonId: 'cp-1'
+    })
+    expect(getPersonAgentCapsule).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(listPersonAgentCapsuleMemoryCheckpoints).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1',
+      limit: 1
     })
     expect(getPersonAgentTaskQueueRunnerState).toHaveBeenCalledWith(expect.anything(), {})
     expect(listPersonAgentTasks).toHaveBeenCalledWith(expect.anything(), {
@@ -881,7 +963,9 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
           lastProcessedTaskCount: 4,
           totalProcessedTaskCount: 9,
           lastError: null
-        })
+        }),
+        capsuleStatus: 'ready',
+        activationSource: 'import_batch'
       }),
       recommendations: expect.objectContaining({
         attentionLevel: 'high',
@@ -923,6 +1007,15 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
         status: 'idle',
         totalProcessedTaskCount: 9
       }),
+      capsule: expect.objectContaining({
+        capsuleId: 'capsule-1',
+        capsuleStatus: 'ready',
+        activationSource: 'import_batch'
+      }),
+      capsuleCheckpoint: expect.objectContaining({
+        checkpointId: 'checkpoint-1',
+        checkpointKind: 'refresh'
+      }),
       tasks: [
         expect.objectContaining({
           taskId: 'task-1',
@@ -953,6 +1046,100 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
       ]
     }))
     expect(close).toHaveBeenCalled()
+  })
+
+  it('provides standalone person-agent capsule reads through ipc', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    getPersonAgentCapsule.mockReturnValue({
+      capsuleId: 'capsule-1',
+      personAgentId: 'agent-1',
+      canonicalPersonId: 'cp-1',
+      capsuleStatus: 'ready',
+      activationSource: 'import_batch',
+      sessionNamespace: 'person-agent:agent-1',
+      workspaceRoot: '/tmp/forgetme/person-agents/workspaces/agent-1',
+      stateRoot: '/tmp/forgetme/person-agents/state/agent-1',
+      identityProfile: {
+        primaryDisplayName: 'Alice Chen',
+        normalizedName: 'alice chen',
+        promotionTier: 'high_signal',
+        strategyProfileVersion: 2,
+        factsVersion: 3,
+        interactionVersion: 4
+      },
+      latestCheckpointId: 'checkpoint-2',
+      latestCheckpointAt: '2026-04-08T02:00:00.000Z',
+      activatedAt: '2026-04-08T00:30:00.000Z',
+      createdAt: '2026-04-08T00:30:00.000Z',
+      updatedAt: '2026-04-08T02:00:00.000Z'
+    })
+    listPersonAgentCapsuleMemoryCheckpoints.mockReturnValue([
+      {
+        checkpointId: 'checkpoint-2',
+        capsuleId: 'capsule-1',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        checkpointKind: 'refresh',
+        factsVersion: 4,
+        interactionVersion: 5,
+        strategyProfileVersion: 2,
+        taskSnapshotAt: '2026-04-08T01:59:00.000Z',
+        summary: 'Refresh snapshot.',
+        summaryPayload: {
+          source: 'refresh_rebuild'
+        },
+        createdAt: '2026-04-08T02:00:00.000Z'
+      },
+      {
+        checkpointId: 'checkpoint-1',
+        capsuleId: 'capsule-1',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        checkpointKind: 'activation',
+        factsVersion: 3,
+        interactionVersion: 4,
+        strategyProfileVersion: 2,
+        taskSnapshotAt: '2026-04-08T00:30:00.000Z',
+        summary: 'Initial activation snapshot.',
+        summaryPayload: {
+          source: 'import_batch'
+        },
+        createdAt: '2026-04-08T00:30:00.000Z'
+      }
+    ])
+
+    registerWorkspaceIpc(appPathsFixture())
+
+    const capsuleHandler = handlerMap.get('archive:getPersonAgentCapsule')
+    const checkpointHandler = handlerMap.get('archive:listPersonAgentCapsuleMemoryCheckpoints')
+
+    const capsule = await capsuleHandler?.({}, { canonicalPersonId: 'cp-1' })
+    const checkpoints = await checkpointHandler?.({}, { canonicalPersonId: 'cp-1', limit: 2 })
+
+    expect(getPersonAgentCapsule).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(listPersonAgentCapsuleMemoryCheckpoints).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1',
+      limit: 2
+    })
+    expect(capsule).toEqual(expect.objectContaining({
+      capsuleId: 'capsule-1',
+      capsuleStatus: 'ready',
+      activationSource: 'import_batch'
+    }))
+    expect(checkpoints).toEqual([
+      expect.objectContaining({
+        checkpointId: 'checkpoint-2',
+        checkpointKind: 'refresh'
+      }),
+      expect.objectContaining({
+        checkpointId: 'checkpoint-1',
+        checkpointKind: 'activation'
+      })
+    ])
+    expect(close).toHaveBeenCalledTimes(2)
   })
 
   it('surfaces stalled person-agent task queue runner alerts in inspection bundles', async () => {
@@ -992,6 +1179,8 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
         lastError: null,
         updatedAt: '2026-04-08T01:00:00.000Z'
       })
+      listPersonAgentCapsuleMemoryCheckpoints.mockReturnValue([])
+      listPersonAgentTasks.mockReturnValue([])
 
       registerWorkspaceIpc(appPathsFixture())
 
