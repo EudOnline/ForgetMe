@@ -3,9 +3,10 @@ import type {
   AgentMemoryRecord,
   AgentPolicyVersionRecord,
   AgentRole,
-  ListPersonAgentRefreshQueueInput,
   ListAgentMemoriesInput,
   ListAgentPolicyVersionsInput,
+  ListPersonAgentRefreshQueueInput,
+  ListPersonAgentTaskRunsInput,
   PersonAgentAuditEventRecord,
   PersonAgentConsultationSessionDetail,
   PersonAgentConsultationSessionSummary,
@@ -20,8 +21,11 @@ import type {
   PersonAgentRecord,
   PersonAgentRuntimeStateRecord,
   PersonAgentStrategyProfile,
-  PersonAgentTaskStatus,
   PersonAgentTaskRecord,
+  PersonAgentTaskRunAction,
+  PersonAgentTaskRunRecord,
+  PersonAgentTaskRunStatus,
+  PersonAgentTaskStatus,
   PersonAgentStatus
 } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
@@ -166,6 +170,22 @@ type PersonAgentTaskRow = {
   statusChangedAt: string | null
   statusSource: string | null
   statusReason: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+type PersonAgentTaskRunRow = {
+  id: string
+  taskId: string
+  taskKey: string
+  personAgentId: string
+  canonicalPersonId: string
+  taskKind: PersonAgentTaskRecord['taskKind']
+  runStatus: PersonAgentTaskRunStatus
+  summary: string
+  suggestedQuestion: string | null
+  actionItemsJson: string
+  source: string | null
   createdAt: string
   updatedAt: string
 }
@@ -394,6 +414,24 @@ function mapPersonAgentTaskRow(row: PersonAgentTaskRow): PersonAgentTaskRecord {
     statusChangedAt: row.statusChangedAt ?? row.updatedAt,
     statusSource: row.statusSource,
     statusReason: row.statusReason,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt
+  }
+}
+
+function mapPersonAgentTaskRunRow(row: PersonAgentTaskRunRow): PersonAgentTaskRunRecord {
+  return {
+    runId: row.id,
+    taskId: row.taskId,
+    taskKey: row.taskKey,
+    personAgentId: row.personAgentId,
+    canonicalPersonId: row.canonicalPersonId,
+    taskKind: row.taskKind,
+    runStatus: row.runStatus,
+    summary: row.summary,
+    suggestedQuestion: row.suggestedQuestion,
+    actionItems: parseJsonArray<PersonAgentTaskRunAction>(row.actionItemsJson),
+    source: row.source,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt
   }
@@ -1501,6 +1539,108 @@ export function updatePersonAgentTaskStatus(db: ArchiveDatabase, input: {
   return getPersonAgentTaskById(db, {
     taskId: input.taskId
   })
+}
+
+export function appendPersonAgentTaskRun(db: ArchiveDatabase, input: {
+  runId?: string
+  taskId: string
+  taskKey: string
+  personAgentId: string
+  canonicalPersonId: string
+  taskKind: PersonAgentTaskRecord['taskKind']
+  runStatus: PersonAgentTaskRunStatus
+  summary: string
+  suggestedQuestion?: string | null
+  actionItems?: PersonAgentTaskRunAction[]
+  source?: string | null
+  createdAt?: string
+  updatedAt?: string
+}) {
+  const now = new Date().toISOString()
+  const runId = input.runId ?? crypto.randomUUID()
+  const createdAt = input.createdAt ?? now
+  const updatedAt = input.updatedAt ?? createdAt
+
+  db.prepare(
+    `insert into person_agent_task_runs (
+      id,
+      task_id,
+      task_key,
+      person_agent_id,
+      canonical_person_id,
+      task_kind,
+      run_status,
+      summary,
+      suggested_question,
+      action_items_json,
+      source,
+      created_at,
+      updated_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    runId,
+    input.taskId,
+    input.taskKey,
+    input.personAgentId,
+    input.canonicalPersonId,
+    input.taskKind,
+    input.runStatus,
+    input.summary,
+    input.suggestedQuestion ?? null,
+    JSON.stringify(input.actionItems ?? []),
+    input.source ?? null,
+    createdAt,
+    updatedAt
+  )
+
+  return listPersonAgentTaskRuns(db, {
+    taskId: input.taskId
+  }).find((run) => run.runId === runId) ?? null
+}
+
+export function listPersonAgentTaskRuns(
+  db: ArchiveDatabase,
+  input: ListPersonAgentTaskRunsInput = {}
+): PersonAgentTaskRunRecord[] {
+  const rows = db.prepare(
+    `select
+      id,
+      task_id as taskId,
+      task_key as taskKey,
+      person_agent_id as personAgentId,
+      canonical_person_id as canonicalPersonId,
+      task_kind as taskKind,
+      run_status as runStatus,
+      summary,
+      suggested_question as suggestedQuestion,
+      action_items_json as actionItemsJson,
+      source,
+      created_at as createdAt,
+      updated_at as updatedAt
+     from person_agent_task_runs
+     order by created_at desc, id desc`
+  ).all() as PersonAgentTaskRunRow[]
+
+  return rows
+    .filter((row) => {
+      if (input.taskId && row.taskId !== input.taskId) {
+        return false
+      }
+      if (input.personAgentId && row.personAgentId !== input.personAgentId) {
+        return false
+      }
+      if (input.canonicalPersonId && row.canonicalPersonId !== input.canonicalPersonId) {
+        return false
+      }
+      if (input.taskKind && row.taskKind !== input.taskKind) {
+        return false
+      }
+      if (input.runStatus && row.runStatus !== input.runStatus) {
+        return false
+      }
+      return true
+    })
+    .map(mapPersonAgentTaskRunRow)
 }
 
 export function enqueuePersonAgentRefresh(db: ArchiveDatabase, input: {

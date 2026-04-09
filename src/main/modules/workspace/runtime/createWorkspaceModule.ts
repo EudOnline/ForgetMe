@@ -25,12 +25,16 @@ import {
   getPersonAgentConsultationSession,
   listPersonAgentConsultationSessions
 } from '../../../services/personAgentConsultationService'
-import { transitionPersonAgentTask } from '../../../services/personAgentTaskService'
+import {
+  executePersonAgentTask,
+  transitionPersonAgentTask
+} from '../../../services/personAgentTaskService'
 import {
   getPersonAgentByCanonicalPersonId,
   listPersonAgentAuditEvents,
   listPersonAgentInteractionMemories,
   listPersonAgentRefreshQueue,
+  listPersonAgentTaskRuns,
   listPersonAgentTasks
 } from '../../../services/governancePersistenceService'
 import { getPersonAgentFactMemorySummary } from '../../../services/personAgentFactMemoryService'
@@ -387,6 +391,21 @@ export function createWorkspaceModule(appPaths: AppPaths) {
       reason?: string
     }) {
       return this.withArchiveDatabase((db) => transitionPersonAgentTask(db, input))
+    },
+    async listPersonAgentTaskRuns(input: {
+      taskId?: string
+      personAgentId?: string
+      canonicalPersonId?: string
+      taskKind?: 'await_refresh' | 'resolve_conflict' | 'fill_coverage_gap' | 'expand_topic' | 'review_strategy_change'
+      runStatus?: 'completed' | 'blocked' | 'failed'
+    } = {}) {
+      return this.withArchiveDatabase((db) => listPersonAgentTaskRuns(db, input))
+    },
+    async executePersonAgentTask(input: {
+      taskId: string
+      source?: string
+    }) {
+      return this.withArchiveDatabase((db) => executePersonAgentTask(db, input))
     },
     async getPersonAgentMemorySummary(input: { canonicalPersonId: string }) {
       return this.withArchiveDatabase((db) => {

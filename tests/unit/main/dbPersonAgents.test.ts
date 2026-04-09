@@ -37,7 +37,8 @@ describe('person-agent persistence migrations', () => {
       'person_agent_consultation_sessions',
       'person_agent_consultation_turns',
       'person_agent_runtime_state',
-      'person_agent_tasks'
+      'person_agent_tasks',
+      'person_agent_task_runs'
     ]))
 
     const personAgentColumns = db.prepare("pragma table_info('person_agents')").all() as Array<{ name: string }>
@@ -121,6 +122,29 @@ describe('person-agent persistence migrations', () => {
       'status_changed_at',
       'status_source',
       'status_reason'
+    ]))
+
+    const taskRunColumns = db.prepare("pragma table_info('person_agent_task_runs')").all() as Array<{ name: string }>
+    expect(taskRunColumns.map((column) => column.name)).toEqual(expect.arrayContaining([
+      'task_id',
+      'task_key',
+      'person_agent_id',
+      'canonical_person_id',
+      'task_kind',
+      'run_status',
+      'summary',
+      'suggested_question',
+      'action_items_json',
+      'source',
+      'created_at'
+    ]))
+
+    const taskRunIndexes = db.prepare(
+      "select name from sqlite_master where type='index' and tbl_name='person_agent_task_runs'"
+    ).all() as Array<{ name: string }>
+    expect(taskRunIndexes.map((row) => row.name)).toEqual(expect.arrayContaining([
+      'idx_person_agent_task_runs_task_id',
+      'idx_person_agent_task_runs_canonical_person_id'
     ]))
 
     db.close()

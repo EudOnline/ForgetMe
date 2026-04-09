@@ -778,6 +778,22 @@ export type PersonAgentTaskStatus =
   | 'completed'
   | 'dismissed'
 
+export type PersonAgentTaskRunStatus =
+  | 'completed'
+  | 'blocked'
+  | 'failed'
+
+export type PersonAgentTaskRunAction = {
+  kind:
+    | 'wait_for_refresh'
+    | 'review_conflict'
+    | 'collect_evidence'
+    | 'ask_follow_up'
+    | 'review_strategy'
+  label: string
+  payload: Record<string, unknown>
+}
+
 export type PersonAgentTaskRecord = {
   taskId: string
   taskKey: string
@@ -792,6 +808,22 @@ export type PersonAgentTaskRecord = {
   statusChangedAt: string
   statusSource: string | null
   statusReason: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type PersonAgentTaskRunRecord = {
+  runId: string
+  taskId: string
+  taskKey: string
+  personAgentId: string
+  canonicalPersonId: string
+  taskKind: PersonAgentTaskKind
+  runStatus: PersonAgentTaskRunStatus
+  summary: string
+  suggestedQuestion: string | null
+  actionItems: PersonAgentTaskRunAction[]
+  source: string | null
   createdAt: string
   updatedAt: string
 }
@@ -1090,6 +1122,19 @@ export type TransitionPersonAgentTaskInput = {
   status: Exclude<PersonAgentTaskStatus, 'pending'>
   source?: string
   reason?: string
+}
+
+export type ListPersonAgentTaskRunsInput = {
+  taskId?: string
+  personAgentId?: string
+  canonicalPersonId?: string
+  taskKind?: PersonAgentTaskKind
+  runStatus?: PersonAgentTaskRunStatus
+}
+
+export type ExecutePersonAgentTaskInput = {
+  taskId: string
+  source?: string
 }
 
 export type GetPersonaDraftReviewByTurnInput = {
@@ -2041,6 +2086,8 @@ export interface ArchiveApi {
   listPersonAgentAuditEvents: (input?: ListPersonAgentAuditEventsInput) => Promise<PersonAgentAuditEventRecord[]>
   listPersonAgentTasks: (input?: ListPersonAgentTasksInput) => Promise<PersonAgentTaskRecord[]>
   transitionPersonAgentTask: (input: TransitionPersonAgentTaskInput) => Promise<PersonAgentTaskRecord | null>
+  listPersonAgentTaskRuns: (input?: ListPersonAgentTaskRunsInput) => Promise<PersonAgentTaskRunRecord[]>
+  executePersonAgentTask: (input: ExecutePersonAgentTaskInput) => Promise<PersonAgentTaskRunRecord | null>
   getPersonAgentMemorySummary: (input: GetPersonAgentMemorySummaryInput) => Promise<PersonAgentMemorySummary | null>
   getPersonAgentInspectionBundle: (input: GetPersonAgentInspectionBundleInput) => Promise<PersonAgentInspectionBundle | null>
   runMemoryWorkspaceCompare: (input: RunMemoryWorkspaceCompareInput) => Promise<MemoryWorkspaceCompareSessionDetail | null>

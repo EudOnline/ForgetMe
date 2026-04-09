@@ -1,9 +1,11 @@
 import type {
   PersonAgentTaskRecord,
+  PersonAgentTaskRunRecord,
   PersonAgentTaskStatus
 } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
 import {
+  appendPersonAgentTaskRun,
   appendPersonAgentAuditEvent,
   getPersonAgentByCanonicalPersonId,
   getPersonAgentTaskById,
@@ -53,6 +55,129 @@ function canTransitionTaskStatus(currentStatus: PersonAgentTaskStatus, nextStatu
   }
 
   return false
+}
+
+function conflictQuestion() {
+  return '这条冲突信息里，哪一个来源更可信？'
+}
+
+function coverageGapQuestion() {
+  return '关于这个人，还有哪一类资料最值得补充？'
+}
+
+function strategyQuestion() {
+  return '这次策略调整是否需要同步到前端展示方式？'
+}
+
+function buildTaskExecutionRun(_db: ArchiveDatabase, task: PersonAgentTaskRecord): Omit<
+  PersonAgentTaskRunRecord,
+  'runId' | 'createdAt' | 'updatedAt'
+> {
+  if (task.taskKind === 'await_refresh') {
+    return {
+      taskId: task.taskId,
+      taskKey: task.taskKey,
+      personAgentId: task.personAgentId,
+      canonicalPersonId: task.canonicalPersonId,
+      taskKind: task.taskKind,
+      runStatus: 'blocked',
+      summary: 'Refresh is still pending, so downstream conflict review should wait.',
+      suggestedQuestion: null,
+      actionItems: [{
+        kind: 'wait_for_refresh',
+        label: 'Wait for queued refresh',
+        payload: {
+          refreshId: task.sourceRef.refreshId ?? null
+        }
+      }],
+      source: null
+    }
+  }
+
+  if (task.taskKind === 'resolve_conflict') {
+    return {
+      taskId: task.taskId,
+      taskKey: task.taskKey,
+      personAgentId: task.personAgentId,
+      canonicalPersonId: task.canonicalPersonId,
+      taskKind: task.taskKind,
+      runStatus: 'completed',
+      summary: 'Review the conflicting evidence for school_name before answering with a single value.',
+      suggestedQuestion: conflictQuestion(),
+      actionItems: [{
+        kind: 'review_conflict',
+        label: 'Review conflicting memory',
+        payload: {
+          memoryKey: task.sourceRef.memoryKey ?? null
+        }
+      }],
+      source: null
+    }
+  }
+
+  if (task.taskKind === 'fill_coverage_gap') {
+    return {
+      taskId: task.taskId,
+      taskKey: task.taskKey,
+      personAgentId: task.personAgentId,
+      canonicalPersonId: task.canonicalPersonId,
+      taskKind: task.taskKind,
+      runStatus: 'completed',
+      summary: `Collect more grounded evidence for ${task.title.replace(/^Fill /, '')} before future consultations rely on it.`,
+      suggestedQuestion: coverageGapQuestion(),
+      actionItems: [{
+        kind: 'collect_evidence',
+        label: 'Collect supporting evidence',
+        payload: {
+          memoryKey: task.sourceRef.memoryKey ?? null
+        }
+      }],
+      source: null
+    }
+  }
+
+  if (task.taskKind === 'expand_topic') {
+    const topicLabel = task.title.replace(/^Expand /, '')
+    const suggestedQuestion = `要不要继续追问 ${topicLabel} 的细节？`
+
+    return {
+      taskId: task.taskId,
+      taskKey: task.taskKey,
+      personAgentId: task.personAgentId,
+      canonicalPersonId: task.canonicalPersonId,
+      taskKind: task.taskKind,
+      runStatus: 'completed',
+      summary: `Prepare a follow-up question for the recurring topic ${topicLabel}.`,
+      suggestedQuestion,
+      actionItems: [{
+        kind: 'ask_follow_up',
+        label: 'Ask suggested follow-up',
+        payload: {
+          question: suggestedQuestion
+        }
+      }],
+      source: null
+    }
+  }
+
+  return {
+    taskId: task.taskId,
+    taskKey: task.taskKey,
+    personAgentId: task.personAgentId,
+    canonicalPersonId: task.canonicalPersonId,
+    taskKind: task.taskKind,
+    runStatus: 'completed',
+    summary: 'Review the latest strategy adjustment before aligning downstream consultation behavior.',
+    suggestedQuestion: strategyQuestion(),
+    actionItems: [{
+      kind: 'review_strategy',
+      label: 'Review strategy change',
+      payload: {
+        auditEventId: task.sourceRef.auditEventId ?? null
+      }
+    }],
+    source: null
+  }
 }
 
 export function syncPersonAgentTasks(db: ArchiveDatabase, input: {
@@ -225,4 +350,62 @@ export function transitionPersonAgentTask(db: ArchiveDatabase, input: {
   })
 
   return updatedTask
+}
+
+export function executePersonAgentTask(db: ArchiveDatabase, input: {
+  taskId: string
+  source?: string
+  now?: string
+}) {
+  const task = getPersonAgentTaskById(db, {
+    taskId: input.taskId
+  })
+
+  if (!task) {
+    return null
+  }
+
+  if (task.status === 'completed' || task.status === 'dismissed') {
+    throw new Error(`Cannot execute terminal person-agent task: ${task.taskId}`)
+  }
+
+  const now = input.now ?? new Date().toISOString()
+  const runDraft = buildTaskExecutionRun(db, task)
+  const run = appendPersonAgentTaskRun(db, {
+    ...runDraft,
+    source: input.source ?? null,
+    createdAt: now,
+    updatedAt: now
+  })
+
+  if (!run) {
+    return null
+  }
+
+  if (run.runStatus === 'completed') {
+    transitionPersonAgentTask(db, {
+      taskId: task.taskId,
+      status: 'completed',
+      source: input.source ?? 'task_executor',
+      reason: `task_run:${run.runId}`,
+      now
+    })
+  }
+
+  appendPersonAgentAuditEvent(db, {
+    personAgentId: task.personAgentId,
+    canonicalPersonId: task.canonicalPersonId,
+    eventKind: 'task_executed',
+    payload: {
+      runId: run.runId,
+      taskId: task.taskId,
+      taskKey: task.taskKey,
+      taskKind: task.taskKind,
+      runStatus: run.runStatus,
+      source: input.source ?? null
+    },
+    createdAt: now
+  })
+
+  return run
 }

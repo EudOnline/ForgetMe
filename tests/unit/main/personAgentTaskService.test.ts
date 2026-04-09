@@ -7,12 +7,14 @@ import {
   appendPersonAgentAuditEvent,
   enqueuePersonAgentRefresh,
   listPersonAgentAuditEvents,
+  listPersonAgentTaskRuns,
   listPersonAgentTasks,
   replacePersonAgentFactMemories,
   upsertPersonAgent,
   upsertPersonAgentInteractionMemory
 } from '../../../src/main/services/governancePersistenceService'
 import {
+  executePersonAgentTask,
   syncPersonAgentTasks,
   transitionPersonAgentTask
 } from '../../../src/main/services/personAgentTaskService'
@@ -390,6 +392,118 @@ describe('personAgentTaskService', () => {
         })
       })
     ])
+
+    db.close()
+  })
+
+  it('executes conflict-resolution tasks into completed task runs', () => {
+    const db = setupDatabase()
+    seedTaskFixture(db)
+
+    const tasks = syncPersonAgentTasks(db, {
+      canonicalPersonId: 'cp-1',
+      now: NOW
+    })
+    const conflictTask = tasks.find((task) => task.taskKind === 'resolve_conflict')
+
+    const run = executePersonAgentTask(db, {
+      taskId: conflictTask!.taskId,
+      source: 'workspace_ui',
+      now: '2026-04-08T12:06:00.000Z'
+    })
+
+    expect(run).toMatchObject({
+      taskId: conflictTask!.taskId,
+      taskKey: 'resolve_conflict:conflict.school_name:hash-conflict',
+      taskKind: 'resolve_conflict',
+      runStatus: 'completed',
+      summary: 'Review the conflicting evidence for school_name before answering with a single value.',
+      suggestedQuestion: '这条冲突信息里，哪一个来源更可信？',
+      actionItems: [
+        expect.objectContaining({
+          kind: 'review_conflict',
+          label: 'Review conflicting memory',
+          payload: expect.objectContaining({
+            memoryKey: 'conflict.school_name'
+          })
+        })
+      ],
+      source: 'workspace_ui',
+      createdAt: '2026-04-08T12:06:00.000Z'
+    })
+    expect(listPersonAgentTasks(db, {
+      canonicalPersonId: 'cp-1',
+      status: 'completed'
+    })).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        taskId: conflictTask!.taskId,
+        status: 'completed'
+      })
+    ]))
+    expect(listPersonAgentTaskRuns(db, {
+      canonicalPersonId: 'cp-1'
+    })).toEqual([
+      expect.objectContaining({
+        taskId: conflictTask!.taskId,
+        runStatus: 'completed'
+      })
+    ])
+    expect(listPersonAgentAuditEvents(db, {
+      canonicalPersonId: 'cp-1',
+      eventKind: 'task_executed'
+    })).toEqual([
+      expect.objectContaining({
+        eventKind: 'task_executed',
+        payload: expect.objectContaining({
+          taskId: conflictTask!.taskId,
+          taskKey: conflictTask!.taskKey,
+          runStatus: 'completed',
+          source: 'workspace_ui'
+        })
+      })
+    ])
+
+    db.close()
+  })
+
+  it('records blocked runs for await-refresh tasks without completing them', () => {
+    const db = setupDatabase()
+    seedTaskFixture(db)
+
+    const tasks = syncPersonAgentTasks(db, {
+      canonicalPersonId: 'cp-1',
+      now: NOW
+    })
+    const refreshTask = tasks.find((task) => task.taskKind === 'await_refresh')
+
+    const run = executePersonAgentTask(db, {
+      taskId: refreshTask!.taskId,
+      source: 'workspace_ui',
+      now: '2026-04-08T12:07:00.000Z'
+    })
+
+    expect(run).toMatchObject({
+      taskId: refreshTask!.taskId,
+      taskKind: 'await_refresh',
+      runStatus: 'blocked',
+      summary: 'Refresh is still pending, so downstream conflict review should wait.',
+      suggestedQuestion: null,
+      actionItems: [
+        expect.objectContaining({
+          kind: 'wait_for_refresh',
+          label: 'Wait for queued refresh',
+          payload: expect.objectContaining({
+            refreshId: 'refresh-1'
+          })
+        })
+      ]
+    })
+    expect(listPersonAgentTasks(db, {
+      canonicalPersonId: 'cp-1'
+    }).find((task) => task.taskId === refreshTask!.taskId)).toMatchObject({
+      taskId: refreshTask!.taskId,
+      status: 'pending'
+    })
 
     db.close()
   })

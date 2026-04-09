@@ -28,10 +28,12 @@ const {
   getPersonAgentConsultationRuntimeState,
   getPersonAgentConsultationSession,
   listPersonAgentConsultationSessions,
+  executePersonAgentTask,
   transitionPersonAgentTask,
   getPersonAgentByCanonicalPersonId,
   listPersonAgentAuditEvents,
   listPersonAgentRefreshQueue,
+  listPersonAgentTaskRuns,
   listPersonAgentTasks,
   getPersonAgentFactMemorySummary,
   listPersonAgentInteractionMemories
@@ -59,10 +61,12 @@ const {
   getPersonAgentConsultationRuntimeState: vi.fn(),
   getPersonAgentConsultationSession: vi.fn(),
   listPersonAgentConsultationSessions: vi.fn(),
+  executePersonAgentTask: vi.fn(),
   transitionPersonAgentTask: vi.fn(),
   getPersonAgentByCanonicalPersonId: vi.fn(),
   listPersonAgentAuditEvents: vi.fn(),
   listPersonAgentRefreshQueue: vi.fn(),
+  listPersonAgentTaskRuns: vi.fn(),
   listPersonAgentTasks: vi.fn(),
   getPersonAgentFactMemorySummary: vi.fn(),
   listPersonAgentInteractionMemories: vi.fn()
@@ -145,6 +149,7 @@ vi.mock('../../../src/main/services/personAgentTaskService', async (importOrigin
   const actual = await importOriginal<typeof import('../../../src/main/services/personAgentTaskService')>()
   return {
     ...actual,
+    executePersonAgentTask,
     transitionPersonAgentTask
   }
 })
@@ -156,6 +161,7 @@ vi.mock('../../../src/main/services/governancePersistenceService', async (import
     getPersonAgentByCanonicalPersonId,
     listPersonAgentAuditEvents,
     listPersonAgentRefreshQueue,
+    listPersonAgentTaskRuns,
     listPersonAgentTasks,
     listPersonAgentInteractionMemories
   }
@@ -224,10 +230,12 @@ describe('registerWorkspaceIpc session handlers', () => {
     getPersonAgentConsultationRuntimeState.mockReset()
     getPersonAgentConsultationSession.mockReset()
     listPersonAgentConsultationSessions.mockReset()
+    executePersonAgentTask.mockReset()
     transitionPersonAgentTask.mockReset()
     getPersonAgentByCanonicalPersonId.mockReset()
     listPersonAgentAuditEvents.mockReset()
     listPersonAgentRefreshQueue.mockReset()
+    listPersonAgentTaskRuns.mockReset()
     listPersonAgentTasks.mockReset()
     getPersonAgentFactMemorySummary.mockReset()
     listPersonAgentInteractionMemories.mockReset()
@@ -966,6 +974,91 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
       status: 'dismissed',
       statusSource: 'workspace_ui',
       statusReason: 'handled externally'
+    }))
+    expect(close).toHaveBeenCalledTimes(2)
+  })
+
+  it('lists task runs and executes person-agent tasks through ipc', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    listPersonAgentTaskRuns.mockReturnValue([
+      {
+        runId: 'run-1',
+        taskId: 'task-1',
+        taskKey: 'resolve_conflict:conflict.school_name:hash-conflict',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        taskKind: 'resolve_conflict',
+        runStatus: 'completed',
+        summary: 'Review the conflicting evidence for school_name before answering with a single value.',
+        suggestedQuestion: '这条冲突信息里，哪一个来源更可信？',
+        actionItems: [
+          {
+            kind: 'review_conflict',
+            label: 'Review conflicting memory',
+            payload: {
+              memoryKey: 'conflict.school_name'
+            }
+          }
+        ],
+        source: 'workspace_ui',
+        createdAt: '2026-04-08T01:13:00.000Z',
+        updatedAt: '2026-04-08T01:13:00.000Z'
+      }
+    ])
+    executePersonAgentTask.mockReturnValue({
+      runId: 'run-2',
+      taskId: 'task-2',
+      taskKey: 'expand_topic:topic.profile_facts:3:1',
+      personAgentId: 'agent-1',
+      canonicalPersonId: 'cp-1',
+      taskKind: 'expand_topic',
+      runStatus: 'completed',
+      summary: 'Prepare a follow-up question for the recurring topic Profile facts.',
+      suggestedQuestion: '要不要继续追问 Profile facts 的细节？',
+      actionItems: [
+        {
+          kind: 'ask_follow_up',
+          label: 'Ask suggested follow-up',
+          payload: {
+            question: '要不要继续追问 Profile facts 的细节？'
+          }
+        }
+      ],
+      source: 'workspace_ui',
+      createdAt: '2026-04-08T01:14:00.000Z',
+      updatedAt: '2026-04-08T01:14:00.000Z'
+    })
+
+    registerWorkspaceIpc(appPathsFixture())
+
+    const listHandler = handlerMap.get('archive:listPersonAgentTaskRuns')
+    const executeHandler = handlerMap.get('archive:executePersonAgentTask')
+    const listed = await listHandler?.({}, {
+      canonicalPersonId: 'cp-1'
+    })
+    const executed = await executeHandler?.({}, {
+      taskId: 'task-2',
+      source: 'workspace_ui'
+    })
+
+    expect(listPersonAgentTaskRuns).toHaveBeenCalledWith(expect.anything(), {
+      canonicalPersonId: 'cp-1'
+    })
+    expect(executePersonAgentTask).toHaveBeenCalledWith(expect.anything(), {
+      taskId: 'task-2',
+      source: 'workspace_ui'
+    })
+    expect(listed).toEqual([
+      expect.objectContaining({
+        runId: 'run-1',
+        runStatus: 'completed'
+      })
+    ])
+    expect(executed).toEqual(expect.objectContaining({
+      runId: 'run-2',
+      taskKind: 'expand_topic',
+      runStatus: 'completed'
     }))
     expect(close).toHaveBeenCalledTimes(2)
   })

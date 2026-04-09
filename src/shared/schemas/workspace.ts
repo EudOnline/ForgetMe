@@ -157,6 +157,25 @@ export const transitionPersonAgentTaskInputSchema = z.object({
   reason: z.string().min(1).optional()
 })
 
+export const listPersonAgentTaskRunsInputSchema = z.object({
+  taskId: z.string().min(1).optional(),
+  personAgentId: z.string().min(1).optional(),
+  canonicalPersonId: z.string().min(1).optional(),
+  taskKind: z.enum([
+    'await_refresh',
+    'resolve_conflict',
+    'fill_coverage_gap',
+    'expand_topic',
+    'review_strategy_change'
+  ]).optional(),
+  runStatus: z.enum(['completed', 'blocked', 'failed']).optional()
+}).optional().default({})
+
+export const executePersonAgentTaskInputSchema = z.object({
+  taskId: z.string().min(1),
+  source: z.string().min(1).optional()
+})
+
 export const getPersonaDraftReviewByTurnInputSchema = z.object({
   turnId: z.string().min(1)
 })
