@@ -738,6 +738,22 @@ export type PersonAgentCapsuleRuntimeArtifacts = {
   files: PersonAgentCapsuleArtifactRecord[]
 }
 
+export type PersonAgentCapsuleRuntimeContext = {
+  capsuleId: string
+  personAgentId: string
+  canonicalPersonId: string
+  sessionNamespace: string
+  identitySummary: string
+  memorySummary: string
+  runtimeSummary: string
+  latestCheckpointSummary: string | null
+  recentActivity: Array<{
+    eventKind: string
+    createdAt: string | null
+    summary: string
+  }>
+}
+
 export type PersonAgentAuditEventRecord = {
   auditEventId: string
   personAgentId: string | null
@@ -1081,6 +1097,7 @@ export type PersonAgentAnswerPack = {
     factsVersion: number
     interactionVersion: number
   }
+  capsuleRuntimeContext?: PersonAgentCapsuleRuntimeContext | null
 }
 
 export type MemoryWorkspacePersonAgentContext = {

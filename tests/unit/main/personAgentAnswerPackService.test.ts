@@ -2,13 +2,21 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { ensureAppPaths } from '../../../src/main/services/appPaths'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
 import {
+  getPersonAgentCapsule,
   replacePersonAgentFactMemories,
+  upsertPersonAgentRuntimeState,
   upsertPersonAgent,
   upsertPersonAgentInteractionMemory
 } from '../../../src/main/services/governancePersistenceService'
 import { buildPersonAgentAnswerPack } from '../../../src/main/services/personAgentAnswerPackService'
+import { materializePersonAgentCapsule } from '../../../src/main/services/personAgentCapsuleService'
+import {
+  appendPersonAgentCapsuleActivityEvent,
+  syncPersonAgentCapsuleRuntimeArtifacts
+} from '../../../src/main/services/personAgentCapsuleRuntimeArtifactsService'
 
 const NOW = '2026-04-06T12:00:00.000Z'
 
@@ -355,6 +363,87 @@ describe('personAgentAnswerPackService', () => {
     })
 
     expect(pack?.candidateAnswer).toContain('Open conflicts remain on school_name')
+
+    db.close()
+  })
+
+  it('enriches answer packs with capsule runtime context when runtime artifacts exist', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-person-agent-answer-pack-capsule-'))
+    const appPaths = ensureAppPaths(root)
+    const db = openDatabase(path.join(root, 'archive.sqlite'))
+    runMigrations(db)
+    const personAgent = seedPersonAgentMemoryFixture(db)
+
+    materializePersonAgentCapsule(db, {
+      appPaths,
+      personAgent,
+      activationSource: 'import_batch',
+      checkpointKind: 'activation',
+      summary: 'Initial activation checkpoint.',
+      now: NOW
+    })
+
+    upsertPersonAgentRuntimeState(db, {
+      personAgentId: personAgent.personAgentId,
+      canonicalPersonId: 'cp-1',
+      sessionCount: 1,
+      totalTurnCount: 2,
+      latestQuestion: '她的生日是什么？',
+      latestQuestionClassification: 'profile_fact',
+      lastAnswerDigest: 'Birthday: 1997-02-03.',
+      lastConsultedAt: NOW,
+      updatedAt: NOW
+    })
+
+    const capsule = getPersonAgentCapsule(db, {
+      personAgentId: personAgent.personAgentId
+    })
+    expect(capsule).not.toBeNull()
+
+    syncPersonAgentCapsuleRuntimeArtifacts(db, {
+      capsule: capsule!,
+      personAgent,
+      now: NOW
+    })
+    appendPersonAgentCapsuleActivityEvent({
+      capsule: capsule!,
+      event: {
+        eventKind: 'consultation_turn_persisted',
+        capsuleId: capsule!.capsuleId,
+        personAgentId: personAgent.personAgentId,
+        canonicalPersonId: 'cp-1',
+        sessionId: 'session-1',
+        turnId: 'turn-1',
+        question: '她的生日是什么？',
+        createdAt: NOW
+      }
+    })
+
+    const pack = buildPersonAgentAnswerPack(db, {
+      canonicalPersonId: 'cp-1',
+      question: '她的生日是什么？'
+    })
+
+    expect(pack?.capsuleRuntimeContext).toMatchObject({
+      capsuleId: capsule!.capsuleId,
+      personAgentId: personAgent.personAgentId,
+      canonicalPersonId: 'cp-1',
+      sessionNamespace: `person-agent:${personAgent.personAgentId}`,
+      identitySummary: expect.stringContaining('Alice Chen'),
+      memorySummary: expect.stringContaining('Facts v2'),
+      runtimeSummary: expect.stringContaining('她的生日是什么？'),
+      latestCheckpointSummary: expect.stringContaining('activation')
+    })
+    expect(pack?.capsuleRuntimeContext?.recentActivity).toEqual([
+      expect.objectContaining({
+        eventKind: 'consultation_turn_persisted',
+        summary: expect.stringContaining('她的生日是什么？')
+      }),
+      expect.objectContaining({
+        eventKind: 'capsule_checkpoint_written',
+        summary: expect.stringContaining('activation')
+      })
+    ])
 
     db.close()
   })

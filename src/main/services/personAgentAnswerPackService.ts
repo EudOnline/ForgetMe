@@ -17,6 +17,7 @@ import {
   classifyPersonAgentQuestion,
   createCitation
 } from './memoryWorkspaceResponseHelperService'
+import { buildPersonAgentCapsulePromptContext } from './personAgentCapsulePromptContextService'
 import { createDefaultPersonAgentStrategyProfile } from './personAgentStrategyService'
 
 function normalizeQuestion(question: string) {
@@ -198,6 +199,10 @@ export function buildPersonAgentAnswerPack(db: ArchiveDatabase, input: {
     gapKey: record.memoryKey.replace(/^coverage\./, ''),
     summary: record.summaryValue
   }))
+  const capsuleRuntimeContext = buildPersonAgentCapsulePromptContext(db, {
+    personAgentId: personAgent.personAgentId,
+    canonicalPersonId: input.canonicalPersonId
+  })
 
   let candidateAnswer = ''
   let supportingFacts: PersonAgentAnswerPack['supportingFacts'] = []
@@ -283,6 +288,7 @@ export function buildPersonAgentAnswerPack(db: ArchiveDatabase, input: {
     memoryVersions: {
       factsVersion: personAgent.factsVersion,
       interactionVersion: personAgent.interactionVersion
-    }
+    },
+    capsuleRuntimeContext
   }
 }
