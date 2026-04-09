@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { ensureAppPaths } from '../../../src/main/services/appPaths'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
 import {
@@ -18,6 +18,7 @@ import {
   listPersonAgentConsultationSessions
 } from '../../../src/main/services/personAgentConsultationService'
 import { materializePersonAgentCapsule } from '../../../src/main/services/personAgentCapsuleService'
+import * as personAgentRuntimeService from '../../../src/main/services/personAgentRuntimeService'
 
 const NOW = '2026-04-08T12:00:00.000Z'
 
@@ -165,6 +166,68 @@ function seedConsultationFixture(
 }
 
 describe('personAgentConsultationService', () => {
+  it('delegates persisted consultation execution to the unified runtime service', () => {
+    const consultationTurn = {
+      turnId: 'turn-1',
+      sessionId: 'session-1',
+      personAgentId: 'pa-1',
+      canonicalPersonId: 'cp-1',
+      ordinal: 1,
+      question: '她的生日是什么？',
+      answerPack: {
+        personAgentId: 'pa-1',
+        canonicalPersonId: 'cp-1',
+        strategyProfile: {
+          profileVersion: 1,
+          responseStyle: 'contextual',
+          evidencePreference: 'quote_first',
+          conflictBehavior: 'balanced'
+        },
+        question: '她的生日是什么？',
+        questionClassification: 'profile_fact',
+        candidateAnswer: 'Birthday: 1997-02-03.',
+        supportingFacts: [],
+        supportingCitations: [],
+        conflicts: [],
+        coverageGaps: [],
+        recentInteractionTopics: [],
+        generationReason: 'Resolved through active person-agent fact memory.',
+        memoryVersions: {
+          factsVersion: 1,
+          interactionVersion: 1
+        },
+        capsulePromptBundle: null,
+        capsuleRuntimeContext: null
+      },
+      createdAt: NOW
+    }
+
+    const runtimeSpy = vi.spyOn(personAgentRuntimeService, 'runPersonAgentRuntime')
+      .mockReturnValue({
+        resultKind: 'consultation_turn',
+        consultationTurn
+      })
+
+    const result = askPersonAgentConsultationPersisted({} as ReturnType<typeof openDatabase>, {
+      canonicalPersonId: 'cp-1',
+      question: '她的生日是什么？',
+      now: NOW
+    })
+
+    expect(runtimeSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        operationKind: 'consultation',
+        canonicalPersonId: 'cp-1',
+        question: '她的生日是什么？',
+        now: NOW
+      })
+    )
+    expect(result).toBe(consultationTurn)
+
+    runtimeSpy.mockRestore()
+  })
+
   it('creates persisted consultation sessions, appends turns, and updates runtime state', () => {
     const { appPaths, db } = setupDatabase()
     const personAgent = seedConsultationFixture(db, { appPaths })

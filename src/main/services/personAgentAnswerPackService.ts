@@ -17,8 +17,7 @@ import {
   classifyPersonAgentQuestion,
   createCitation
 } from './memoryWorkspaceResponseHelperService'
-import { buildPersonAgentCapsulePromptBundle } from './personAgentCapsulePromptBundleService'
-import { buildPersonAgentCapsulePromptContext } from './personAgentCapsulePromptContextService'
+import { buildPersonAgentCapsuleRuntimePromptArtifacts } from './personAgentCapsulePromptBundleService'
 import { createDefaultPersonAgentStrategyProfile } from './personAgentStrategyService'
 
 function normalizeQuestion(question: string) {
@@ -172,6 +171,8 @@ function buildRecentInteractionTopics(
 export function buildPersonAgentAnswerPack(db: ArchiveDatabase, input: {
   canonicalPersonId: string
   question: string
+  capsulePromptBundle?: PersonAgentAnswerPack['capsulePromptBundle']
+  capsuleRuntimeContext?: PersonAgentAnswerPack['capsuleRuntimeContext']
 }): PersonAgentAnswerPack | null {
   const personAgent = getPersonAgentByCanonicalPersonId(db, {
     canonicalPersonId: input.canonicalPersonId
@@ -200,16 +201,19 @@ export function buildPersonAgentAnswerPack(db: ArchiveDatabase, input: {
     gapKey: record.memoryKey.replace(/^coverage\./, ''),
     summary: record.summaryValue
   }))
-  const capsuleRuntimeContext = buildPersonAgentCapsulePromptContext(db, {
-    personAgentId: personAgent.personAgentId,
-    canonicalPersonId: input.canonicalPersonId
-  })
-  const capsulePromptBundle = buildPersonAgentCapsulePromptBundle(db, {
-    personAgentId: personAgent.personAgentId,
-    canonicalPersonId: input.canonicalPersonId,
-    operationKind: 'consultation',
-    promptInput: input.question
-  })
+  const runtimePromptArtifacts = input.capsulePromptBundle !== undefined || input.capsuleRuntimeContext !== undefined
+    ? {
+        runtimeContext: input.capsuleRuntimeContext ?? null,
+        promptBundle: input.capsulePromptBundle ?? null
+      }
+    : buildPersonAgentCapsuleRuntimePromptArtifacts(db, {
+        personAgentId: personAgent.personAgentId,
+        canonicalPersonId: input.canonicalPersonId,
+        operationKind: 'consultation',
+        promptInput: input.question
+      })
+  const capsuleRuntimeContext = runtimePromptArtifacts.runtimeContext
+  const capsulePromptBundle = runtimePromptArtifacts.promptBundle
 
   let candidateAnswer = ''
   let supportingFacts: PersonAgentAnswerPack['supportingFacts'] = []

@@ -1,5 +1,6 @@
 import type {
   PersonAgentCapsulePromptBundle,
+  PersonAgentCapsuleRuntimeContext,
   PersonAgentTaskRecord
 } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
@@ -40,25 +41,15 @@ function buildTaskRunUserPrompt(task: {
   ].filter(Boolean).join('\n')
 }
 
-export function buildPersonAgentCapsulePromptBundle(db: ArchiveDatabase, input: {
-  personAgentId?: string
-  canonicalPersonId?: string
+function buildPromptBundleFromRuntimeContext(input: {
+  runtimeContext: PersonAgentCapsuleRuntimeContext
   operationKind: PersonAgentCapsulePromptBundle['operationKind']
   promptInput: string
   taskKind?: PersonAgentTaskRecord['taskKind']
   suggestedQuestion?: string | null
-}): PersonAgentCapsulePromptBundle | null {
-  const runtimeContext = buildPersonAgentCapsulePromptContext(db, {
-    personAgentId: input.personAgentId,
-    canonicalPersonId: input.canonicalPersonId
-  })
-
-  if (!runtimeContext) {
-    return null
-  }
-
+}): PersonAgentCapsulePromptBundle {
   const systemPrompt = buildSystemPrompt({
-    displaySummary: runtimeContext.identitySummary,
+    displaySummary: input.runtimeContext.identitySummary,
     operationKind: input.operationKind
   })
 
@@ -73,19 +64,57 @@ export function buildPersonAgentCapsulePromptBundle(db: ArchiveDatabase, input: 
   return {
     bundleVersion: 1,
     operationKind: input.operationKind,
-    capsuleId: runtimeContext.capsuleId,
-    personAgentId: runtimeContext.personAgentId,
-    canonicalPersonId: runtimeContext.canonicalPersonId,
-    sessionNamespace: runtimeContext.sessionNamespace,
+    capsuleId: input.runtimeContext.capsuleId,
+    personAgentId: input.runtimeContext.personAgentId,
+    canonicalPersonId: input.runtimeContext.canonicalPersonId,
+    sessionNamespace: input.runtimeContext.sessionNamespace,
     promptInput: input.promptInput,
     systemPrompt,
     userPrompt,
     context: {
-      identitySummary: runtimeContext.identitySummary,
-      memorySummary: runtimeContext.memorySummary,
-      runtimeSummary: runtimeContext.runtimeSummary,
-      latestCheckpointSummary: runtimeContext.latestCheckpointSummary,
-      recentActivity: runtimeContext.recentActivity.map((entry) => entry.summary)
+      identitySummary: input.runtimeContext.identitySummary,
+      memorySummary: input.runtimeContext.memorySummary,
+      runtimeSummary: input.runtimeContext.runtimeSummary,
+      latestCheckpointSummary: input.runtimeContext.latestCheckpointSummary,
+      recentActivity: input.runtimeContext.recentActivity.map((entry) => entry.summary)
     }
   }
+}
+
+export function buildPersonAgentCapsuleRuntimePromptArtifacts(db: ArchiveDatabase, input: {
+  personAgentId?: string
+  canonicalPersonId?: string
+  operationKind: PersonAgentCapsulePromptBundle['operationKind']
+  promptInput: string
+  taskKind?: PersonAgentTaskRecord['taskKind']
+  suggestedQuestion?: string | null
+}) {
+  const runtimeContext = buildPersonAgentCapsulePromptContext(db, {
+    personAgentId: input.personAgentId,
+    canonicalPersonId: input.canonicalPersonId
+  })
+
+  return {
+    runtimeContext,
+    promptBundle: runtimeContext
+      ? buildPromptBundleFromRuntimeContext({
+          runtimeContext,
+          operationKind: input.operationKind,
+          promptInput: input.promptInput,
+          taskKind: input.taskKind,
+          suggestedQuestion: input.suggestedQuestion
+        })
+      : null
+  }
+}
+
+export function buildPersonAgentCapsulePromptBundle(db: ArchiveDatabase, input: {
+  personAgentId?: string
+  canonicalPersonId?: string
+  operationKind: PersonAgentCapsulePromptBundle['operationKind']
+  promptInput: string
+  taskKind?: PersonAgentTaskRecord['taskKind']
+  suggestedQuestion?: string | null
+}): PersonAgentCapsulePromptBundle | null {
+  return buildPersonAgentCapsuleRuntimePromptArtifacts(db, input).promptBundle
 }

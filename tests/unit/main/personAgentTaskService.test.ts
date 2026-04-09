@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { ensureAppPaths } from '../../../src/main/services/appPaths'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
 import {
@@ -21,6 +21,7 @@ import {
   transitionPersonAgentTask
 } from '../../../src/main/services/personAgentTaskService'
 import { materializePersonAgentCapsule } from '../../../src/main/services/personAgentCapsuleService'
+import * as personAgentRuntimeService from '../../../src/main/services/personAgentRuntimeService'
 
 const NOW = '2026-04-08T12:00:00.000Z'
 
@@ -183,6 +184,50 @@ function seedTaskFixture(db: ReturnType<typeof openDatabase>, appPaths?: ReturnT
 }
 
 describe('personAgentTaskService', () => {
+  it('delegates task execution to the unified runtime service', () => {
+    const taskRun = {
+      runId: 'run-1',
+      taskId: 'task-1',
+      taskKey: 'resolve_conflict:conflict.school_name:hash-conflict',
+      personAgentId: 'pa-1',
+      canonicalPersonId: 'cp-1',
+      taskKind: 'resolve_conflict' as const,
+      runStatus: 'completed' as const,
+      summary: 'Review the conflicting evidence for school_name before answering with a single value.',
+      suggestedQuestion: '这条冲突信息里，哪一个来源更可信？',
+      actionItems: [],
+      source: 'workspace_ui',
+      promptBundle: null,
+      createdAt: NOW,
+      updatedAt: NOW
+    }
+
+    const runtimeSpy = vi.spyOn(personAgentRuntimeService, 'runPersonAgentRuntime')
+      .mockReturnValue({
+        resultKind: 'task_run',
+        taskRun
+      })
+
+    const result = executePersonAgentTask({} as ReturnType<typeof openDatabase>, {
+      taskId: 'task-1',
+      source: 'workspace_ui',
+      now: NOW
+    })
+
+    expect(runtimeSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        operationKind: 'execute_task',
+        taskId: 'task-1',
+        source: 'workspace_ui',
+        now: NOW
+      })
+    )
+    expect(result).toBe(taskRun)
+
+    runtimeSpy.mockRestore()
+  })
+
   it('derives pending refresh, conflict, coverage, interaction, and strategy tasks', () => {
     const { db } = setupDatabase()
     const personAgent = seedTaskFixture(db)
