@@ -25,9 +25,14 @@ const NOW = '2026-04-09T01:00:00.000Z'
 
 function setupDatabase() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-person-agent-task-queue-runner-'))
+  const appPaths = ensureAppPaths(root)
   const db = openDatabase(path.join(root, 'archive.sqlite'))
   runMigrations(db)
-  return db
+  return {
+    root,
+    appPaths,
+    db
+  }
 }
 
 function seedCanonicalPerson(db: ReturnType<typeof openDatabase>, input: {
@@ -75,7 +80,10 @@ function seedCanonicalPerson(db: ReturnType<typeof openDatabase>, input: {
   )
 }
 
-function seedExecutableTaskFixture(db: ReturnType<typeof openDatabase>) {
+function seedExecutableTaskFixture(
+  db: ReturnType<typeof openDatabase>,
+  appPaths?: ReturnType<typeof ensureAppPaths>
+) {
   seedCanonicalPerson(db, {
     canonicalPersonId: 'cp-1',
     displayName: 'Alice Chen',
@@ -155,6 +163,7 @@ function seedExecutableTaskFixture(db: ReturnType<typeof openDatabase>) {
   })
 
   materializePersonAgentCapsule(db, {
+    appPaths,
     personAgent,
     activationSource: 'import_batch',
     checkpointKind: 'activation',
@@ -208,8 +217,8 @@ function seedBlockedTaskFixture(db: ReturnType<typeof openDatabase>) {
 
 describe('personAgentTaskQueueRunnerService', () => {
   it('runs a queue cycle across pending executable tasks and returns true', () => {
-    const db = setupDatabase()
-    seedExecutableTaskFixture(db)
+    const { appPaths, db } = setupDatabase()
+    seedExecutableTaskFixture(db, appPaths)
 
     const processed = runPersonAgentTaskQueueCycle(db, {
       source: 'background_runner',
@@ -292,12 +301,29 @@ describe('personAgentTaskQueueRunnerService', () => {
       lastProcessedCapsuleId: expect.any(String),
       lastProcessedCapsuleSessionNamespace: expect.stringMatching(/^person-agent:/)
     }))
+    const runtimeStateArtifact = JSON.parse(
+      fs.readFileSync(
+        path.join(appPaths.personAgentStateDir, taskRuns[0]!.personAgentId, 'runtime-state.json'),
+        'utf8'
+      )
+    ) as Record<string, unknown>
+    expect(runtimeStateArtifact).toEqual(expect.objectContaining({
+      canonicalPersonId: 'cp-1',
+      personAgentId: taskRuns[0]!.personAgentId,
+      latestTaskRunId: expect.any(String),
+      latestTaskRunKind: expect.stringMatching(/resolve_conflict|fill_coverage_gap|expand_topic|review_strategy_change/),
+      taskRunner: expect.objectContaining({
+        runnerName: 'person_agent_task_queue',
+        status: 'idle',
+        lastCompletedAt: '2026-04-09T01:05:00.000Z'
+      })
+    }))
 
     db.close()
   })
 
   it('returns false when only blocked await-refresh tasks remain', () => {
-    const db = setupDatabase()
+    const { db } = setupDatabase()
     seedBlockedTaskFixture(db)
 
     const processed = runPersonAgentTaskQueueCycle(db, {
@@ -340,7 +366,7 @@ describe('personAgentTaskQueueRunnerService', () => {
   })
 
   it('records runner failures when task queue processing throws', () => {
-    const db = setupDatabase()
+    const { db } = setupDatabase()
 
     expect(() => runPersonAgentTaskQueueCycle(db, {
       source: 'background_runner',

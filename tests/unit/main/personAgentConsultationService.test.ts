@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { ensureAppPaths } from '../../../src/main/services/appPaths'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
 import {
   getPersonAgentRuntimeState,
@@ -22,9 +23,14 @@ const NOW = '2026-04-08T12:00:00.000Z'
 
 function setupDatabase() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-person-agent-consultation-'))
+  const appPaths = ensureAppPaths(root)
   const db = openDatabase(path.join(root, 'archive.sqlite'))
   runMigrations(db)
-  return db
+  return {
+    root,
+    appPaths,
+    db
+  }
 }
 
 function seedCanonicalPerson(db: ReturnType<typeof openDatabase>, input: {
@@ -72,7 +78,13 @@ function seedCanonicalPerson(db: ReturnType<typeof openDatabase>, input: {
   )
 }
 
-function seedConsultationFixture(db: ReturnType<typeof openDatabase>, status: 'active' | 'candidate' = 'active') {
+function seedConsultationFixture(
+  db: ReturnType<typeof openDatabase>,
+  input: {
+    appPaths?: ReturnType<typeof ensureAppPaths>
+    status?: 'active' | 'candidate'
+  } = {}
+) {
   seedCanonicalPerson(db, {
     canonicalPersonId: 'cp-1',
     displayName: 'Alice Chen',
@@ -81,7 +93,7 @@ function seedConsultationFixture(db: ReturnType<typeof openDatabase>, status: 'a
 
   const personAgent = upsertPersonAgent(db, {
     canonicalPersonId: 'cp-1',
-    status,
+    status: input.status ?? 'active',
     promotionTier: 'high_signal',
     promotionScore: 74,
     promotionReasonSummary: 'High signal person.',
@@ -141,6 +153,7 @@ function seedConsultationFixture(db: ReturnType<typeof openDatabase>, status: 'a
   })
 
   materializePersonAgentCapsule(db, {
+    appPaths: input.appPaths,
     personAgent,
     activationSource: 'import_batch',
     checkpointKind: 'activation',
@@ -153,8 +166,8 @@ function seedConsultationFixture(db: ReturnType<typeof openDatabase>, status: 'a
 
 describe('personAgentConsultationService', () => {
   it('creates persisted consultation sessions, appends turns, and updates runtime state', () => {
-    const db = setupDatabase()
-    const personAgent = seedConsultationFixture(db)
+    const { appPaths, db } = setupDatabase()
+    const personAgent = seedConsultationFixture(db, { appPaths })
 
     const firstTurn = askPersonAgentConsultationPersisted(db, {
       canonicalPersonId: 'cp-1',
@@ -221,6 +234,20 @@ describe('personAgentConsultationService', () => {
       capsuleSessionNamespace: `person-agent:${personAgent.personAgentId}`
     })
     expect(runtimeState?.lastAnswerDigest?.length).toBeGreaterThan(0)
+    const runtimeStateArtifact = JSON.parse(
+      fs.readFileSync(
+        path.join(appPaths.personAgentStateDir, personAgent.personAgentId, 'runtime-state.json'),
+        'utf8'
+      )
+    ) as Record<string, unknown>
+    expect(runtimeStateArtifact).toEqual(expect.objectContaining({
+      canonicalPersonId: 'cp-1',
+      personAgentId: personAgent.personAgentId,
+      activeSessionId: firstTurn?.sessionId,
+      totalTurnCount: 2,
+      latestQuestion: '她还有什么冲突？',
+      lastConsultedAt: '2026-04-08T12:05:00.000Z'
+    }))
     expect(listPersonAgentTaskRuns(db, {
       canonicalPersonId: 'cp-1'
     })).toEqual(expect.arrayContaining([
@@ -253,8 +280,8 @@ describe('personAgentConsultationService', () => {
   })
 
   it('returns null when the person agent is missing or inactive', () => {
-    const db = setupDatabase()
-    seedConsultationFixture(db, 'candidate')
+    const { db } = setupDatabase()
+    seedConsultationFixture(db, { status: 'candidate' })
 
     expect(askPersonAgentConsultationPersisted(db, {
       canonicalPersonId: 'cp-1',

@@ -718,6 +718,26 @@ export type PersonAgentCapsuleMemoryCheckpointRecord = {
   createdAt: string
 }
 
+export type PersonAgentCapsuleArtifactKind =
+  | 'identity'
+  | 'memory_snapshot'
+  | 'runtime_state'
+  | 'checkpoint'
+
+export type PersonAgentCapsuleArtifactRecord = {
+  kind: PersonAgentCapsuleArtifactKind
+  relativePath: string
+  absolutePath: string
+  updatedAt: string
+}
+
+export type PersonAgentCapsuleRuntimeArtifacts = {
+  capsuleId: string
+  personAgentId: string
+  canonicalPersonId: string
+  files: PersonAgentCapsuleArtifactRecord[]
+}
+
 export type PersonAgentAuditEventRecord = {
   auditEventId: string
   personAgentId: string | null

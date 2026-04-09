@@ -18,6 +18,7 @@ import {
   updatePersonAgentTaskStatus
 } from './governancePersistenceService'
 import { getPersonAgentFactMemorySummary } from './personAgentFactMemoryService'
+import { syncPersonAgentCapsuleRuntimeArtifacts } from './personAgentCapsuleRuntimeArtifactsService'
 
 type DerivedTaskRow = Omit<
   PersonAgentTaskRecord,
@@ -419,6 +420,17 @@ export function executePersonAgentTask(db: ArchiveDatabase, input: {
     },
     createdAt: now
   })
+
+  const personAgent = getPersonAgentByCanonicalPersonId(db, {
+    canonicalPersonId: task.canonicalPersonId
+  })
+  if (capsule && personAgent) {
+    syncPersonAgentCapsuleRuntimeArtifacts(db, {
+      capsule,
+      personAgent,
+      now
+    })
+  }
 
   return run
 }

@@ -85,9 +85,10 @@ describe('personAgentCapsuleService', () => {
       capsuleStatus: 'ready',
       latestCheckpointId: expect.any(String)
     }))
-    expect(listPersonAgentCapsuleMemoryCheckpoints(db, {
+    const checkpoints = listPersonAgentCapsuleMemoryCheckpoints(db, {
       personAgentId: personAgent.personAgentId
-    })).toEqual([
+    })
+    expect(checkpoints).toEqual([
       expect.objectContaining({
         checkpointKind: 'activation',
         factsVersion: 3,
@@ -95,6 +96,41 @@ describe('personAgentCapsuleService', () => {
         strategyProfileVersion: 2
       })
     ])
+    const workspaceRoot = path.join(appPaths.personAgentWorkspaceDir, personAgent.personAgentId)
+    const stateRoot = path.join(appPaths.personAgentStateDir, personAgent.personAgentId)
+    const identityArtifactPath = path.join(workspaceRoot, 'identity.json')
+    const memorySnapshotPath = path.join(workspaceRoot, 'memory-snapshot.json')
+    const runtimeStatePath = path.join(stateRoot, 'runtime-state.json')
+    const checkpointArtifactPath = path.join(stateRoot, 'checkpoints', `${checkpoints[0]!.checkpointId}.json`)
+
+    expect(fs.existsSync(identityArtifactPath)).toBe(true)
+    expect(fs.existsSync(memorySnapshotPath)).toBe(true)
+    expect(fs.existsSync(runtimeStatePath)).toBe(true)
+    expect(fs.existsSync(checkpointArtifactPath)).toBe(true)
+
+    expect(JSON.parse(fs.readFileSync(identityArtifactPath, 'utf8'))).toEqual(expect.objectContaining({
+      capsuleId: expect.any(String),
+      canonicalPersonId: 'cp-1',
+      personAgentId: personAgent.personAgentId,
+      activationSource: 'import_batch'
+    }))
+    expect(JSON.parse(fs.readFileSync(memorySnapshotPath, 'utf8'))).toEqual(expect.objectContaining({
+      canonicalPersonId: 'cp-1',
+      personAgentId: personAgent.personAgentId,
+      factsVersion: 3,
+      interactionVersion: 4,
+      strategyProfileVersion: 2
+    }))
+    expect(JSON.parse(fs.readFileSync(runtimeStatePath, 'utf8'))).toEqual(expect.objectContaining({
+      canonicalPersonId: 'cp-1',
+      personAgentId: personAgent.personAgentId,
+      sessionNamespace: `person-agent:${personAgent.personAgentId}`
+    }))
+    expect(JSON.parse(fs.readFileSync(checkpointArtifactPath, 'utf8'))).toEqual(expect.objectContaining({
+      checkpointId: checkpoints[0]!.checkpointId,
+      checkpointKind: 'activation',
+      canonicalPersonId: 'cp-1'
+    }))
 
     db.close()
   })

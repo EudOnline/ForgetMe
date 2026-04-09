@@ -14,6 +14,7 @@ import {
   listPersonAgentCapsuleMemoryCheckpoints,
   upsertPersonAgentCapsule
 } from './governancePersistenceService'
+import { syncPersonAgentCapsuleRuntimeArtifacts } from './personAgentCapsuleRuntimeArtifactsService'
 
 function logicalCapsuleRoot(kind: 'workspace' | 'state', personAgentId: string) {
   return `person-agent://${kind}/${personAgentId}`
@@ -143,7 +144,20 @@ export function materializePersonAgentCapsule(db: ArchiveDatabase, input: {
     })
   }
 
-  return getPersonAgentCapsule(db, {
+  const persistedCapsule = getPersonAgentCapsule(db, {
     personAgentId: input.personAgent.personAgentId
   })
+  if (persistedCapsule) {
+    syncPersonAgentCapsuleRuntimeArtifacts(db, {
+      capsule: persistedCapsule,
+      personAgent: input.personAgent,
+      checkpoint: listPersonAgentCapsuleMemoryCheckpoints(db, {
+        capsuleId: persistedCapsule.capsuleId,
+        limit: 1
+      })[0] ?? null,
+      now
+    })
+  }
+
+  return persistedCapsule
 }

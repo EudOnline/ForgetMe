@@ -1,7 +1,13 @@
 import path from 'node:path'
 import type { AppPaths } from './appPaths'
 import { openDatabase, runMigrations } from './db'
-import { getPersonAgentTaskQueueRunnerState, upsertPersonAgentTaskQueueRunnerState } from './governancePersistenceService'
+import {
+  getPersonAgentByCanonicalPersonId,
+  getPersonAgentCapsule,
+  getPersonAgentTaskQueueRunnerState,
+  upsertPersonAgentTaskQueueRunnerState
+} from './governancePersistenceService'
+import { syncPersonAgentCapsuleRuntimeArtifacts } from './personAgentCapsuleRuntimeArtifactsService'
 import { processPersonAgentTaskQueue } from './personAgentTaskService'
 
 const DEFAULT_PERSON_AGENT_TASK_QUEUE_RUNNER_INTERVAL_MS = 5_000
@@ -65,6 +71,25 @@ export function runPersonAgentTaskQueueCycle(
       lastError: null,
       updatedAt: now
     })
+
+    const latestRun = runs[0] ?? null
+    if (latestRun) {
+      const personAgent = getPersonAgentByCanonicalPersonId(db, {
+        canonicalPersonId: latestRun.canonicalPersonId
+      })
+      const capsule = getPersonAgentCapsule(db, {
+        personAgentId: latestRun.personAgentId,
+        canonicalPersonId: latestRun.canonicalPersonId
+      })
+
+      if (personAgent && capsule) {
+        syncPersonAgentCapsuleRuntimeArtifacts(db, {
+          capsule,
+          personAgent,
+          now
+        })
+      }
+    }
 
     return processedTaskCount > 0
   } catch (error) {

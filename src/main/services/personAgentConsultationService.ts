@@ -9,12 +9,14 @@ import {
   appendPersonAgentConsultationTurn,
   createPersonAgentConsultationSession,
   getPersonAgentByCanonicalPersonId,
+  getPersonAgentCapsule,
   getPersonAgentConsultationSession as getPersistedConsultationSession,
   getPersonAgentRuntimeState,
   listPersonAgentConsultationSessions as listPersistedConsultationSessions,
   upsertPersonAgentRuntimeState
 } from './governancePersistenceService'
 import { buildPersonAgentAnswerPack } from './personAgentAnswerPackService'
+import { syncPersonAgentCapsuleRuntimeArtifacts } from './personAgentCapsuleRuntimeArtifactsService'
 import {
   processPersonAgentTaskQueue,
   syncPersonAgentTasks
@@ -125,6 +127,18 @@ export function askPersonAgentConsultationPersisted(db: ArchiveDatabase, input: 
     source: 'consultation_sync',
     now
   })
+
+  const capsule = getPersonAgentCapsule(db, {
+    personAgentId: personAgent.personAgentId,
+    canonicalPersonId: input.canonicalPersonId
+  })
+  if (capsule) {
+    syncPersonAgentCapsuleRuntimeArtifacts(db, {
+      capsule,
+      personAgent,
+      now
+    })
+  }
 
   return turn
 }
