@@ -22,7 +22,7 @@ describe('engineering convergence structure', () => {
     expect(fs.existsSync(repoPath('src/shared/schemas/import.ts'))).toBe(true)
     expect(fs.existsSync(repoPath('src/shared/schemas/review.ts'))).toBe(true)
     expect(fs.existsSync(repoPath('src/shared/schemas/workspace.ts'))).toBe(true)
-    expect(fs.existsSync(repoPath('src/shared/schemas/objective.ts'))).toBe(true)
+    expect(fs.existsSync(repoPath('src/shared/schemas/objective.ts'))).toBe(false)
   })
 
   it('moves main-process registration into bootstrap modules', () => {
@@ -31,7 +31,6 @@ describe('engineering convergence structure', () => {
 
     expect(fs.existsSync(repoPath('src/main/bootstrap/registerIpc.ts'))).toBe(true)
     expect(fs.existsSync(repoPath('src/main/bootstrap/serviceContainer.ts'))).toBe(true)
-    expect(fs.existsSync(repoPath('src/main/modules/objective/registerObjectiveIpc.ts'))).toBe(true)
     expect(fs.existsSync(repoPath('src/main/modules/review/registerReviewIpc.ts'))).toBe(true)
     expect(fs.existsSync(repoPath('src/main/modules/workspace/registerWorkspaceIpc.ts'))).toBe(true)
     expect(fs.existsSync(repoPath('src/main/modules/import/registerImportIpc.ts'))).toBe(true)
@@ -39,7 +38,6 @@ describe('engineering convergence structure', () => {
     expect(fs.existsSync(repoPath('src/main/modules/ops/registerOpsIpc.ts'))).toBe(true)
     expect(mainEntry).toContain("from './bootstrap/registerIpc'")
     expect(mainEntry).toContain("from './bootstrap/serviceContainer'")
-    expect(bootstrapEntry).toContain("from '../modules/objective/registerObjectiveIpc'")
     expect(bootstrapEntry).toContain("from '../modules/review/registerReviewIpc'")
     expect(bootstrapEntry).toContain("from '../modules/workspace/registerWorkspaceIpc'")
     expect(bootstrapEntry).toContain("from '../modules/import/registerImportIpc'")

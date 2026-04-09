@@ -1,6 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { createImportPreloadModule } from './modules/import'
-import { createObjectivePreloadModule } from './modules/objective'
 import { createOpsPreloadModule } from './modules/ops'
 import { createPeoplePreloadModule } from './modules/people'
 import { createReviewPreloadModule } from './modules/review'
@@ -14,7 +13,6 @@ contextBridge.exposeInMainWorld(
     createPeoplePreloadModule(ipcRenderer),
     createReviewPreloadModule(ipcRenderer),
     createWorkspacePreloadModule(ipcRenderer),
-    createObjectivePreloadModule(ipcRenderer),
     createOpsPreloadModule(ipcRenderer)
   )
 )

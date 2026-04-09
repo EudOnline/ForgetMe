@@ -4,6 +4,7 @@ import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { ensureAppPaths } from '../../../src/main/services/appPaths'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
+import type { PersonAgentConsultationTurnRecord } from '../../../src/shared/archiveContracts'
 import {
   getPersonAgentRuntimeState,
   listPersonAgentTaskRuns,
@@ -167,7 +168,7 @@ function seedConsultationFixture(
 
 describe('personAgentConsultationService', () => {
   it('delegates persisted consultation execution to the unified runtime service', () => {
-    const consultationTurn = {
+    const consultationTurn: PersonAgentConsultationTurnRecord = {
       turnId: 'turn-1',
       sessionId: 'session-1',
       personAgentId: 'pa-1',

@@ -3,14 +3,12 @@ import type { AppPaths } from '../../../../src/main/services/appPaths'
 
 const {
   registerImportIpc,
-  registerObjectiveIpc,
   registerPeopleIpc,
   registerReviewIpc,
   registerWorkspaceIpc,
   registerOpsIpc
 } = vi.hoisted(() => ({
   registerImportIpc: vi.fn(),
-  registerObjectiveIpc: vi.fn(),
   registerPeopleIpc: vi.fn(),
   registerReviewIpc: vi.fn(),
   registerWorkspaceIpc: vi.fn(),
@@ -19,10 +17,6 @@ const {
 
 vi.mock('../../../../src/main/modules/import/registerImportIpc', () => ({
   registerImportIpc
-}))
-
-vi.mock('../../../../src/main/modules/objective/registerObjectiveIpc', () => ({
-  registerObjectiveIpc
 }))
 
 vi.mock('../../../../src/main/modules/people/registerPeopleIpc', () => ({
@@ -50,14 +44,16 @@ function appPathsFixture(): AppPaths {
     vaultDir: '/tmp/forgetme/vault',
     vaultOriginalsDir: '/tmp/forgetme/vault/originals',
     importReportsDir: '/tmp/forgetme/reports',
-    preservationReportsDir: '/tmp/forgetme/preservation-reports'
+    preservationReportsDir: '/tmp/forgetme/preservation-reports',
+    personAgentRootDir: '/tmp/forgetme/person-agents',
+    personAgentWorkspaceDir: '/tmp/forgetme/person-agents/workspaces',
+    personAgentStateDir: '/tmp/forgetme/person-agents/state'
   }
 }
 
 describe('registerIpc', () => {
   beforeEach(() => {
     registerImportIpc.mockReset()
-    registerObjectiveIpc.mockReset()
     registerPeopleIpc.mockReset()
     registerReviewIpc.mockReset()
     registerWorkspaceIpc.mockReset()
@@ -72,7 +68,6 @@ describe('registerIpc', () => {
     })
 
     expect(registerImportIpc).toHaveBeenCalledWith(appPaths)
-    expect(registerObjectiveIpc).toHaveBeenCalledWith(appPaths)
     expect(registerPeopleIpc).toHaveBeenCalledWith(appPaths)
     expect(registerReviewIpc).toHaveBeenCalledWith(appPaths)
     expect(registerWorkspaceIpc).toHaveBeenCalledWith(appPaths)

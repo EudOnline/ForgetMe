@@ -15,7 +15,6 @@ import { EnrichmentJobsPage } from '../pages/EnrichmentJobsPage'
 import { GroupPortraitPage } from '../pages/GroupPortraitPage'
 import { ImportPage } from '../pages/ImportPage'
 import { MemoryWorkspacePage } from '../pages/MemoryWorkspacePage'
-import { ObjectiveWorkbenchPage } from '../pages/ObjectiveWorkbenchPage'
 import { PeoplePage } from '../pages/PeoplePage'
 import { PersonDetailPage } from '../pages/PersonDetailPage'
 import { PreservationPage } from '../pages/PreservationPage'
@@ -30,7 +29,6 @@ import {
   openGroupPortrait,
   openImport,
   openMemoryWorkspace,
-  openObjectiveWorkbench,
   openPeople,
   openPersonDetail,
   openPreservation,
@@ -269,16 +267,6 @@ export default function AppShell() {
                   {t('nav.documentEvidence')}
                 </button>
               </li>
-              <li>
-                <button
-                  className="fmNavItem"
-                  type="button"
-                  onClick={() => dispatch(openObjectiveWorkbench())}
-                  aria-current={navMatches('objective-workbench', route.kind) ? 'page' : undefined}
-                >
-                  {t('nav.objectiveWorkbench')}
-                </button>
-              </li>
             </ul>
           </div>
         </nav>
@@ -336,7 +324,6 @@ export default function AppShell() {
             {route.kind === 'preservation' ? <PreservationPage /> : null}
             {route.kind === 'enrichment' ? <EnrichmentJobsPage onSelectFile={(fileId) => dispatch(openDocumentEvidence(fileId))} /> : null}
             {route.kind === 'document-evidence' ? <DocumentEvidencePage fileId={route.fileId} /> : null}
-            {route.kind === 'objective-workbench' ? <ObjectiveWorkbenchPage /> : null}
           </div>
         </section>
       </div>

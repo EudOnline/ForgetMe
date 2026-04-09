@@ -71,11 +71,12 @@ import type {
   PersonAgentAuditEventRecord,
   PersonAgentCapsuleRecord,
   PersonAgentInspectionHighlight,
+  PersonAgentInspectionOverview,
   PersonAgentInspectionRecommendations,
   PersonAgentMemorySummary,
   PersonAgentRecord,
   PersonAgentRefreshQueueRecord
-} from '../../../shared/archiveContracts'
+} from '../../../../shared/archiveContracts'
 
 const PERSON_AGENT_RUNTIME_RUNNER_STALLED_THRESHOLD_MINUTES = 15
 const PERSON_AGENT_RUNTIME_RUNNER_STALLED_THRESHOLD_MS =
@@ -115,7 +116,7 @@ function buildPersonAgentInspectionOverview(input: {
   auditEvents: PersonAgentAuditEventRecord[]
   runnerState: ReturnType<typeof getPersonAgentRuntimeRunnerState>
   now: string
-}) {
+}): PersonAgentInspectionOverview {
   const latestStrategyChangeEvent = input.auditEvents.find((event) => event.eventKind === 'strategy_profile_updated') ?? null
   const latestStrategyChangePayload = latestStrategyChangeEvent?.payload ?? {}
   const changedFields = Array.isArray(latestStrategyChangePayload.changedFields)

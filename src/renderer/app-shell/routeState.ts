@@ -14,7 +14,6 @@ export type AppRoute =
   | { kind: 'enrichment' }
   | { kind: 'document-evidence'; fileId: string | null }
   | { kind: 'preservation' }
-  | { kind: 'objective-workbench' }
 
 export type AppShellState = {
   route: AppRoute
@@ -48,7 +47,5 @@ export function pageLabelKeyForRoute(route: AppRoute) {
       return 'page.ops.enrichmentJobs'
     case 'document-evidence':
       return 'page.evidence.document'
-    case 'objective-workbench':
-      return 'page.ops.objectiveWorkbench'
   }
 }

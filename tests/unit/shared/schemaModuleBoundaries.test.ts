@@ -15,7 +15,7 @@ describe('shared schema and contract boundaries', () => {
     expect(fs.existsSync(repoPath('src/shared/schemas/people.ts'))).toBe(true)
     expect(fs.existsSync(repoPath('src/shared/schemas/review.ts'))).toBe(true)
     expect(fs.existsSync(repoPath('src/shared/schemas/workspace.ts'))).toBe(true)
-    expect(fs.existsSync(repoPath('src/shared/schemas/objective.ts'))).toBe(true)
+    expect(fs.existsSync(repoPath('src/shared/schemas/objective.ts'))).toBe(false)
     expect(fs.existsSync(repoPath('src/shared/schemas/ops.ts'))).toBe(true)
   })
 
@@ -24,7 +24,7 @@ describe('shared schema and contract boundaries', () => {
     expect(fs.existsSync(repoPath('src/shared/contracts/people.ts'))).toBe(true)
     expect(fs.existsSync(repoPath('src/shared/contracts/review.ts'))).toBe(true)
     expect(fs.existsSync(repoPath('src/shared/contracts/workspace.ts'))).toBe(true)
-    expect(fs.existsSync(repoPath('src/shared/contracts/objective.ts'))).toBe(true)
+    expect(fs.existsSync(repoPath('src/shared/contracts/objective.ts'))).toBe(false)
     expect(fs.existsSync(repoPath('src/shared/contracts/ops.ts'))).toBe(true)
   })
 
@@ -37,7 +37,6 @@ describe('shared schema and contract boundaries', () => {
       readRepoFile('src/main/modules/people/registerPeopleIpc.ts'),
       readRepoFile('src/main/modules/review/registerReviewIpc.ts'),
       readRepoFile('src/main/modules/workspace/registerWorkspaceIpc.ts'),
-      readRepoFile('src/main/modules/objective/registerObjectiveIpc.ts'),
       readRepoFile('src/main/modules/ops/registerOpsIpc.ts')
     ]
 

@@ -39,7 +39,10 @@ function appPathsFixture(): AppPaths {
     vaultDir: '/tmp/forgetme/vault',
     vaultOriginalsDir: '/tmp/forgetme/vault/originals',
     importReportsDir: '/tmp/forgetme/reports',
-    preservationReportsDir: '/tmp/forgetme/preservation-reports'
+    preservationReportsDir: '/tmp/forgetme/preservation-reports',
+    personAgentRootDir: '/tmp/forgetme/person-agents',
+    personAgentWorkspaceDir: '/tmp/forgetme/person-agents/workspaces',
+    personAgentStateDir: '/tmp/forgetme/person-agents/state'
   }
 }
 

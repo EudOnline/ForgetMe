@@ -10,9 +10,9 @@ describe('startMainProcess', () => {
       approvedDraftProviderSendRetryRunner: { stop: vi.fn() },
       personAgentRuntimeRunner: { stop: vi.fn() }
     })
-    let resolveStartupRepairs: (() => void) | null = null
+    const startupRepairsGate: { resolve: (() => void) | null } = { resolve: null }
     const runStartupRepairs = vi.fn().mockImplementation(() => new Promise<void>((resolve) => {
-      resolveStartupRepairs = resolve
+      startupRepairsGate.resolve = resolve
     }))
 
     const startupPromise = initializeMainProcess({
@@ -29,7 +29,7 @@ describe('startMainProcess', () => {
     expect(startBackgroundRunners).not.toHaveBeenCalled()
     expect(createWindow).not.toHaveBeenCalled()
 
-    resolveStartupRepairs?.()
+    startupRepairsGate.resolve?.()
     await startupPromise
 
     expect(startBackgroundRunners).toHaveBeenCalledTimes(1)

@@ -75,10 +75,6 @@ export function openPreservation() {
   return navigate({ kind: 'preservation' })
 }
 
-export function openObjectiveWorkbench() {
-  return navigate({ kind: 'objective-workbench' })
-}
-
 export function openReviewQueueFromCitation(citation: MemoryWorkspaceCitation) {
   return openReviewQueue({
     initialJournalQuery: citation.targetId,

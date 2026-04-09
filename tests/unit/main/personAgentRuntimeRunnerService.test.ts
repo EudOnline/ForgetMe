@@ -4,6 +4,7 @@ import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { ensureAppPaths } from '../../../src/main/services/appPaths'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
+import type { PersonAgentRefreshQueueRecord } from '../../../src/shared/archiveContracts'
 import { materializePersonAgentCapsule } from '../../../src/main/services/personAgentCapsuleService'
 import { upsertPersonAgent } from '../../../src/main/services/governancePersistenceService'
 import {
@@ -242,12 +243,20 @@ describe('personAgentRuntimeRunnerService', () => {
         source: 'refresh_sync',
         now: NOW
       })
-      return {
+      const refreshRecord: PersonAgentRefreshQueueRecord = {
         refreshId: 'refresh-1',
         canonicalPersonId: 'cp-1',
         personAgentId: personAgent.personAgentId,
-        status: 'completed'
+        status: 'completed',
+        reasons: ['runtime_sync'],
+        requestedAt: NOW,
+        startedAt: NOW,
+        completedAt: NOW,
+        lastError: null,
+        createdAt: NOW,
+        updatedAt: NOW
       }
+      return refreshRecord
     })
     const syncRuntimeArtifacts = vi.fn()
 
