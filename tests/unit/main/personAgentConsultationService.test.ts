@@ -182,7 +182,13 @@ describe('personAgentConsultationService', () => {
       question: '她的生日是什么？',
       answerPack: expect.objectContaining({
         questionClassification: 'profile_fact',
-        candidateAnswer: expect.stringContaining('1997-02-03')
+        candidateAnswer: expect.stringContaining('1997-02-03'),
+        capsulePromptBundle: expect.objectContaining({
+          operationKind: 'consultation',
+          promptInput: '她的生日是什么？',
+          systemPrompt: expect.stringContaining('Alice Chen'),
+          userPrompt: expect.stringContaining('她的生日是什么？')
+        })
       })
     })
 
@@ -217,6 +223,10 @@ describe('personAgentConsultationService', () => {
       sessionId: firstTurn!.sessionId
     })
     expect(detail?.turns.map((turn) => turn.ordinal)).toEqual([1, 2])
+    expect(detail?.turns[0]?.answerPack.capsulePromptBundle).toMatchObject({
+      operationKind: 'consultation',
+      promptInput: '她的生日是什么？'
+    })
 
     const runtimeState = getPersonAgentRuntimeState(db, {
       canonicalPersonId: 'cp-1'

@@ -754,6 +754,25 @@ export type PersonAgentCapsuleRuntimeContext = {
   }>
 }
 
+export type PersonAgentCapsulePromptBundle = {
+  bundleVersion: 1
+  operationKind: 'consultation' | 'task_run'
+  capsuleId: string
+  personAgentId: string
+  canonicalPersonId: string
+  sessionNamespace: string
+  promptInput: string
+  systemPrompt: string
+  userPrompt: string
+  context: {
+    identitySummary: string
+    memorySummary: string
+    runtimeSummary: string
+    latestCheckpointSummary: string | null
+    recentActivity: string[]
+  }
+}
+
 export type PersonAgentAuditEventRecord = {
   auditEventId: string
   personAgentId: string | null
@@ -947,6 +966,7 @@ export type PersonAgentTaskRunRecord = {
   suggestedQuestion: string | null
   actionItems: PersonAgentTaskRunAction[]
   source: string | null
+  promptBundle?: PersonAgentCapsulePromptBundle | null
   capsuleId?: string | null
   capsuleSessionNamespace?: string | null
   createdAt: string
@@ -1097,6 +1117,7 @@ export type PersonAgentAnswerPack = {
     factsVersion: number
     interactionVersion: number
   }
+  capsulePromptBundle?: PersonAgentCapsulePromptBundle | null
   capsuleRuntimeContext?: PersonAgentCapsuleRuntimeContext | null
 }
 

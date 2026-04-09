@@ -17,6 +17,7 @@ import {
   classifyPersonAgentQuestion,
   createCitation
 } from './memoryWorkspaceResponseHelperService'
+import { buildPersonAgentCapsulePromptBundle } from './personAgentCapsulePromptBundleService'
 import { buildPersonAgentCapsulePromptContext } from './personAgentCapsulePromptContextService'
 import { createDefaultPersonAgentStrategyProfile } from './personAgentStrategyService'
 
@@ -203,6 +204,12 @@ export function buildPersonAgentAnswerPack(db: ArchiveDatabase, input: {
     personAgentId: personAgent.personAgentId,
     canonicalPersonId: input.canonicalPersonId
   })
+  const capsulePromptBundle = buildPersonAgentCapsulePromptBundle(db, {
+    personAgentId: personAgent.personAgentId,
+    canonicalPersonId: input.canonicalPersonId,
+    operationKind: 'consultation',
+    promptInput: input.question
+  })
 
   let candidateAnswer = ''
   let supportingFacts: PersonAgentAnswerPack['supportingFacts'] = []
@@ -289,6 +296,7 @@ export function buildPersonAgentAnswerPack(db: ArchiveDatabase, input: {
       factsVersion: personAgent.factsVersion,
       interactionVersion: personAgent.interactionVersion
     },
+    capsulePromptBundle,
     capsuleRuntimeContext
   }
 }

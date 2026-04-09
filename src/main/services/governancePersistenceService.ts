@@ -12,6 +12,7 @@ import type {
   PersonAgentCapsuleCheckpointKind,
   PersonAgentCapsuleIdentityProfile,
   PersonAgentCapsuleMemoryCheckpointRecord,
+  PersonAgentCapsulePromptBundle,
   PersonAgentCapsuleRecord,
   PersonAgentCapsuleStatus,
   PersonAgentConsultationSessionDetail,
@@ -224,6 +225,7 @@ type PersonAgentTaskRunRow = {
   summary: string
   suggestedQuestion: string | null
   actionItemsJson: string
+  promptBundleJson: string | null
   source: string | null
   createdAt: string
   updatedAt: string
@@ -296,6 +298,23 @@ function parseJsonObject(value: string): Record<string, unknown> {
   }
 
   return {}
+}
+
+function parseJsonObjectOrNull(value: string | null): Record<string, unknown> | null {
+  if (!value) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>
+    }
+  } catch {
+    return null
+  }
+
+  return null
 }
 
 function parseStrategyProfile(value: string | null): PersonAgentStrategyProfile | null {
@@ -579,6 +598,7 @@ function decoratePersonAgentTaskQueueRunnerStateRecord(
       summary,
       suggested_question as suggestedQuestion,
       action_items_json as actionItemsJson,
+      prompt_bundle_json as promptBundleJson,
       source,
       created_at as createdAt,
       updated_at as updatedAt
@@ -651,6 +671,7 @@ function mapPersonAgentTaskRunRow(row: PersonAgentTaskRunRow): PersonAgentTaskRu
     summary: row.summary,
     suggestedQuestion: row.suggestedQuestion,
     actionItems: parseJsonArray<PersonAgentTaskRunAction>(row.actionItemsJson),
+    promptBundle: parseJsonObjectOrNull(row.promptBundleJson) as PersonAgentCapsulePromptBundle | null,
     source: row.source,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt
@@ -2005,6 +2026,7 @@ export function appendPersonAgentTaskRun(db: ArchiveDatabase, input: {
   summary: string
   suggestedQuestion?: string | null
   actionItems?: PersonAgentTaskRunAction[]
+  promptBundle?: PersonAgentCapsulePromptBundle | null
   source?: string | null
   createdAt?: string
   updatedAt?: string
@@ -2026,10 +2048,11 @@ export function appendPersonAgentTaskRun(db: ArchiveDatabase, input: {
       summary,
       suggested_question,
       action_items_json,
+      prompt_bundle_json,
       source,
       created_at,
       updated_at
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     runId,
     input.taskId,
@@ -2041,6 +2064,7 @@ export function appendPersonAgentTaskRun(db: ArchiveDatabase, input: {
     input.summary,
     input.suggestedQuestion ?? null,
     JSON.stringify(input.actionItems ?? []),
+    input.promptBundle ? JSON.stringify(input.promptBundle) : null,
     input.source ?? null,
     createdAt,
     updatedAt
@@ -2118,6 +2142,7 @@ export function listPersonAgentTaskRuns(
       summary,
       suggested_question as suggestedQuestion,
       action_items_json as actionItemsJson,
+      prompt_bundle_json as promptBundleJson,
       source,
       created_at as createdAt,
       updated_at as updatedAt

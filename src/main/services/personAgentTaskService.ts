@@ -22,6 +22,7 @@ import {
   appendPersonAgentCapsuleActivityEvent,
   syncPersonAgentCapsuleRuntimeArtifacts
 } from './personAgentCapsuleRuntimeArtifactsService'
+import { buildPersonAgentCapsulePromptBundle } from './personAgentCapsulePromptBundleService'
 
 type DerivedTaskRow = Omit<
   PersonAgentTaskRecord,
@@ -381,8 +382,17 @@ export function executePersonAgentTask(db: ArchiveDatabase, input: {
 
   const now = input.now ?? new Date().toISOString()
   const runDraft = buildTaskExecutionRun(db, task)
+  const promptBundle = buildPersonAgentCapsulePromptBundle(db, {
+    personAgentId: task.personAgentId,
+    canonicalPersonId: task.canonicalPersonId,
+    operationKind: 'task_run',
+    promptInput: runDraft.summary,
+    taskKind: runDraft.taskKind,
+    suggestedQuestion: runDraft.suggestedQuestion
+  })
   const run = appendPersonAgentTaskRun(db, {
     ...runDraft,
+    promptBundle,
     source: input.source ?? null,
     createdAt: now,
     updatedAt: now

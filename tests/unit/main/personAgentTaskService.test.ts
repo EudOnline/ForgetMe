@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { ensureAppPaths } from '../../../src/main/services/appPaths'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
 import {
   appendPersonAgentAuditEvent,
@@ -19,14 +20,19 @@ import {
   syncPersonAgentTasks,
   transitionPersonAgentTask
 } from '../../../src/main/services/personAgentTaskService'
+import { materializePersonAgentCapsule } from '../../../src/main/services/personAgentCapsuleService'
 
 const NOW = '2026-04-08T12:00:00.000Z'
 
 function setupDatabase() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-person-agent-tasks-'))
+  const appPaths = ensureAppPaths(root)
   const db = openDatabase(path.join(root, 'archive.sqlite'))
   runMigrations(db)
-  return db
+  return {
+    db,
+    appPaths
+  }
 }
 
 function seedCanonicalPerson(db: ReturnType<typeof openDatabase>, input: {
@@ -74,7 +80,7 @@ function seedCanonicalPerson(db: ReturnType<typeof openDatabase>, input: {
   )
 }
 
-function seedTaskFixture(db: ReturnType<typeof openDatabase>) {
+function seedTaskFixture(db: ReturnType<typeof openDatabase>, appPaths?: ReturnType<typeof ensureAppPaths>) {
   seedCanonicalPerson(db, {
     canonicalPersonId: 'cp-1',
     displayName: 'Alice Chen',
@@ -162,12 +168,23 @@ function seedTaskFixture(db: ReturnType<typeof openDatabase>) {
     createdAt: '2026-04-08T12:01:00.000Z'
   })
 
+  if (appPaths) {
+    materializePersonAgentCapsule(db, {
+      appPaths,
+      personAgent,
+      activationSource: 'import_batch',
+      checkpointKind: 'activation',
+      summary: 'Initial capsule for task runtime tests.',
+      now: NOW
+    })
+  }
+
   return personAgent
 }
 
 describe('personAgentTaskService', () => {
   it('derives pending refresh, conflict, coverage, interaction, and strategy tasks', () => {
-    const db = setupDatabase()
+    const { db } = setupDatabase()
     const personAgent = seedTaskFixture(db)
 
     const tasks = syncPersonAgentTasks(db, {
@@ -196,7 +213,7 @@ describe('personAgentTaskService', () => {
   })
 
   it('replaces stale task sets instead of duplicating them', () => {
-    const db = setupDatabase()
+    const { db } = setupDatabase()
     seedTaskFixture(db)
 
     syncPersonAgentTasks(db, {
@@ -228,7 +245,7 @@ describe('personAgentTaskService', () => {
   })
 
   it('preserves dismissed task state across sync when the derived task key is unchanged', () => {
-    const db = setupDatabase()
+    const { db } = setupDatabase()
     seedTaskFixture(db)
 
     const firstSync = syncPersonAgentTasks(db, {
@@ -265,7 +282,7 @@ describe('personAgentTaskService', () => {
   })
 
   it('reopens a derived task when its source fingerprint changes', () => {
-    const db = setupDatabase()
+    const { db } = setupDatabase()
     const personAgent = seedTaskFixture(db)
 
     const firstSync = syncPersonAgentTasks(db, {
@@ -331,7 +348,7 @@ describe('personAgentTaskService', () => {
   })
 
   it('transitions tasks and records audit events for task status updates', () => {
-    const db = setupDatabase()
+    const { db } = setupDatabase()
     seedTaskFixture(db)
 
     const [firstTask] = syncPersonAgentTasks(db, {
@@ -398,8 +415,8 @@ describe('personAgentTaskService', () => {
   })
 
   it('executes conflict-resolution tasks into completed task runs', () => {
-    const db = setupDatabase()
-    seedTaskFixture(db)
+    const { db, appPaths } = setupDatabase()
+    seedTaskFixture(db, appPaths)
 
     const tasks = syncPersonAgentTasks(db, {
       canonicalPersonId: 'cp-1',
@@ -430,7 +447,13 @@ describe('personAgentTaskService', () => {
         })
       ],
       source: 'workspace_ui',
-      createdAt: '2026-04-08T12:06:00.000Z'
+      createdAt: '2026-04-08T12:06:00.000Z',
+      promptBundle: expect.objectContaining({
+        operationKind: 'task_run',
+        promptInput: 'Review the conflicting evidence for school_name before answering with a single value.',
+        systemPrompt: expect.stringContaining('Alice Chen'),
+        userPrompt: expect.stringContaining('resolve_conflict')
+      })
     })
     expect(listPersonAgentTasks(db, {
       canonicalPersonId: 'cp-1',
@@ -446,7 +469,10 @@ describe('personAgentTaskService', () => {
     })).toEqual([
       expect.objectContaining({
         taskId: conflictTask!.taskId,
-        runStatus: 'completed'
+        runStatus: 'completed',
+        promptBundle: expect.objectContaining({
+          operationKind: 'task_run'
+        })
       })
     ])
     expect(listPersonAgentAuditEvents(db, {
@@ -468,8 +494,8 @@ describe('personAgentTaskService', () => {
   })
 
   it('records blocked runs for await-refresh tasks without completing them', () => {
-    const db = setupDatabase()
-    seedTaskFixture(db)
+    const { db, appPaths } = setupDatabase()
+    seedTaskFixture(db, appPaths)
 
     const tasks = syncPersonAgentTasks(db, {
       canonicalPersonId: 'cp-1',
@@ -510,8 +536,8 @@ describe('personAgentTaskService', () => {
   })
 
   it('auto-processes executable tasks while leaving await-refresh pending', () => {
-    const db = setupDatabase()
-    seedTaskFixture(db)
+    const { db, appPaths } = setupDatabase()
+    seedTaskFixture(db, appPaths)
 
     syncPersonAgentTasks(db, {
       canonicalPersonId: 'cp-1',
