@@ -62,7 +62,7 @@ export function getWorkspaceClient(): WorkspaceClient {
     listMemoryWorkspaceSessions: bridgeMethod('listMemoryWorkspaceSessions', async () => []),
     getMemoryWorkspaceSession: bridgeMethod('getMemoryWorkspaceSession', async () => null),
     askMemoryWorkspacePersisted: bridgeMethod('askMemoryWorkspacePersisted', async () => null),
-    runPersonAgentCapsuleRuntime: bridgeMethod('runPersonAgentCapsuleRuntime', async () => null),
+    runPersonAgentCapsuleRuntime: bridgeMethod('runPersonAgentCapsuleRuntime', async () => ({ resultKind: 'not_found' as const })),
     getPersonAgentCapsuleRuntimeInspection: bridgeMethod('getPersonAgentCapsuleRuntimeInspection', async () => null),
     listPersonAgentConsultationSessions: bridgeMethod('listPersonAgentConsultationSessions', async () => []),
     getPersonAgentConsultationSession: bridgeMethod('getPersonAgentConsultationSession', async () => null),

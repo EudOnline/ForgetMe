@@ -37,10 +37,12 @@ import type {
   PersonAgentAnswerPack,
   PersonAgentFactMemoryRecord,
   PersonAgentInteractionMemoryRecord,
+  PersonAgentCapsuleRuntimeInspection,
   PersonAgentPromotionScore,
   PersonAgentRecord,
   RunMemoryWorkspaceCompareInput,
   RunMemoryWorkspaceCompareMatrixInput,
+  RunPersonAgentCapsuleRuntimeResult,
   TransitionPersonaDraftReviewInput,
   UpdatePersonaDraftReviewInput
 } from '../../../src/shared/archiveContracts'
@@ -841,6 +843,72 @@ describe('phase-eight memory workspace contracts', () => {
     })).toEqual({
       canonicalPersonId: 'cp-1'
     })
+
+    const runtimeResult: RunPersonAgentCapsuleRuntimeResult = {
+      resultKind: 'consultation_turn',
+      consultationTurn: {
+        turnId: 'pct-1',
+        sessionId: 'pcs-1',
+        personAgentId: 'pa-1',
+        canonicalPersonId: 'cp-1',
+        ordinal: 1,
+        question: '她的生日是什么？',
+        answerPack,
+        createdAt: '2026-04-06T10:15:00.000Z'
+      }
+    }
+    const runtimeInspection: PersonAgentCapsuleRuntimeInspection = {
+      inspectionKind: 'capsule_runtime',
+      canonicalPersonId: 'cp-1',
+      overview: {
+        hasActiveAgent: true,
+        pendingRefreshCount: 0,
+        openConflictCount: 0,
+        coverageGapCount: 0,
+        interactionTopicCount: 1,
+        totalQuestionCount: 4,
+        latestRefreshRequestedAt: null,
+        latestStrategyChange: null,
+        capsuleStatus: 'missing',
+        activationSource: null,
+        taskQueueRunner: {
+          status: 'missing',
+          stalled: false,
+          thresholdMinutes: 15,
+          reason: null,
+          lastHeartbeatAt: null,
+          lastProcessedTaskCount: 0,
+          totalProcessedTaskCount: 0,
+          lastError: null
+        }
+      },
+      recommendations: {
+        attentionLevel: 'steady',
+        nextBestAction: 'monitor',
+        blockingReason: null,
+        suggestedQuestion: null,
+        recommendedTopics: []
+      },
+      highlights: [],
+      capsule: null,
+      capsuleCheckpoint: null,
+      runnerState: null,
+      tasks: [],
+      state: personAgent,
+      memorySummary: {
+        canonicalPersonId: 'cp-1',
+        factSummary: null,
+        interactionMemories: [interactionMemoryRecord]
+      },
+      refreshQueue: [],
+      auditEvents: []
+    }
+    expect(runtimeResult.resultKind).toBe('consultation_turn')
+    expect(runtimeInspection.inspectionKind).toBe('capsule_runtime')
+    expectTypeOf<ArchiveApi['runPersonAgentCapsuleRuntime']>()
+      .toEqualTypeOf<(input: Parameters<ArchiveApi['runPersonAgentCapsuleRuntime']>[0]) => Promise<RunPersonAgentCapsuleRuntimeResult>>()
+    expectTypeOf<ArchiveApi['getPersonAgentCapsuleRuntimeInspection']>()
+      .toEqualTypeOf<(input: Parameters<ArchiveApi['getPersonAgentCapsuleRuntimeInspection']>[0]) => Promise<PersonAgentCapsuleRuntimeInspection | null>>()
 
     expect(getPersonAgentMemorySummaryInputSchema.parse({
       canonicalPersonId: 'cp-1'

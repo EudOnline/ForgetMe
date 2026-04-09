@@ -69,6 +69,7 @@ import {
 } from '../../../services/approvedDraftProviderSendService'
 import { listApprovedDraftSendDestinations } from '../../../services/approvedDraftSendDestinationService'
 import type {
+  PersonAgentCapsuleRuntimeInspection,
   RunPersonAgentCapsuleRuntimeInput,
   RunPersonAgentCapsuleRuntimeResult,
   PersonAgentAuditEventRecord,
@@ -465,26 +466,50 @@ export function createWorkspaceModule(appPaths: AppPaths) {
     async runPersonAgentCapsuleRuntime(input: RunPersonAgentCapsuleRuntimeInput): Promise<RunPersonAgentCapsuleRuntimeResult> {
       return this.withArchiveDatabase((db) => {
         if (input.operationKind === 'consultation') {
-          return askPersonAgentConsultationPersisted(db, {
+          const consultationTurn = askPersonAgentConsultationPersisted(db, {
             canonicalPersonId: input.canonicalPersonId,
             question: input.question,
             sessionId: input.sessionId
           })
+          return consultationTurn
+            ? {
+                resultKind: 'consultation_turn',
+                consultationTurn
+              }
+            : {
+                resultKind: 'not_found'
+              }
         }
 
         if (input.operationKind === 'transition_task') {
-          return transitionPersonAgentTask(db, {
+          const task = transitionPersonAgentTask(db, {
             taskId: input.taskId,
             status: input.status,
             source: input.source,
             reason: input.reason
           })
+          return task
+            ? {
+                resultKind: 'task_transition',
+                task
+              }
+            : {
+                resultKind: 'not_found'
+              }
         }
 
-        return executePersonAgentTask(db, {
+        const taskRun = executePersonAgentTask(db, {
           taskId: input.taskId,
           source: input.source
         })
+        return taskRun
+          ? {
+              resultKind: 'task_run',
+              taskRun
+            }
+          : {
+              resultKind: 'not_found'
+            }
       })
     },
     async listPersonAgentConsultationSessions(input: Parameters<typeof listPersonAgentConsultationSessions>[1] = {}) {
@@ -556,7 +581,7 @@ export function createWorkspaceModule(appPaths: AppPaths) {
         })
       })
     },
-    async getPersonAgentCapsuleRuntimeInspection(input: { canonicalPersonId: string }) {
+    async getPersonAgentCapsuleRuntimeInspection(input: { canonicalPersonId: string }): Promise<PersonAgentCapsuleRuntimeInspection | null> {
       return this.withArchiveDatabase((db) => {
         const now = new Date().toISOString()
         const state = getPersonAgentByCanonicalPersonId(db, input)
@@ -606,6 +631,7 @@ export function createWorkspaceModule(appPaths: AppPaths) {
         }
 
         return {
+          inspectionKind: 'capsule_runtime',
           canonicalPersonId: input.canonicalPersonId,
           overview,
           recommendations: buildPersonAgentInspectionRecommendations({

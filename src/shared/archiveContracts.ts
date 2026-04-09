@@ -1274,13 +1274,28 @@ export type RunPersonAgentCapsuleRuntimeInput =
     }
 
 export type RunPersonAgentCapsuleRuntimeResult =
-  | PersonAgentConsultationTurnRecord
-  | PersonAgentTaskRecord
-  | PersonAgentTaskRunRecord
-  | null
+  | {
+      resultKind: 'consultation_turn'
+      consultationTurn: PersonAgentConsultationTurnRecord
+    }
+  | {
+      resultKind: 'task_transition'
+      task: PersonAgentTaskRecord
+    }
+  | {
+      resultKind: 'task_run'
+      taskRun: PersonAgentTaskRunRecord
+    }
+  | {
+      resultKind: 'not_found'
+    }
 
 export type GetPersonAgentCapsuleRuntimeInspectionInput = {
   canonicalPersonId: string
+}
+
+export type PersonAgentCapsuleRuntimeInspection = PersonAgentInspectionBundle & {
+  inspectionKind: 'capsule_runtime'
 }
 
 export type ListPersonAgentConsultationSessionsInput = {
@@ -2263,7 +2278,7 @@ export interface ArchiveApi {
   runPersonAgentCapsuleRuntime: (input: RunPersonAgentCapsuleRuntimeInput) => Promise<RunPersonAgentCapsuleRuntimeResult>
   getPersonAgentCapsuleRuntimeInspection: (
     input: GetPersonAgentCapsuleRuntimeInspectionInput
-  ) => Promise<PersonAgentInspectionBundle | null>
+  ) => Promise<PersonAgentCapsuleRuntimeInspection | null>
   listPersonAgentConsultationSessions: (input?: ListPersonAgentConsultationSessionsInput) => Promise<PersonAgentConsultationSessionSummary[]>
   getPersonAgentConsultationSession: (input: GetPersonAgentConsultationSessionInput) => Promise<PersonAgentConsultationSessionDetail | null>
   getPersonAgentRuntimeState: (input: GetPersonAgentRuntimeStateInput) => Promise<PersonAgentRuntimeStateRecord | null>

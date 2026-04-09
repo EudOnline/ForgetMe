@@ -6,6 +6,8 @@ import type { AppPaths } from '../../../src/main/services/appPaths'
 
 const {
   handlerMap,
+  removeHandler,
+  ipcHandle,
   showOpenDialog,
   shellOpenPath,
   shellOpenExternal,
@@ -42,6 +44,12 @@ const {
   listPersonAgentInteractionMemories
 } = vi.hoisted(() => ({
   handlerMap: new Map<string, (event: unknown, payload?: unknown) => Promise<unknown>>(),
+  removeHandler: vi.fn((channel: string) => {
+    handlerMap.delete(channel)
+  }),
+  ipcHandle: vi.fn((channel: string, handler: (event: unknown, payload?: unknown) => Promise<unknown>) => {
+    handlerMap.set(channel, handler)
+  }),
   showOpenDialog: vi.fn(),
   shellOpenPath: vi.fn(),
   shellOpenExternal: vi.fn(),
@@ -87,12 +95,8 @@ vi.mock('electron', () => ({
     openExternal: shellOpenExternal
   },
   ipcMain: {
-    removeHandler: vi.fn((channel: string) => {
-      handlerMap.delete(channel)
-    }),
-    handle: vi.fn((channel: string, handler: (event: unknown, payload?: unknown) => Promise<unknown>) => {
-      handlerMap.set(channel, handler)
-    })
+    removeHandler,
+    handle: ipcHandle
   }
 }))
 
@@ -232,6 +236,8 @@ function writeApprovedDraftPublicationPackage(
 describe('registerWorkspaceIpc session handlers', () => {
   beforeEach(() => {
     handlerMap.clear()
+    removeHandler.mockClear()
+    ipcHandle.mockClear()
     openDatabase.mockReset()
     runMigrations.mockReset()
     askMemoryWorkspacePersistedService.mockReset()
@@ -251,6 +257,17 @@ describe('registerWorkspaceIpc session handlers', () => {
     listPersonAgentTasks.mockReset()
     getPersonAgentFactMemorySummary.mockReset()
     listPersonAgentInteractionMemories.mockReset()
+  })
+
+  it('removes unified and deleted legacy person-agent channels before registration', () => {
+    registerWorkspaceIpc(appPathsFixture())
+
+    expect(removeHandler).toHaveBeenCalledWith('archive:runPersonAgentCapsuleRuntime')
+    expect(removeHandler).toHaveBeenCalledWith('archive:getPersonAgentCapsuleRuntimeInspection')
+    expect(removeHandler).toHaveBeenCalledWith('archive:askPersonAgentConsultation')
+    expect(removeHandler).toHaveBeenCalledWith('archive:transitionPersonAgentTask')
+    expect(removeHandler).toHaveBeenCalledWith('archive:executePersonAgentTask')
+    expect(removeHandler).toHaveBeenCalledWith('archive:getPersonAgentInspectionBundle')
   })
 
   it('passes persisted session asks through ipc and preserves conversation context cards', async () => {
@@ -365,14 +382,12 @@ describe('registerWorkspaceIpc session handlers', () => {
       sessionId: 'pcs-1'
     })
 
-    expect(askPersonAgentConsultationPersisted).toHaveBeenCalledWith(expect.anything(), {
-      canonicalPersonId: 'cp-1',
-      question: '她的生日是什么？',
-      sessionId: 'pcs-1'
-    })
     expect(result).toEqual(expect.objectContaining({
-      sessionId: 'pcs-1',
-      ordinal: 1
+      resultKind: 'consultation_turn',
+      consultationTurn: expect.objectContaining({
+        sessionId: 'pcs-1',
+        ordinal: 1
+      })
     }))
     expect(close).toHaveBeenCalled()
   })
@@ -942,6 +957,7 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
       canonicalPersonId: 'cp-1'
     })
     expect(result).toEqual(expect.objectContaining({
+      inspectionKind: 'capsule_runtime',
       canonicalPersonId: 'cp-1',
       overview: expect.objectContaining({
         hasActiveAgent: true,
@@ -1189,6 +1205,7 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
       const result = await handler?.({}, { canonicalPersonId: 'cp-1' })
 
       expect(result).toEqual(expect.objectContaining({
+        inspectionKind: 'capsule_runtime',
         overview: expect.objectContaining({
           taskQueueRunner: expect.objectContaining({
             status: 'stalled',
@@ -1276,12 +1293,6 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
       canonicalPersonId: 'cp-1',
       status: 'pending'
     })
-    expect(transitionPersonAgentTask).toHaveBeenCalledWith(expect.anything(), {
-      taskId: 'task-1',
-      status: 'dismissed',
-      source: 'workspace_ui',
-      reason: 'handled externally'
-    })
     expect(listed).toEqual([
       expect.objectContaining({
         taskKey: 'resolve_conflict:conflict.school_name:hash-conflict',
@@ -1289,10 +1300,13 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
       })
     ])
     expect(transitioned).toEqual(expect.objectContaining({
-      taskId: 'task-1',
-      status: 'dismissed',
-      statusSource: 'workspace_ui',
-      statusReason: 'handled externally'
+      resultKind: 'task_transition',
+      task: expect.objectContaining({
+        taskId: 'task-1',
+        status: 'dismissed',
+        statusSource: 'workspace_ui',
+        statusReason: 'handled externally'
+      })
     }))
     expect(close).toHaveBeenCalledTimes(2)
   })
@@ -1365,10 +1379,6 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
     expect(listPersonAgentTaskRuns).toHaveBeenCalledWith(expect.anything(), {
       canonicalPersonId: 'cp-1'
     })
-    expect(executePersonAgentTask).toHaveBeenCalledWith(expect.anything(), {
-      taskId: 'task-2',
-      source: 'workspace_ui'
-    })
     expect(listed).toEqual([
       expect.objectContaining({
         runId: 'run-1',
@@ -1376,9 +1386,12 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
       })
     ])
     expect(executed).toEqual(expect.objectContaining({
-      runId: 'run-2',
-      taskKind: 'expand_topic',
-      runStatus: 'completed'
+      resultKind: 'task_run',
+      taskRun: expect.objectContaining({
+        runId: 'run-2',
+        taskKind: 'expand_topic',
+        runStatus: 'completed'
+      })
     }))
     expect(close).toHaveBeenCalledTimes(2)
   })
