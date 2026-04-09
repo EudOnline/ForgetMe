@@ -20,15 +20,10 @@ import {
   listMemoryWorkspaceSessions
 } from '../../../services/memoryWorkspaceSessionService'
 import {
-  askPersonAgentConsultationPersisted,
   getPersonAgentConsultationRuntimeState,
   getPersonAgentConsultationSession,
   listPersonAgentConsultationSessions
 } from '../../../services/personAgentConsultationService'
-import {
-  executePersonAgentTask,
-  transitionPersonAgentTask
-} from '../../../services/personAgentTaskService'
 import {
   getPersonAgentByCanonicalPersonId,
   getPersonAgentCapsule,
@@ -41,6 +36,7 @@ import {
   listPersonAgentTasks
 } from '../../../services/governancePersistenceService'
 import { getPersonAgentFactMemorySummary } from '../../../services/personAgentFactMemoryService'
+import { runPersonAgentRuntime } from '../../../services/personAgentRuntimeService'
 import {
   createPersonaDraftReviewFromTurn,
   getPersonaDraftReviewByTurn,
@@ -464,53 +460,15 @@ export function createWorkspaceModule(appPaths: AppPaths) {
       return this.withArchiveDatabase((db) => askMemoryWorkspacePersisted(db, input))
     },
     async runPersonAgentCapsuleRuntime(input: RunPersonAgentCapsuleRuntimeInput): Promise<RunPersonAgentCapsuleRuntimeResult> {
-      return this.withArchiveDatabase((db) => {
-        if (input.operationKind === 'consultation') {
-          const consultationTurn = askPersonAgentConsultationPersisted(db, {
-            canonicalPersonId: input.canonicalPersonId,
-            question: input.question,
-            sessionId: input.sessionId
-          })
-          return consultationTurn
-            ? {
-                resultKind: 'consultation_turn',
-                consultationTurn
-              }
-            : {
-                resultKind: 'not_found'
-              }
-        }
-
-        if (input.operationKind === 'transition_task') {
-          const task = transitionPersonAgentTask(db, {
-            taskId: input.taskId,
-            status: input.status,
-            source: input.source,
-            reason: input.reason
-          })
-          return task
-            ? {
-                resultKind: 'task_transition',
-                task
-              }
-            : {
-                resultKind: 'not_found'
-              }
-        }
-
-        const taskRun = executePersonAgentTask(db, {
-          taskId: input.taskId,
-          source: input.source
-        })
-        return taskRun
-          ? {
-              resultKind: 'task_run',
-              taskRun
-            }
-          : {
-              resultKind: 'not_found'
-            }
-      })
+      return this.withArchiveDatabase((db) =>
+        input.operationKind === 'execute_task'
+          ? runPersonAgentRuntime(db, {
+              operationKind: 'task_run',
+              taskId: input.taskId,
+              source: input.source
+            })
+          : runPersonAgentRuntime(db, input)
+      )
     },
     async listPersonAgentConsultationSessions(input: Parameters<typeof listPersonAgentConsultationSessions>[1] = {}) {
       return this.withArchiveDatabase((db) => listPersonAgentConsultationSessions(db, input))

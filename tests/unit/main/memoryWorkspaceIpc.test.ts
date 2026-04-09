@@ -26,6 +26,7 @@ const {
   listApprovedPersonaDraftProviderSends,
   retryApprovedPersonaDraftProviderSend,
   sendApprovedPersonaDraftToProvider,
+  runPersonAgentRuntime,
   askPersonAgentConsultationPersisted,
   getPersonAgentConsultationRuntimeState,
   getPersonAgentConsultationSession,
@@ -68,6 +69,7 @@ const {
   listApprovedPersonaDraftProviderSends: vi.fn(),
   retryApprovedPersonaDraftProviderSend: vi.fn(),
   sendApprovedPersonaDraftToProvider: vi.fn(),
+  runPersonAgentRuntime: vi.fn(),
   askPersonAgentConsultationPersisted: vi.fn(),
   getPersonAgentConsultationRuntimeState: vi.fn(),
   getPersonAgentConsultationSession: vi.fn(),
@@ -143,6 +145,14 @@ vi.mock('../../../src/main/services/approvedDraftProviderSendService', () => ({
   retryApprovedPersonaDraftProviderSend,
   sendApprovedPersonaDraftToProvider
 }))
+
+vi.mock('../../../src/main/services/personAgentRuntimeService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/main/services/personAgentRuntimeService')>()
+  return {
+    ...actual,
+    runPersonAgentRuntime
+  }
+})
 
 vi.mock('../../../src/main/services/personAgentConsultationService', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../src/main/services/personAgentConsultationService')>()
@@ -241,6 +251,7 @@ describe('registerWorkspaceIpc session handlers', () => {
     openDatabase.mockReset()
     runMigrations.mockReset()
     askMemoryWorkspacePersistedService.mockReset()
+    runPersonAgentRuntime.mockReset()
     askPersonAgentConsultationPersisted.mockReset()
     getPersonAgentConsultationRuntimeState.mockReset()
     getPersonAgentConsultationSession.mockReset()
@@ -345,31 +356,34 @@ describe('registerWorkspaceIpc session handlers', () => {
   it('runs consultation operations through unified capsule runtime execution ipc', async () => {
     const close = vi.fn()
     openDatabase.mockReturnValue({ close })
-    askPersonAgentConsultationPersisted.mockReturnValue({
-      turnId: 'pct-1',
-      sessionId: 'pcs-1',
-      personAgentId: 'agent-1',
-      canonicalPersonId: 'cp-1',
-      ordinal: 1,
-      question: '她的生日是什么？',
-      answerPack: {
+    runPersonAgentRuntime.mockReturnValue({
+      resultKind: 'consultation_turn',
+      consultationTurn: {
+        turnId: 'pct-1',
+        sessionId: 'pcs-1',
         personAgentId: 'agent-1',
         canonicalPersonId: 'cp-1',
+        ordinal: 1,
         question: '她的生日是什么？',
-        questionClassification: 'profile_fact',
-        candidateAnswer: 'Birthday: 1997-02-03.',
-        supportingFacts: [],
-        supportingCitations: [],
-        conflicts: [],
-        coverageGaps: [],
-        recentInteractionTopics: [],
-        generationReason: 'Resolved through active person-agent fact memory.',
-        memoryVersions: {
-          factsVersion: 2,
-          interactionVersion: 3
-        }
-      },
-      createdAt: '2026-04-08T12:00:00.000Z'
+        answerPack: {
+          personAgentId: 'agent-1',
+          canonicalPersonId: 'cp-1',
+          question: '她的生日是什么？',
+          questionClassification: 'profile_fact',
+          candidateAnswer: 'Birthday: 1997-02-03.',
+          supportingFacts: [],
+          supportingCitations: [],
+          conflicts: [],
+          coverageGaps: [],
+          recentInteractionTopics: [],
+          generationReason: 'Resolved through active person-agent fact memory.',
+          memoryVersions: {
+            factsVersion: 2,
+            interactionVersion: 3
+          }
+        },
+        createdAt: '2026-04-08T12:00:00.000Z'
+      }
     })
 
     registerWorkspaceIpc(appPathsFixture())
@@ -389,6 +403,13 @@ describe('registerWorkspaceIpc session handlers', () => {
         ordinal: 1
       })
     }))
+    expect(runPersonAgentRuntime).toHaveBeenCalledWith(expect.anything(), {
+      operationKind: 'consultation',
+      canonicalPersonId: 'cp-1',
+      question: '她的生日是什么？',
+      sessionId: 'pcs-1'
+    })
+    expect(askPersonAgentConsultationPersisted).not.toHaveBeenCalled()
     expect(close).toHaveBeenCalled()
   })
 
@@ -1253,24 +1274,27 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
         updatedAt: '2026-04-08T01:10:00.000Z'
       }
     ])
-    transitionPersonAgentTask.mockReturnValue({
-      taskId: 'task-1',
-      taskKey: 'resolve_conflict:conflict.school_name:hash-conflict',
-      personAgentId: 'agent-1',
-      canonicalPersonId: 'cp-1',
-      taskKind: 'resolve_conflict',
-      status: 'dismissed',
-      priority: 'high',
-      title: 'Resolve school_name',
-      summary: 'Pending values: 北京大学 / 清华大学 (2 pending)',
-      sourceRef: {
-        memoryKey: 'conflict.school_name'
-      },
-      statusChangedAt: '2026-04-08T01:12:00.000Z',
-      statusSource: 'workspace_ui',
-      statusReason: 'handled externally',
-      createdAt: '2026-04-08T01:10:00.000Z',
-      updatedAt: '2026-04-08T01:12:00.000Z'
+    runPersonAgentRuntime.mockReturnValue({
+      resultKind: 'task_transition',
+      task: {
+        taskId: 'task-1',
+        taskKey: 'resolve_conflict:conflict.school_name:hash-conflict',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        taskKind: 'resolve_conflict',
+        status: 'dismissed',
+        priority: 'high',
+        title: 'Resolve school_name',
+        summary: 'Pending values: 北京大学 / 清华大学 (2 pending)',
+        sourceRef: {
+          memoryKey: 'conflict.school_name'
+        },
+        statusChangedAt: '2026-04-08T01:12:00.000Z',
+        statusSource: 'workspace_ui',
+        statusReason: 'handled externally',
+        createdAt: '2026-04-08T01:10:00.000Z',
+        updatedAt: '2026-04-08T01:12:00.000Z'
+      }
     })
 
     registerWorkspaceIpc(appPathsFixture())
@@ -1308,6 +1332,14 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
         statusReason: 'handled externally'
       })
     }))
+    expect(runPersonAgentRuntime).toHaveBeenCalledWith(expect.anything(), {
+      operationKind: 'transition_task',
+      taskId: 'task-1',
+      status: 'dismissed',
+      source: 'workspace_ui',
+      reason: 'handled externally'
+    })
+    expect(transitionPersonAgentTask).not.toHaveBeenCalled()
     expect(close).toHaveBeenCalledTimes(2)
   })
 
@@ -1339,28 +1371,31 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
         updatedAt: '2026-04-08T01:13:00.000Z'
       }
     ])
-    executePersonAgentTask.mockReturnValue({
-      runId: 'run-2',
-      taskId: 'task-2',
-      taskKey: 'expand_topic:topic.profile_facts:3:1',
-      personAgentId: 'agent-1',
-      canonicalPersonId: 'cp-1',
-      taskKind: 'expand_topic',
-      runStatus: 'completed',
-      summary: 'Prepare a follow-up question for the recurring topic Profile facts.',
-      suggestedQuestion: '要不要继续追问 Profile facts 的细节？',
-      actionItems: [
-        {
-          kind: 'ask_follow_up',
-          label: 'Ask suggested follow-up',
-          payload: {
-            question: '要不要继续追问 Profile facts 的细节？'
+    runPersonAgentRuntime.mockReturnValue({
+      resultKind: 'task_run',
+      taskRun: {
+        runId: 'run-2',
+        taskId: 'task-2',
+        taskKey: 'expand_topic:topic.profile_facts:3:1',
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        taskKind: 'expand_topic',
+        runStatus: 'completed',
+        summary: 'Prepare a follow-up question for the recurring topic Profile facts.',
+        suggestedQuestion: '要不要继续追问 Profile facts 的细节？',
+        actionItems: [
+          {
+            kind: 'ask_follow_up',
+            label: 'Ask suggested follow-up',
+            payload: {
+              question: '要不要继续追问 Profile facts 的细节？'
+            }
           }
-        }
-      ],
-      source: 'workspace_ui',
-      createdAt: '2026-04-08T01:14:00.000Z',
-      updatedAt: '2026-04-08T01:14:00.000Z'
+        ],
+        source: 'workspace_ui',
+        createdAt: '2026-04-08T01:14:00.000Z',
+        updatedAt: '2026-04-08T01:14:00.000Z'
+      }
     })
 
     registerWorkspaceIpc(appPathsFixture())
@@ -1393,6 +1428,12 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
         runStatus: 'completed'
       })
     }))
+    expect(runPersonAgentRuntime).toHaveBeenCalledWith(expect.anything(), {
+      operationKind: 'task_run',
+      taskId: 'task-2',
+      source: 'workspace_ui'
+    })
+    expect(executePersonAgentTask).not.toHaveBeenCalled()
     expect(close).toHaveBeenCalledTimes(2)
   })
 })
