@@ -46,6 +46,8 @@ import type {
 } from '../../../src/shared/archiveContracts'
 import {
   askMemoryWorkspaceInputSchema,
+  getPersonAgentCapsuleRuntimeInspectionInputSchema,
+  runPersonAgentCapsuleRuntimeInputSchema,
   createPersonaDraftReviewFromTurnInputSchema,
   getPersonAgentMemorySummaryInputSchema,
   getPersonAgentStateInputSchema,
@@ -793,6 +795,48 @@ describe('phase-eight memory workspace contracts', () => {
     expect(promotionScore.thresholds.active).toBe(45)
 
     expect(getPersonAgentStateInputSchema.parse({
+      canonicalPersonId: 'cp-1'
+    })).toEqual({
+      canonicalPersonId: 'cp-1'
+    })
+
+    expect(runPersonAgentCapsuleRuntimeInputSchema.parse({
+      operationKind: 'consultation',
+      canonicalPersonId: 'cp-1',
+      question: '她的生日是什么？',
+      sessionId: 'pcs-1'
+    })).toEqual({
+      operationKind: 'consultation',
+      canonicalPersonId: 'cp-1',
+      question: '她的生日是什么？',
+      sessionId: 'pcs-1'
+    })
+
+    expect(runPersonAgentCapsuleRuntimeInputSchema.parse({
+      operationKind: 'transition_task',
+      taskId: 'task-1',
+      status: 'dismissed',
+      source: 'workspace_ui',
+      reason: 'handled externally'
+    })).toEqual({
+      operationKind: 'transition_task',
+      taskId: 'task-1',
+      status: 'dismissed',
+      source: 'workspace_ui',
+      reason: 'handled externally'
+    })
+
+    expect(runPersonAgentCapsuleRuntimeInputSchema.parse({
+      operationKind: 'execute_task',
+      taskId: 'task-2',
+      source: 'workspace_ui'
+    })).toEqual({
+      operationKind: 'execute_task',
+      taskId: 'task-2',
+      source: 'workspace_ui'
+    })
+
+    expect(getPersonAgentCapsuleRuntimeInspectionInputSchema.parse({
       canonicalPersonId: 'cp-1'
     })).toEqual({
       canonicalPersonId: 'cp-1'

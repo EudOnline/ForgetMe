@@ -127,6 +127,37 @@ describe('preload archiveApi bridge', () => {
     })
   })
 
+  it('exposes unified capsule runtime execution and inspection methods through contextBridge', async () => {
+    await import('../../../src/preload/index')
+
+    expect(exposeInMainWorld).toHaveBeenCalledTimes(1)
+
+    const archiveApi = exposeInMainWorld.mock.calls[0]?.[1] as {
+      runPersonAgentCapsuleRuntime: (input: Record<string, unknown>) => Promise<unknown>
+      getPersonAgentCapsuleRuntimeInspection: (input: { canonicalPersonId: string }) => Promise<unknown>
+    }
+
+    await archiveApi.runPersonAgentCapsuleRuntime({
+      operationKind: 'consultation',
+      canonicalPersonId: 'cp-1',
+      question: '她的生日是什么？',
+      sessionId: 'pcs-1'
+    })
+    await archiveApi.getPersonAgentCapsuleRuntimeInspection({
+      canonicalPersonId: 'cp-1'
+    })
+
+    expect(invoke).toHaveBeenNthCalledWith(1, 'archive:runPersonAgentCapsuleRuntime', {
+      operationKind: 'consultation',
+      canonicalPersonId: 'cp-1',
+      question: '她的生日是什么？',
+      sessionId: 'pcs-1'
+    })
+    expect(invoke).toHaveBeenNthCalledWith(2, 'archive:getPersonAgentCapsuleRuntimeInspection', {
+      canonicalPersonId: 'cp-1'
+    })
+  })
+
   it('exposes objective runtime methods and omits obsolete run-centric bridges', async () => {
     await import('../../../src/preload/index')
 

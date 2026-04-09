@@ -69,6 +69,8 @@ import {
 } from '../../../services/approvedDraftProviderSendService'
 import { listApprovedDraftSendDestinations } from '../../../services/approvedDraftSendDestinationService'
 import type {
+  RunPersonAgentCapsuleRuntimeInput,
+  RunPersonAgentCapsuleRuntimeResult,
   PersonAgentAuditEventRecord,
   PersonAgentCapsuleRecord,
   PersonAgentInspectionHighlight,
@@ -460,8 +462,30 @@ export function createWorkspaceModule(appPaths: AppPaths) {
     async askPersisted(input: Parameters<typeof askMemoryWorkspacePersisted>[1]) {
       return this.withArchiveDatabase((db) => askMemoryWorkspacePersisted(db, input))
     },
-    async askPersonAgentConsultation(input: Parameters<typeof askPersonAgentConsultationPersisted>[1]) {
-      return this.withArchiveDatabase((db) => askPersonAgentConsultationPersisted(db, input))
+    async runPersonAgentCapsuleRuntime(input: RunPersonAgentCapsuleRuntimeInput): Promise<RunPersonAgentCapsuleRuntimeResult> {
+      return this.withArchiveDatabase((db) => {
+        if (input.operationKind === 'consultation') {
+          return askPersonAgentConsultationPersisted(db, {
+            canonicalPersonId: input.canonicalPersonId,
+            question: input.question,
+            sessionId: input.sessionId
+          })
+        }
+
+        if (input.operationKind === 'transition_task') {
+          return transitionPersonAgentTask(db, {
+            taskId: input.taskId,
+            status: input.status,
+            source: input.source,
+            reason: input.reason
+          })
+        }
+
+        return executePersonAgentTask(db, {
+          taskId: input.taskId,
+          source: input.source
+        })
+      })
     },
     async listPersonAgentConsultationSessions(input: Parameters<typeof listPersonAgentConsultationSessions>[1] = {}) {
       return this.withArchiveDatabase((db) => listPersonAgentConsultationSessions(db, input))
@@ -510,14 +534,6 @@ export function createWorkspaceModule(appPaths: AppPaths) {
     } = {}) {
       return this.withArchiveDatabase((db) => listPersonAgentTasks(db, input))
     },
-    async transitionPersonAgentTask(input: {
-      taskId: string
-      status: 'processing' | 'completed' | 'dismissed'
-      source?: string
-      reason?: string
-    }) {
-      return this.withArchiveDatabase((db) => transitionPersonAgentTask(db, input))
-    },
     async listPersonAgentTaskRuns(input: {
       taskId?: string
       personAgentId?: string
@@ -526,12 +542,6 @@ export function createWorkspaceModule(appPaths: AppPaths) {
       runStatus?: 'completed' | 'blocked' | 'failed'
     } = {}) {
       return this.withArchiveDatabase((db) => listPersonAgentTaskRuns(db, input))
-    },
-    async executePersonAgentTask(input: {
-      taskId: string
-      source?: string
-    }) {
-      return this.withArchiveDatabase((db) => executePersonAgentTask(db, input))
     },
     async getPersonAgentMemorySummary(input: { canonicalPersonId: string }) {
       return this.withArchiveDatabase((db) => {
@@ -546,7 +556,7 @@ export function createWorkspaceModule(appPaths: AppPaths) {
         })
       })
     },
-    async getPersonAgentInspectionBundle(input: { canonicalPersonId: string }) {
+    async getPersonAgentCapsuleRuntimeInspection(input: { canonicalPersonId: string }) {
       return this.withArchiveDatabase((db) => {
         const now = new Date().toISOString()
         const state = getPersonAgentByCanonicalPersonId(db, input)

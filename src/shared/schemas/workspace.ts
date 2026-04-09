@@ -103,12 +103,6 @@ export const askMemoryWorkspacePersistedInputSchema = z.object({
   sessionId: z.string().min(1).optional()
 })
 
-export const askPersonAgentConsultationInputSchema = z.object({
-  canonicalPersonId: z.string().min(1),
-  question: z.string().min(1),
-  sessionId: z.string().min(1).optional()
-})
-
 export const getPersonAgentStateInputSchema = z.object({
   canonicalPersonId: z.string().min(1)
 })
@@ -136,7 +130,28 @@ export const getPersonAgentMemorySummaryInputSchema = z.object({
   canonicalPersonId: z.string().min(1)
 })
 
-export const getPersonAgentInspectionBundleInputSchema = z.object({
+export const runPersonAgentCapsuleRuntimeInputSchema = z.discriminatedUnion('operationKind', [
+  z.object({
+    operationKind: z.literal('consultation'),
+    canonicalPersonId: z.string().min(1),
+    question: z.string().min(1),
+    sessionId: z.string().min(1).optional()
+  }),
+  z.object({
+    operationKind: z.literal('transition_task'),
+    taskId: z.string().min(1),
+    status: z.enum(['processing', 'completed', 'dismissed']),
+    source: z.string().min(1).optional(),
+    reason: z.string().min(1).optional()
+  }),
+  z.object({
+    operationKind: z.literal('execute_task'),
+    taskId: z.string().min(1),
+    source: z.string().min(1).optional()
+  })
+])
+
+export const getPersonAgentCapsuleRuntimeInspectionInputSchema = z.object({
   canonicalPersonId: z.string().min(1)
 })
 
@@ -169,13 +184,6 @@ export const listPersonAgentTasksInputSchema = z.object({
   status: z.enum(['pending', 'processing', 'completed', 'dismissed']).optional()
 }).optional().default({})
 
-export const transitionPersonAgentTaskInputSchema = z.object({
-  taskId: z.string().min(1),
-  status: z.enum(['processing', 'completed', 'dismissed']),
-  source: z.string().min(1).optional(),
-  reason: z.string().min(1).optional()
-})
-
 export const listPersonAgentTaskRunsInputSchema = z.object({
   taskId: z.string().min(1).optional(),
   personAgentId: z.string().min(1).optional(),
@@ -189,11 +197,6 @@ export const listPersonAgentTaskRunsInputSchema = z.object({
   ]).optional(),
   runStatus: z.enum(['completed', 'blocked', 'failed']).optional()
 }).optional().default({})
-
-export const executePersonAgentTaskInputSchema = z.object({
-  taskId: z.string().min(1),
-  source: z.string().min(1).optional()
-})
 
 export const getPersonaDraftReviewByTurnInputSchema = z.object({
   turnId: z.string().min(1)

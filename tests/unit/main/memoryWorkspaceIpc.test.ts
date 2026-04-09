@@ -325,7 +325,7 @@ describe('registerWorkspaceIpc session handlers', () => {
     expect(close).toHaveBeenCalled()
   })
 
-  it('persists person-agent consultation turns through ipc', async () => {
+  it('runs consultation operations through unified capsule runtime execution ipc', async () => {
     const close = vi.fn()
     openDatabase.mockReturnValue({ close })
     askPersonAgentConsultationPersisted.mockReturnValue({
@@ -357,8 +357,9 @@ describe('registerWorkspaceIpc session handlers', () => {
 
     registerWorkspaceIpc(appPathsFixture())
 
-    const handler = handlerMap.get('archive:askPersonAgentConsultation')
+    const handler = handlerMap.get('archive:runPersonAgentCapsuleRuntime')
     const result = await handler?.({}, {
+      operationKind: 'consultation',
       canonicalPersonId: 'cp-1',
       question: '她的生日是什么？',
       sessionId: 'pcs-1'
@@ -911,7 +912,7 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
 
     registerWorkspaceIpc(appPathsFixture())
 
-    const handler = handlerMap.get('archive:getPersonAgentInspectionBundle')
+    const handler = handlerMap.get('archive:getPersonAgentCapsuleRuntimeInspection')
     const result = await handler?.({}, { canonicalPersonId: 'cp-1' })
 
     expect(getPersonAgentByCanonicalPersonId).toHaveBeenCalledWith(expect.anything(), {
@@ -1184,7 +1185,7 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
 
       registerWorkspaceIpc(appPathsFixture())
 
-      const handler = handlerMap.get('archive:getPersonAgentInspectionBundle')
+      const handler = handlerMap.get('archive:getPersonAgentCapsuleRuntimeInspection')
       const result = await handler?.({}, { canonicalPersonId: 'cp-1' })
 
       expect(result).toEqual(expect.objectContaining({
@@ -1211,7 +1212,7 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
     }
   })
 
-  it('lists and transitions person-agent tasks through ipc', async () => {
+  it('lists tasks and runs transition operations through unified capsule runtime execution ipc', async () => {
     const close = vi.fn()
     openDatabase.mockReturnValue({ close })
     listPersonAgentTasks.mockReturnValue([
@@ -1258,12 +1259,13 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
     registerWorkspaceIpc(appPathsFixture())
 
     const listHandler = handlerMap.get('archive:listPersonAgentTasks')
-    const transitionHandler = handlerMap.get('archive:transitionPersonAgentTask')
+    const transitionHandler = handlerMap.get('archive:runPersonAgentCapsuleRuntime')
     const listed = await listHandler?.({}, {
       canonicalPersonId: 'cp-1',
       status: 'pending'
     })
     const transitioned = await transitionHandler?.({}, {
+      operationKind: 'transition_task',
       taskId: 'task-1',
       status: 'dismissed',
       source: 'workspace_ui',
@@ -1295,7 +1297,7 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
     expect(close).toHaveBeenCalledTimes(2)
   })
 
-  it('lists task runs and executes person-agent tasks through ipc', async () => {
+  it('lists task runs and executes tasks through unified capsule runtime execution ipc', async () => {
     const close = vi.fn()
     openDatabase.mockReturnValue({ close })
     listPersonAgentTaskRuns.mockReturnValue([
@@ -1350,11 +1352,12 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
     registerWorkspaceIpc(appPathsFixture())
 
     const listHandler = handlerMap.get('archive:listPersonAgentTaskRuns')
-    const executeHandler = handlerMap.get('archive:executePersonAgentTask')
+    const executeHandler = handlerMap.get('archive:runPersonAgentCapsuleRuntime')
     const listed = await listHandler?.({}, {
       canonicalPersonId: 'cp-1'
     })
     const executed = await executeHandler?.({}, {
+      operationKind: 'execute_task',
       taskId: 'task-2',
       source: 'workspace_ui'
     })

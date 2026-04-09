@@ -1253,14 +1253,34 @@ export type GetPersonAgentMemorySummaryInput = {
   canonicalPersonId: string
 }
 
-export type GetPersonAgentInspectionBundleInput = {
-  canonicalPersonId: string
-}
+export type RunPersonAgentCapsuleRuntimeInput =
+  | {
+      operationKind: 'consultation'
+      canonicalPersonId: string
+      question: string
+      sessionId?: string
+    }
+  | {
+      operationKind: 'transition_task'
+      taskId: string
+      status: Exclude<PersonAgentTaskStatus, 'pending'>
+      source?: string
+      reason?: string
+    }
+  | {
+      operationKind: 'execute_task'
+      taskId: string
+      source?: string
+    }
 
-export type AskPersonAgentConsultationInput = {
+export type RunPersonAgentCapsuleRuntimeResult =
+  | PersonAgentConsultationTurnRecord
+  | PersonAgentTaskRecord
+  | PersonAgentTaskRunRecord
+  | null
+
+export type GetPersonAgentCapsuleRuntimeInspectionInput = {
   canonicalPersonId: string
-  question: string
-  sessionId?: string
 }
 
 export type ListPersonAgentConsultationSessionsInput = {
@@ -1292,24 +1312,12 @@ export type ListPersonAgentTasksInput = {
   status?: PersonAgentTaskStatus
 }
 
-export type TransitionPersonAgentTaskInput = {
-  taskId: string
-  status: Exclude<PersonAgentTaskStatus, 'pending'>
-  source?: string
-  reason?: string
-}
-
 export type ListPersonAgentTaskRunsInput = {
   taskId?: string
   personAgentId?: string
   canonicalPersonId?: string
   taskKind?: PersonAgentTaskKind
   runStatus?: PersonAgentTaskRunStatus
-}
-
-export type ExecutePersonAgentTaskInput = {
-  taskId: string
-  source?: string
 }
 
 export type GetPersonaDraftReviewByTurnInput = {
@@ -2252,7 +2260,10 @@ export interface ArchiveApi {
   listMemoryWorkspaceSessions: (input?: { scope?: MemoryWorkspaceScope }) => Promise<MemoryWorkspaceSessionSummary[]>
   getMemoryWorkspaceSession: (sessionId: string) => Promise<MemoryWorkspaceSessionDetail | null>
   askMemoryWorkspacePersisted: (input: AskMemoryWorkspacePersistedInput) => Promise<MemoryWorkspaceTurnRecord | null>
-  askPersonAgentConsultation: (input: AskPersonAgentConsultationInput) => Promise<PersonAgentConsultationTurnRecord | null>
+  runPersonAgentCapsuleRuntime: (input: RunPersonAgentCapsuleRuntimeInput) => Promise<RunPersonAgentCapsuleRuntimeResult>
+  getPersonAgentCapsuleRuntimeInspection: (
+    input: GetPersonAgentCapsuleRuntimeInspectionInput
+  ) => Promise<PersonAgentInspectionBundle | null>
   listPersonAgentConsultationSessions: (input?: ListPersonAgentConsultationSessionsInput) => Promise<PersonAgentConsultationSessionSummary[]>
   getPersonAgentConsultationSession: (input: GetPersonAgentConsultationSessionInput) => Promise<PersonAgentConsultationSessionDetail | null>
   getPersonAgentRuntimeState: (input: GetPersonAgentRuntimeStateInput) => Promise<PersonAgentRuntimeStateRecord | null>
@@ -2265,11 +2276,8 @@ export interface ArchiveApi {
   listPersonAgentRefreshQueue: (input?: ListPersonAgentRefreshQueueInput) => Promise<PersonAgentRefreshQueueRecord[]>
   listPersonAgentAuditEvents: (input?: ListPersonAgentAuditEventsInput) => Promise<PersonAgentAuditEventRecord[]>
   listPersonAgentTasks: (input?: ListPersonAgentTasksInput) => Promise<PersonAgentTaskRecord[]>
-  transitionPersonAgentTask: (input: TransitionPersonAgentTaskInput) => Promise<PersonAgentTaskRecord | null>
   listPersonAgentTaskRuns: (input?: ListPersonAgentTaskRunsInput) => Promise<PersonAgentTaskRunRecord[]>
-  executePersonAgentTask: (input: ExecutePersonAgentTaskInput) => Promise<PersonAgentTaskRunRecord | null>
   getPersonAgentMemorySummary: (input: GetPersonAgentMemorySummaryInput) => Promise<PersonAgentMemorySummary | null>
-  getPersonAgentInspectionBundle: (input: GetPersonAgentInspectionBundleInput) => Promise<PersonAgentInspectionBundle | null>
   runMemoryWorkspaceCompare: (input: RunMemoryWorkspaceCompareInput) => Promise<MemoryWorkspaceCompareSessionDetail | null>
   listMemoryWorkspaceCompareSessions: (input?: { scope?: MemoryWorkspaceScope }) => Promise<MemoryWorkspaceCompareSessionSummary[]>
   getMemoryWorkspaceCompareSession: (compareSessionId: string) => Promise<MemoryWorkspaceCompareSessionDetail | null>

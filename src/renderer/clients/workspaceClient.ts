@@ -14,7 +14,8 @@ type WorkspaceClient = Pick<
   | 'listMemoryWorkspaceSessions'
   | 'getMemoryWorkspaceSession'
   | 'askMemoryWorkspacePersisted'
-  | 'askPersonAgentConsultation'
+  | 'runPersonAgentCapsuleRuntime'
+  | 'getPersonAgentCapsuleRuntimeInspection'
   | 'listPersonAgentConsultationSessions'
   | 'getPersonAgentConsultationSession'
   | 'getPersonAgentRuntimeState'
@@ -25,11 +26,8 @@ type WorkspaceClient = Pick<
   | 'listPersonAgentRefreshQueue'
   | 'listPersonAgentAuditEvents'
   | 'listPersonAgentTasks'
-  | 'transitionPersonAgentTask'
   | 'listPersonAgentTaskRuns'
-  | 'executePersonAgentTask'
   | 'getPersonAgentMemorySummary'
-  | 'getPersonAgentInspectionBundle'
   | 'runMemoryWorkspaceCompare'
   | 'listMemoryWorkspaceCompareSessions'
   | 'getMemoryWorkspaceCompareSession'
@@ -64,7 +62,8 @@ export function getWorkspaceClient(): WorkspaceClient {
     listMemoryWorkspaceSessions: bridgeMethod('listMemoryWorkspaceSessions', async () => []),
     getMemoryWorkspaceSession: bridgeMethod('getMemoryWorkspaceSession', async () => null),
     askMemoryWorkspacePersisted: bridgeMethod('askMemoryWorkspacePersisted', async () => null),
-    askPersonAgentConsultation: bridgeMethod('askPersonAgentConsultation', async () => null),
+    runPersonAgentCapsuleRuntime: bridgeMethod('runPersonAgentCapsuleRuntime', async () => null),
+    getPersonAgentCapsuleRuntimeInspection: bridgeMethod('getPersonAgentCapsuleRuntimeInspection', async () => null),
     listPersonAgentConsultationSessions: bridgeMethod('listPersonAgentConsultationSessions', async () => []),
     getPersonAgentConsultationSession: bridgeMethod('getPersonAgentConsultationSession', async () => null),
     getPersonAgentRuntimeState: bridgeMethod('getPersonAgentRuntimeState', async () => null),
@@ -75,11 +74,8 @@ export function getWorkspaceClient(): WorkspaceClient {
     listPersonAgentRefreshQueue: bridgeMethod('listPersonAgentRefreshQueue', async () => []),
     listPersonAgentAuditEvents: bridgeMethod('listPersonAgentAuditEvents', async () => []),
     listPersonAgentTasks: bridgeMethod('listPersonAgentTasks', async () => []),
-    transitionPersonAgentTask: bridgeMethod('transitionPersonAgentTask', async () => null),
     listPersonAgentTaskRuns: bridgeMethod('listPersonAgentTaskRuns', async () => []),
-    executePersonAgentTask: bridgeMethod('executePersonAgentTask', async () => null),
     getPersonAgentMemorySummary: bridgeMethod('getPersonAgentMemorySummary', async () => null),
-    getPersonAgentInspectionBundle: bridgeMethod('getPersonAgentInspectionBundle', async () => null),
     runMemoryWorkspaceCompare: bridgeMethod('runMemoryWorkspaceCompare', async () => null),
     listMemoryWorkspaceCompareSessions: bridgeMethod('listMemoryWorkspaceCompareSessions', async () => []),
     getMemoryWorkspaceCompareSession: bridgeMethod('getMemoryWorkspaceCompareSession', async () => null),
