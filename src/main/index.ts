@@ -90,6 +90,7 @@ app.whenReady().then(() => {
 app.on('before-quit', () => {
   backgroundRunners?.enrichmentRunner.stop()
   backgroundRunners?.approvedDraftProviderSendRetryRunner.stop()
+  backgroundRunners?.personAgentTaskQueueRunner.stop()
 })
 
 app.on('window-all-closed', () => {
