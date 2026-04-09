@@ -32,6 +32,7 @@ const {
   transitionPersonAgentTask,
   getPersonAgentByCanonicalPersonId,
   listPersonAgentAuditEvents,
+  getPersonAgentTaskQueueRunnerState,
   listPersonAgentRefreshQueue,
   listPersonAgentTaskRuns,
   listPersonAgentTasks,
@@ -65,6 +66,7 @@ const {
   transitionPersonAgentTask: vi.fn(),
   getPersonAgentByCanonicalPersonId: vi.fn(),
   listPersonAgentAuditEvents: vi.fn(),
+  getPersonAgentTaskQueueRunnerState: vi.fn(),
   listPersonAgentRefreshQueue: vi.fn(),
   listPersonAgentTaskRuns: vi.fn(),
   listPersonAgentTasks: vi.fn(),
@@ -160,6 +162,7 @@ vi.mock('../../../src/main/services/governancePersistenceService', async (import
     ...actual,
     getPersonAgentByCanonicalPersonId,
     listPersonAgentAuditEvents,
+    getPersonAgentTaskQueueRunnerState,
     listPersonAgentRefreshQueue,
     listPersonAgentTaskRuns,
     listPersonAgentTasks,
@@ -234,6 +237,7 @@ describe('registerWorkspaceIpc session handlers', () => {
     transitionPersonAgentTask.mockReset()
     getPersonAgentByCanonicalPersonId.mockReset()
     listPersonAgentAuditEvents.mockReset()
+    getPersonAgentTaskQueueRunnerState.mockReset()
     listPersonAgentRefreshQueue.mockReset()
     listPersonAgentTaskRuns.mockReset()
     listPersonAgentTasks.mockReset()
@@ -680,6 +684,37 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
         })
       })
     ])
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('returns person-agent task queue runner state through ipc', async () => {
+    const close = vi.fn()
+    openDatabase.mockReturnValue({ close })
+    getPersonAgentTaskQueueRunnerState.mockReturnValue({
+      runnerName: 'person_agent_task_queue',
+      status: 'idle',
+      lastStartedAt: '2026-04-08T01:15:00.000Z',
+      lastCompletedAt: '2026-04-08T01:15:02.000Z',
+      lastFailedAt: null,
+      lastProcessedTaskCount: 4,
+      totalProcessedTaskCount: 7,
+      lastError: null,
+      updatedAt: '2026-04-08T01:15:02.000Z'
+    })
+
+    registerWorkspaceIpc(appPathsFixture())
+
+    const handler = handlerMap.get('archive:getPersonAgentTaskQueueRunnerState')
+    const result = await handler?.({}, undefined)
+
+    expect(getPersonAgentTaskQueueRunnerState).toHaveBeenCalledWith(expect.anything(), {})
+    expect(result).toEqual(expect.objectContaining({
+      runnerName: 'person_agent_task_queue',
+      status: 'idle',
+      lastProcessedTaskCount: 4,
+      totalProcessedTaskCount: 7,
+      lastError: null
+    }))
     expect(close).toHaveBeenCalled()
   })
 

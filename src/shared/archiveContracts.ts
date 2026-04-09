@@ -765,6 +765,23 @@ export type PersonAgentRuntimeStateRecord = {
   updatedAt: string
 }
 
+export type PersonAgentTaskQueueRunnerStatus =
+  | 'idle'
+  | 'running'
+  | 'error'
+
+export type PersonAgentTaskQueueRunnerStateRecord = {
+  runnerName: string
+  status: PersonAgentTaskQueueRunnerStatus
+  lastStartedAt: string | null
+  lastCompletedAt: string | null
+  lastFailedAt: string | null
+  lastProcessedTaskCount: number
+  totalProcessedTaskCount: number
+  lastError: string | null
+  updatedAt: string
+}
+
 export type PersonAgentTaskKind =
   | 'await_refresh'
   | 'resolve_conflict'
@@ -2081,6 +2098,7 @@ export interface ArchiveApi {
   listPersonAgentConsultationSessions: (input?: ListPersonAgentConsultationSessionsInput) => Promise<PersonAgentConsultationSessionSummary[]>
   getPersonAgentConsultationSession: (input: GetPersonAgentConsultationSessionInput) => Promise<PersonAgentConsultationSessionDetail | null>
   getPersonAgentRuntimeState: (input: GetPersonAgentRuntimeStateInput) => Promise<PersonAgentRuntimeStateRecord | null>
+  getPersonAgentTaskQueueRunnerState: () => Promise<PersonAgentTaskQueueRunnerStateRecord | null>
   getPersonAgentState: (input: GetPersonAgentStateInput) => Promise<PersonAgentRecord | null>
   listPersonAgentRefreshQueue: (input?: ListPersonAgentRefreshQueueInput) => Promise<PersonAgentRefreshQueueRecord[]>
   listPersonAgentAuditEvents: (input?: ListPersonAgentAuditEventsInput) => Promise<PersonAgentAuditEventRecord[]>

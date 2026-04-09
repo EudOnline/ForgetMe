@@ -22,6 +22,7 @@ import type {
   PersonAgentRuntimeStateRecord,
   PersonAgentStrategyProfile,
   PersonAgentTaskRecord,
+  PersonAgentTaskQueueRunnerStateRecord,
   PersonAgentTaskRunAction,
   PersonAgentTaskRunRecord,
   PersonAgentTaskRunStatus,
@@ -187,6 +188,18 @@ type PersonAgentTaskRunRow = {
   actionItemsJson: string
   source: string | null
   createdAt: string
+  updatedAt: string
+}
+
+type PersonAgentTaskQueueRunnerStateRow = {
+  runnerName: string
+  status: PersonAgentTaskQueueRunnerStateRecord['status']
+  lastStartedAt: string | null
+  lastCompletedAt: string | null
+  lastFailedAt: string | null
+  lastProcessedTaskCount: number
+  totalProcessedTaskCount: number
+  lastError: string | null
   updatedAt: string
 }
 
@@ -433,6 +446,22 @@ function mapPersonAgentTaskRunRow(row: PersonAgentTaskRunRow): PersonAgentTaskRu
     actionItems: parseJsonArray<PersonAgentTaskRunAction>(row.actionItemsJson),
     source: row.source,
     createdAt: row.createdAt,
+    updatedAt: row.updatedAt
+  }
+}
+
+function mapPersonAgentTaskQueueRunnerStateRow(
+  row: PersonAgentTaskQueueRunnerStateRow
+): PersonAgentTaskQueueRunnerStateRecord {
+  return {
+    runnerName: row.runnerName,
+    status: row.status,
+    lastStartedAt: row.lastStartedAt,
+    lastCompletedAt: row.lastCompletedAt,
+    lastFailedAt: row.lastFailedAt,
+    lastProcessedTaskCount: row.lastProcessedTaskCount,
+    totalProcessedTaskCount: row.totalProcessedTaskCount,
+    lastError: row.lastError,
     updatedAt: row.updatedAt
   }
 }
@@ -1598,6 +1627,57 @@ export function appendPersonAgentTaskRun(db: ArchiveDatabase, input: {
   }).find((run) => run.runId === runId) ?? null
 }
 
+export function upsertPersonAgentTaskQueueRunnerState(db: ArchiveDatabase, input: {
+  runnerName: string
+  status: PersonAgentTaskQueueRunnerStateRecord['status']
+  lastStartedAt?: string | null
+  lastCompletedAt?: string | null
+  lastFailedAt?: string | null
+  lastProcessedTaskCount: number
+  totalProcessedTaskCount: number
+  lastError?: string | null
+  updatedAt?: string
+}) {
+  const updatedAt = input.updatedAt ?? new Date().toISOString()
+
+  db.prepare(
+    `insert into person_agent_task_queue_runner_state (
+      runner_name,
+      status,
+      last_started_at,
+      last_completed_at,
+      last_failed_at,
+      last_processed_task_count,
+      total_processed_task_count,
+      last_error,
+      updated_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    on conflict(runner_name) do update set
+      status = excluded.status,
+      last_started_at = excluded.last_started_at,
+      last_completed_at = excluded.last_completed_at,
+      last_failed_at = excluded.last_failed_at,
+      last_processed_task_count = excluded.last_processed_task_count,
+      total_processed_task_count = excluded.total_processed_task_count,
+      last_error = excluded.last_error,
+      updated_at = excluded.updated_at`
+  ).run(
+    input.runnerName,
+    input.status,
+    input.lastStartedAt ?? null,
+    input.lastCompletedAt ?? null,
+    input.lastFailedAt ?? null,
+    input.lastProcessedTaskCount,
+    input.totalProcessedTaskCount,
+    input.lastError ?? null,
+    updatedAt
+  )
+
+  return getPersonAgentTaskQueueRunnerState(db, {
+    runnerName: input.runnerName
+  })
+}
+
 export function listPersonAgentTaskRuns(
   db: ArchiveDatabase,
   input: ListPersonAgentTaskRunsInput = {}
@@ -1641,6 +1721,31 @@ export function listPersonAgentTaskRuns(
       return true
     })
     .map(mapPersonAgentTaskRunRow)
+}
+
+export function getPersonAgentTaskQueueRunnerState(
+  db: ArchiveDatabase,
+  input: {
+    runnerName?: string
+  } = {}
+): PersonAgentTaskQueueRunnerStateRecord | null {
+  const rows = db.prepare(
+    `select
+      runner_name as runnerName,
+      status,
+      last_started_at as lastStartedAt,
+      last_completed_at as lastCompletedAt,
+      last_failed_at as lastFailedAt,
+      last_processed_task_count as lastProcessedTaskCount,
+      total_processed_task_count as totalProcessedTaskCount,
+      last_error as lastError,
+      updated_at as updatedAt
+     from person_agent_task_queue_runner_state
+     order by updated_at desc, runner_name asc`
+  ).all() as PersonAgentTaskQueueRunnerStateRow[]
+
+  const matched = rows.find((row) => !input.runnerName || row.runnerName === input.runnerName)
+  return matched ? mapPersonAgentTaskQueueRunnerStateRow(matched) : null
 }
 
 export function enqueuePersonAgentRefresh(db: ArchiveDatabase, input: {

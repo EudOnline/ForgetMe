@@ -1,10 +1,12 @@
 import path from 'node:path'
 import type { AppPaths } from './appPaths'
 import { openDatabase, runMigrations } from './db'
+import { getPersonAgentTaskQueueRunnerState, upsertPersonAgentTaskQueueRunnerState } from './governancePersistenceService'
 import { processPersonAgentTaskQueue } from './personAgentTaskService'
 
 const DEFAULT_PERSON_AGENT_TASK_QUEUE_RUNNER_INTERVAL_MS = 5_000
 const DEFAULT_PERSON_AGENT_TASK_QUEUE_RUNNER_BATCH_LIMIT = 4
+export const PERSON_AGENT_TASK_QUEUE_RUNNER_NAME = 'person_agent_task_queue'
 
 function parsePositiveInteger(value: string | undefined, fallback: number) {
   const parsed = Number.parseInt(value ?? '', 10)
@@ -21,15 +23,64 @@ export function runPersonAgentTaskQueueCycle(
     limit?: number
     source?: string
     now?: string
+    runnerName?: string
+    processQueue?: typeof processPersonAgentTaskQueue
   } = {}
 ) {
-  const runs = processPersonAgentTaskQueue(db, {
-    limit: input.limit,
-    source: input.source ?? 'background_runner',
-    now: input.now
+  const now = input.now ?? new Date().toISOString()
+  const runnerName = input.runnerName ?? PERSON_AGENT_TASK_QUEUE_RUNNER_NAME
+  const processQueue = input.processQueue ?? processPersonAgentTaskQueue
+  const existingState = getPersonAgentTaskQueueRunnerState(db, {
+    runnerName
   })
 
-  return runs.length > 0
+  upsertPersonAgentTaskQueueRunnerState(db, {
+    runnerName,
+    status: 'running',
+    lastStartedAt: now,
+    lastCompletedAt: existingState?.lastCompletedAt ?? null,
+    lastFailedAt: existingState?.lastFailedAt ?? null,
+    lastProcessedTaskCount: existingState?.lastProcessedTaskCount ?? 0,
+    totalProcessedTaskCount: existingState?.totalProcessedTaskCount ?? 0,
+    lastError: null,
+    updatedAt: now
+  })
+
+  try {
+    const runs = processQueue(db, {
+      limit: input.limit,
+      source: input.source ?? 'background_runner',
+      now
+    })
+    const processedTaskCount = runs.length
+
+    upsertPersonAgentTaskQueueRunnerState(db, {
+      runnerName,
+      status: 'idle',
+      lastStartedAt: now,
+      lastCompletedAt: now,
+      lastFailedAt: existingState?.lastFailedAt ?? null,
+      lastProcessedTaskCount: processedTaskCount,
+      totalProcessedTaskCount: (existingState?.totalProcessedTaskCount ?? 0) + processedTaskCount,
+      lastError: null,
+      updatedAt: now
+    })
+
+    return processedTaskCount > 0
+  } catch (error) {
+    upsertPersonAgentTaskQueueRunnerState(db, {
+      runnerName,
+      status: 'error',
+      lastStartedAt: now,
+      lastCompletedAt: existingState?.lastCompletedAt ?? null,
+      lastFailedAt: now,
+      lastProcessedTaskCount: 0,
+      totalProcessedTaskCount: existingState?.totalProcessedTaskCount ?? 0,
+      lastError: error instanceof Error ? error.message : String(error),
+      updatedAt: now
+    })
+    throw error
+  }
 }
 
 export function createPersonAgentTaskQueueRunner(input: {

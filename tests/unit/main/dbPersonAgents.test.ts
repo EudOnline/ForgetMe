@@ -389,4 +389,75 @@ describe('person-agent persistence migrations', () => {
 
     db.close()
   })
+
+  it('creates and upserts person-agent task queue runner state rows', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-person-agent-runner-state-db-'))
+    const db = openDatabase(path.join(root, 'archive.sqlite'))
+
+    runMigrations(db)
+
+    const runnerStateColumns = db.prepare(
+      "pragma table_info('person_agent_task_queue_runner_state')"
+    ).all() as Array<{ name: string }>
+    expect(runnerStateColumns.map((column) => column.name)).toEqual(expect.arrayContaining([
+      'runner_name',
+      'status',
+      'last_started_at',
+      'last_completed_at',
+      'last_failed_at',
+      'last_processed_task_count',
+      'total_processed_task_count',
+      'last_error',
+      'updated_at'
+    ]))
+
+    const persistenceModule = await import('../../../src/main/services/governancePersistenceService')
+    const upsertRunnerState = Reflect.get(persistenceModule, 'upsertPersonAgentTaskQueueRunnerState') as
+      | ((...args: unknown[]) => unknown)
+      | undefined
+    const getRunnerState = Reflect.get(persistenceModule, 'getPersonAgentTaskQueueRunnerState') as
+      | ((...args: unknown[]) => unknown)
+      | undefined
+
+    expect(typeof upsertRunnerState).toBe('function')
+    expect(typeof getRunnerState).toBe('function')
+
+    upsertRunnerState?.(db, {
+      runnerName: 'person_agent_task_queue',
+      status: 'running',
+      lastStartedAt: '2026-04-09T01:05:00.000Z',
+      lastCompletedAt: null,
+      lastFailedAt: null,
+      lastProcessedTaskCount: 0,
+      totalProcessedTaskCount: 0,
+      lastError: null,
+      updatedAt: '2026-04-09T01:05:00.000Z'
+    })
+
+    upsertRunnerState?.(db, {
+      runnerName: 'person_agent_task_queue',
+      status: 'idle',
+      lastStartedAt: '2026-04-09T01:05:00.000Z',
+      lastCompletedAt: '2026-04-09T01:05:03.000Z',
+      lastFailedAt: null,
+      lastProcessedTaskCount: 4,
+      totalProcessedTaskCount: 4,
+      lastError: null,
+      updatedAt: '2026-04-09T01:05:03.000Z'
+    })
+
+    expect(getRunnerState?.(db, {})).toEqual({
+      runnerName: 'person_agent_task_queue',
+      status: 'idle',
+      lastStartedAt: '2026-04-09T01:05:00.000Z',
+      lastCompletedAt: '2026-04-09T01:05:03.000Z',
+      lastFailedAt: null,
+      lastProcessedTaskCount: 4,
+      totalProcessedTaskCount: 4,
+      lastError: null,
+      updatedAt: '2026-04-09T01:05:03.000Z'
+    })
+
+    db.close()
+  })
 })

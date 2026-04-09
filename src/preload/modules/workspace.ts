@@ -12,6 +12,7 @@ type WorkspacePreloadModule = Pick<
   | 'listPersonAgentConsultationSessions'
   | 'getPersonAgentConsultationSession'
   | 'getPersonAgentRuntimeState'
+  | 'getPersonAgentTaskQueueRunnerState'
   | 'getPersonAgentState'
   | 'listPersonAgentRefreshQueue'
   | 'listPersonAgentAuditEvents'
@@ -59,6 +60,7 @@ export function createWorkspacePreloadModule(ipcRenderer: IpcRenderer): Workspac
     listPersonAgentConsultationSessions: invokeWith(ipcRenderer, 'archive:listPersonAgentConsultationSessions'),
     getPersonAgentConsultationSession: (sessionId) => ipcRenderer.invoke('archive:getPersonAgentConsultationSession', { sessionId }),
     getPersonAgentRuntimeState: invokeWith(ipcRenderer, 'archive:getPersonAgentRuntimeState'),
+    getPersonAgentTaskQueueRunnerState: invokeWithout(ipcRenderer, 'archive:getPersonAgentTaskQueueRunnerState'),
     getPersonAgentState: invokeWith(ipcRenderer, 'archive:getPersonAgentState'),
     listPersonAgentRefreshQueue: invokeWith(ipcRenderer, 'archive:listPersonAgentRefreshQueue'),
     listPersonAgentAuditEvents: invokeWith(ipcRenderer, 'archive:listPersonAgentAuditEvents'),

@@ -34,6 +34,7 @@ import {
   listPersonAgentAuditEvents,
   listPersonAgentInteractionMemories,
   listPersonAgentRefreshQueue,
+  getPersonAgentTaskQueueRunnerState,
   listPersonAgentTaskRuns,
   listPersonAgentTasks
 } from '../../../services/governancePersistenceService'
@@ -363,6 +364,9 @@ export function createWorkspaceModule(appPaths: AppPaths) {
     },
     async getPersonAgentRuntimeState(input: Parameters<typeof getPersonAgentConsultationRuntimeState>[1]) {
       return this.withArchiveDatabase((db) => getPersonAgentConsultationRuntimeState(db, input))
+    },
+    async getPersonAgentTaskQueueRunnerState() {
+      return this.withArchiveDatabase((db) => getPersonAgentTaskQueueRunnerState(db, {}))
     },
     async getPersonAgentState(input: { canonicalPersonId: string }) {
       return this.withArchiveDatabase((db) => getPersonAgentByCanonicalPersonId(db, input))

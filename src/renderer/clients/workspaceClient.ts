@@ -18,6 +18,7 @@ type WorkspaceClient = Pick<
   | 'listPersonAgentConsultationSessions'
   | 'getPersonAgentConsultationSession'
   | 'getPersonAgentRuntimeState'
+  | 'getPersonAgentTaskQueueRunnerState'
   | 'getPersonAgentState'
   | 'listPersonAgentRefreshQueue'
   | 'listPersonAgentAuditEvents'
@@ -65,6 +66,7 @@ export function getWorkspaceClient(): WorkspaceClient {
     listPersonAgentConsultationSessions: bridgeMethod('listPersonAgentConsultationSessions', async () => []),
     getPersonAgentConsultationSession: bridgeMethod('getPersonAgentConsultationSession', async () => null),
     getPersonAgentRuntimeState: bridgeMethod('getPersonAgentRuntimeState', async () => null),
+    getPersonAgentTaskQueueRunnerState: bridgeMethod('getPersonAgentTaskQueueRunnerState', async () => null),
     getPersonAgentState: bridgeMethod('getPersonAgentState', async () => null),
     listPersonAgentRefreshQueue: bridgeMethod('listPersonAgentRefreshQueue', async () => []),
     listPersonAgentAuditEvents: bridgeMethod('listPersonAgentAuditEvents', async () => []),

@@ -224,6 +224,32 @@ describe('personAgentTaskQueueRunnerService', () => {
       'expand_topic',
       'review_strategy_change'
     ])
+    expect(
+      db.prepare(
+        `select
+          runner_name as runnerName,
+          status,
+          last_started_at as lastStartedAt,
+          last_completed_at as lastCompletedAt,
+          last_failed_at as lastFailedAt,
+          last_processed_task_count as lastProcessedTaskCount,
+          total_processed_task_count as totalProcessedTaskCount,
+          last_error as lastError,
+          updated_at as updatedAt
+         from person_agent_task_queue_runner_state
+         where runner_name = ?`
+      ).get('person_agent_task_queue')
+    ).toEqual({
+      runnerName: 'person_agent_task_queue',
+      status: 'idle',
+      lastStartedAt: '2026-04-09T01:05:00.000Z',
+      lastCompletedAt: '2026-04-09T01:05:00.000Z',
+      lastFailedAt: null,
+      lastProcessedTaskCount: 4,
+      totalProcessedTaskCount: 4,
+      lastError: null,
+      updatedAt: '2026-04-09T01:05:00.000Z'
+    })
 
     db.close()
   })
@@ -249,6 +275,65 @@ describe('personAgentTaskQueueRunnerService', () => {
         status: 'pending'
       })
     ])
+    expect(
+      db.prepare(
+        `select
+          runner_name as runnerName,
+          status,
+          last_processed_task_count as lastProcessedTaskCount,
+          total_processed_task_count as totalProcessedTaskCount,
+          last_error as lastError
+         from person_agent_task_queue_runner_state
+         where runner_name = ?`
+      ).get('person_agent_task_queue')
+    ).toEqual({
+      runnerName: 'person_agent_task_queue',
+      status: 'idle',
+      lastProcessedTaskCount: 0,
+      totalProcessedTaskCount: 0,
+      lastError: null
+    })
+
+    db.close()
+  })
+
+  it('records runner failures when task queue processing throws', () => {
+    const db = setupDatabase()
+
+    expect(() => runPersonAgentTaskQueueCycle(db, {
+      source: 'background_runner',
+      now: '2026-04-09T01:07:00.000Z',
+      processQueue: (() => {
+        throw new Error('runner exploded')
+      }) as never
+    } as never)).toThrow('runner exploded')
+
+    expect(
+      db.prepare(
+        `select
+          runner_name as runnerName,
+          status,
+          last_started_at as lastStartedAt,
+          last_completed_at as lastCompletedAt,
+          last_failed_at as lastFailedAt,
+          last_processed_task_count as lastProcessedTaskCount,
+          total_processed_task_count as totalProcessedTaskCount,
+          last_error as lastError,
+          updated_at as updatedAt
+         from person_agent_task_queue_runner_state
+         where runner_name = ?`
+      ).get('person_agent_task_queue')
+    ).toEqual({
+      runnerName: 'person_agent_task_queue',
+      status: 'error',
+      lastStartedAt: '2026-04-09T01:07:00.000Z',
+      lastCompletedAt: null,
+      lastFailedAt: '2026-04-09T01:07:00.000Z',
+      lastProcessedTaskCount: 0,
+      totalProcessedTaskCount: 0,
+      lastError: 'runner exploded',
+      updatedAt: '2026-04-09T01:07:00.000Z'
+    })
 
     db.close()
   })
