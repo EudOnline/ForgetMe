@@ -307,6 +307,13 @@ describe('personAgentTaskQueueRunnerService', () => {
         'utf8'
       )
     ) as Record<string, unknown>
+    const activityLogEntries = fs.readFileSync(
+      path.join(appPaths.personAgentStateDir, taskRuns[0]!.personAgentId, 'activity-log.jsonl'),
+      'utf8'
+    )
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line))
     expect(runtimeStateArtifact).toEqual(expect.objectContaining({
       canonicalPersonId: 'cp-1',
       personAgentId: taskRuns[0]!.personAgentId,
@@ -317,6 +324,13 @@ describe('personAgentTaskQueueRunnerService', () => {
         status: 'idle',
         lastCompletedAt: '2026-04-09T01:05:00.000Z'
       })
+    }))
+    expect(activityLogEntries.at(-1)).toEqual(expect.objectContaining({
+      eventKind: 'task_run_recorded',
+      canonicalPersonId: 'cp-1',
+      personAgentId: taskRuns[0]!.personAgentId,
+      runId: expect.any(String),
+      taskKind: expect.stringMatching(/resolve_conflict|fill_coverage_gap|expand_topic|review_strategy_change/)
     }))
 
     db.close()

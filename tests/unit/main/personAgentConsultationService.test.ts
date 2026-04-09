@@ -240,6 +240,13 @@ describe('personAgentConsultationService', () => {
         'utf8'
       )
     ) as Record<string, unknown>
+    const activityLogEntries = fs.readFileSync(
+      path.join(appPaths.personAgentStateDir, personAgent.personAgentId, 'activity-log.jsonl'),
+      'utf8'
+    )
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line))
     expect(runtimeStateArtifact).toEqual(expect.objectContaining({
       canonicalPersonId: 'cp-1',
       personAgentId: personAgent.personAgentId,
@@ -247,6 +254,14 @@ describe('personAgentConsultationService', () => {
       totalTurnCount: 2,
       latestQuestion: '她还有什么冲突？',
       lastConsultedAt: '2026-04-08T12:05:00.000Z'
+    }))
+    expect(activityLogEntries.at(-1)).toEqual(expect.objectContaining({
+      eventKind: 'consultation_turn_persisted',
+      canonicalPersonId: 'cp-1',
+      personAgentId: personAgent.personAgentId,
+      sessionId: firstTurn?.sessionId,
+      turnId: secondTurn?.turnId,
+      question: '她还有什么冲突？'
     }))
     expect(listPersonAgentTaskRuns(db, {
       canonicalPersonId: 'cp-1'

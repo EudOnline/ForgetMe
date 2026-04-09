@@ -18,7 +18,10 @@ import {
   updatePersonAgentTaskStatus
 } from './governancePersistenceService'
 import { getPersonAgentFactMemorySummary } from './personAgentFactMemoryService'
-import { syncPersonAgentCapsuleRuntimeArtifacts } from './personAgentCapsuleRuntimeArtifactsService'
+import {
+  appendPersonAgentCapsuleActivityEvent,
+  syncPersonAgentCapsuleRuntimeArtifacts
+} from './personAgentCapsuleRuntimeArtifactsService'
 
 type DerivedTaskRow = Omit<
   PersonAgentTaskRecord,
@@ -429,6 +432,21 @@ export function executePersonAgentTask(db: ArchiveDatabase, input: {
       capsule,
       personAgent,
       now
+    })
+    appendPersonAgentCapsuleActivityEvent({
+      capsule,
+      event: {
+        eventKind: 'task_run_recorded',
+        capsuleId: capsule.capsuleId,
+        personAgentId: task.personAgentId,
+        canonicalPersonId: task.canonicalPersonId,
+        runId: run.runId,
+        taskId: task.taskId,
+        taskKind: task.taskKind,
+        runStatus: run.runStatus,
+        source: input.source ?? null,
+        createdAt: now
+      }
     })
   }
 

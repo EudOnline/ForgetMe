@@ -16,7 +16,10 @@ import {
   upsertPersonAgentRuntimeState
 } from './governancePersistenceService'
 import { buildPersonAgentAnswerPack } from './personAgentAnswerPackService'
-import { syncPersonAgentCapsuleRuntimeArtifacts } from './personAgentCapsuleRuntimeArtifactsService'
+import {
+  appendPersonAgentCapsuleActivityEvent,
+  syncPersonAgentCapsuleRuntimeArtifacts
+} from './personAgentCapsuleRuntimeArtifactsService'
 import {
   processPersonAgentTaskQueue,
   syncPersonAgentTasks
@@ -137,6 +140,19 @@ export function askPersonAgentConsultationPersisted(db: ArchiveDatabase, input: 
       capsule,
       personAgent,
       now
+    })
+    appendPersonAgentCapsuleActivityEvent({
+      capsule,
+      event: {
+        eventKind: 'consultation_turn_persisted',
+        capsuleId: capsule.capsuleId,
+        personAgentId: personAgent.personAgentId,
+        canonicalPersonId: input.canonicalPersonId,
+        sessionId: session.sessionId,
+        turnId: turn.turnId,
+        question: input.question,
+        createdAt: now
+      }
     })
   }
 

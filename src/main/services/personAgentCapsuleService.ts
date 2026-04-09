@@ -14,7 +14,10 @@ import {
   listPersonAgentCapsuleMemoryCheckpoints,
   upsertPersonAgentCapsule
 } from './governancePersistenceService'
-import { syncPersonAgentCapsuleRuntimeArtifacts } from './personAgentCapsuleRuntimeArtifactsService'
+import {
+  appendPersonAgentCapsuleActivityEvent,
+  syncPersonAgentCapsuleRuntimeArtifacts
+} from './personAgentCapsuleRuntimeArtifactsService'
 
 function logicalCapsuleRoot(kind: 'workspace' | 'state', personAgentId: string) {
   return `person-agent://${kind}/${personAgentId}`
@@ -124,12 +127,13 @@ export function materializePersonAgentCapsule(db: ArchiveDatabase, input: {
     limit: 1
   })[0] ?? null
 
+  let appendedCheckpoint = null as ReturnType<typeof appendPersonAgentCapsuleMemoryCheckpoint> | null
   if (shouldAppendCheckpoint({
     existingCapsule,
     latestCheckpoint,
     personAgent: input.personAgent
   })) {
-    appendPersonAgentCapsuleMemoryCheckpoint(db, {
+    appendedCheckpoint = appendPersonAgentCapsuleMemoryCheckpoint(db, {
       capsuleId: capsule.capsuleId,
       personAgentId: input.personAgent.personAgentId,
       canonicalPersonId: input.personAgent.canonicalPersonId,
@@ -157,6 +161,20 @@ export function materializePersonAgentCapsule(db: ArchiveDatabase, input: {
       })[0] ?? null,
       now
     })
+    if (appendedCheckpoint) {
+      appendPersonAgentCapsuleActivityEvent({
+        capsule: persistedCapsule,
+        event: {
+          eventKind: 'capsule_checkpoint_written',
+          capsuleId: persistedCapsule.capsuleId,
+          personAgentId: input.personAgent.personAgentId,
+          canonicalPersonId: input.personAgent.canonicalPersonId,
+          checkpointId: appendedCheckpoint.checkpointId,
+          checkpointKind: appendedCheckpoint.checkpointKind,
+          createdAt: appendedCheckpoint.createdAt
+        }
+      })
+    }
   }
 
   return persistedCapsule

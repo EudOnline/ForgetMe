@@ -102,11 +102,13 @@ describe('personAgentCapsuleService', () => {
     const memorySnapshotPath = path.join(workspaceRoot, 'memory-snapshot.json')
     const runtimeStatePath = path.join(stateRoot, 'runtime-state.json')
     const checkpointArtifactPath = path.join(stateRoot, 'checkpoints', `${checkpoints[0]!.checkpointId}.json`)
+    const activityLogPath = path.join(stateRoot, 'activity-log.jsonl')
 
     expect(fs.existsSync(identityArtifactPath)).toBe(true)
     expect(fs.existsSync(memorySnapshotPath)).toBe(true)
     expect(fs.existsSync(runtimeStatePath)).toBe(true)
     expect(fs.existsSync(checkpointArtifactPath)).toBe(true)
+    expect(fs.existsSync(activityLogPath)).toBe(true)
 
     expect(JSON.parse(fs.readFileSync(identityArtifactPath, 'utf8'))).toEqual(expect.objectContaining({
       capsuleId: expect.any(String),
@@ -131,6 +133,19 @@ describe('personAgentCapsuleService', () => {
       checkpointKind: 'activation',
       canonicalPersonId: 'cp-1'
     }))
+    expect(
+      fs.readFileSync(activityLogPath, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line))
+    ).toEqual([
+      expect.objectContaining({
+        eventKind: 'capsule_checkpoint_written',
+        checkpointId: checkpoints[0]!.checkpointId,
+        checkpointKind: 'activation',
+        canonicalPersonId: 'cp-1'
+      })
+    ])
 
     db.close()
   })

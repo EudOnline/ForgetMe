@@ -47,6 +47,20 @@ function createArtifactRecord(input: {
   }
 }
 
+export function appendPersonAgentCapsuleActivityEvent(input: {
+  capsule: PersonAgentCapsuleRecord
+  event: Record<string, unknown>
+}) {
+  if (isLogicalCapsuleRoot(input.capsule.stateRoot)) {
+    return null
+  }
+
+  const activityLogPath = path.join(input.capsule.stateRoot, 'activity-log.jsonl')
+  ensureDirectoryForFile(activityLogPath)
+  fs.appendFileSync(activityLogPath, `${JSON.stringify(input.event)}\n`, 'utf8')
+  return activityLogPath
+}
+
 export function syncPersonAgentCapsuleRuntimeArtifacts(db: ArchiveDatabase, input: {
   capsule: PersonAgentCapsuleRecord
   personAgent: PersonAgentRecord
