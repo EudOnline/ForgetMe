@@ -3,7 +3,10 @@ import type {
   PersonAgentTaskStatus
 } from '../../shared/archiveContracts'
 import type { ArchiveDatabase } from './db'
-import { runPersonAgentRuntime } from './personAgentRuntimeService'
+import {
+  processPersonAgentRuntimeLoop,
+  runPersonAgentRuntime
+} from './personAgentRuntimeService'
 import { runPersonAgentRuntimeLoop } from './personAgentRuntimeLoopService'
 import {
   syncPersonAgentTasks as syncPersonAgentTaskState,
@@ -49,22 +52,11 @@ export function processPersonAgentTaskQueue(db: ArchiveDatabase, input: {
   source?: string
   now?: string
 } = {}) {
-  return runPersonAgentRuntimeLoop(
-    db,
-    {
-      canonicalPersonId: input.canonicalPersonId,
-      personAgentId: input.personAgentId,
-      limit: input.limit
-    },
-    (taskId): PersonAgentTaskRunRecord | null => {
-      const result = runPersonAgentRuntime(db, {
-        operationKind: 'task_run',
-        taskId,
-        source: input.source ?? 'background_queue',
-        now: input.now
-      })
-
-      return result.resultKind === 'task_run' ? result.taskRun : null
-    }
-  )
+  return processPersonAgentRuntimeLoop(db, {
+    canonicalPersonId: input.canonicalPersonId,
+    personAgentId: input.personAgentId,
+    limit: input.limit,
+    source: input.source ?? 'background_queue',
+    now: input.now
+  })
 }

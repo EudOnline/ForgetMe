@@ -17,9 +17,9 @@ import {
   resolveNextPersonAgentStrategyProfile
 } from './personAgentStrategyService'
 import {
-  processPersonAgentTaskQueue,
   syncPersonAgentTasks
 } from './personAgentTaskService'
+import { processPersonAgentRuntimeLoop } from './personAgentRuntimeService'
 import type { PersonAgentCapsuleActivationSource } from '../../shared/archiveContracts'
 
 function uniqueStrings(values: string[]) {
@@ -268,8 +268,10 @@ export function rebuildPersonAgentForCanonicalPerson(db: ArchiveDatabase, input:
 export function processNextPersonAgentRefresh(db: ArchiveDatabase, input: {
   appPaths?: AppPaths
   now?: string
+  processRuntimeLoop?: typeof processPersonAgentRuntimeLoop
 } = {}) {
   const now = input.now ?? new Date().toISOString()
+  const processRuntimeLoop = input.processRuntimeLoop ?? processPersonAgentRuntimeLoop
   const pending = listPersonAgentRefreshQueue(db, {
     status: 'pending'
   })[0] ?? null
@@ -310,7 +312,7 @@ export function processNextPersonAgentRefresh(db: ArchiveDatabase, input: {
       canonicalPersonId: pending.canonicalPersonId,
       now
     })
-    processPersonAgentTaskQueue(db, {
+    processRuntimeLoop(db, {
       canonicalPersonId: pending.canonicalPersonId,
       source: 'refresh_sync',
       now
@@ -331,6 +333,7 @@ export function processNextPersonAgentRefresh(db: ArchiveDatabase, input: {
 export function processPendingPersonAgentRefreshes(db: ArchiveDatabase, input: {
   appPaths?: AppPaths
   now?: string
+  processRuntimeLoop?: typeof processPersonAgentRuntimeLoop
 } = {}) {
   const processed = [] as ReturnType<typeof listPersonAgentRefreshQueue>
 

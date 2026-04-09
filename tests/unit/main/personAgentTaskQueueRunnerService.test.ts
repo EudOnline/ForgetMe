@@ -18,6 +18,7 @@ import { materializePersonAgentCapsule } from '../../../src/main/services/person
 import { syncPersonAgentTasks } from '../../../src/main/services/personAgentTaskService'
 import {
   createPersonAgentTaskQueueRunner,
+  PERSON_AGENT_TASK_QUEUE_RUNNER_NAME,
   runPersonAgentTaskQueueCycle
 } from '../../../src/main/services/personAgentTaskQueueRunnerService'
 
@@ -280,9 +281,9 @@ describe('personAgentTaskQueueRunnerService', () => {
           updated_at as updatedAt
          from person_agent_task_queue_runner_state
          where runner_name = ?`
-      ).get('person_agent_task_queue')
+      ).get(PERSON_AGENT_TASK_QUEUE_RUNNER_NAME)
     ).toEqual({
-      runnerName: 'person_agent_task_queue',
+      runnerName: PERSON_AGENT_TASK_QUEUE_RUNNER_NAME,
       status: 'idle',
       lastStartedAt: '2026-04-09T01:05:00.000Z',
       lastCompletedAt: '2026-04-09T01:05:00.000Z',
@@ -293,9 +294,9 @@ describe('personAgentTaskQueueRunnerService', () => {
       updatedAt: '2026-04-09T01:05:00.000Z'
     })
     expect(getPersonAgentTaskQueueRunnerState(db, {
-      runnerName: 'person_agent_task_queue'
+      runnerName: PERSON_AGENT_TASK_QUEUE_RUNNER_NAME
     })).toEqual(expect.objectContaining({
-      runnerName: 'person_agent_task_queue',
+      runnerName: PERSON_AGENT_TASK_QUEUE_RUNNER_NAME,
       lastProcessedTaskCount: 4,
       lastProcessedCanonicalPersonId: 'cp-1',
       lastProcessedCapsuleId: expect.any(String),
@@ -320,7 +321,7 @@ describe('personAgentTaskQueueRunnerService', () => {
       latestTaskRunId: expect.any(String),
       latestTaskRunKind: expect.stringMatching(/resolve_conflict|fill_coverage_gap|expand_topic|review_strategy_change/),
       taskRunner: expect.objectContaining({
-        runnerName: 'person_agent_task_queue',
+        runnerName: PERSON_AGENT_TASK_QUEUE_RUNNER_NAME,
         status: 'idle',
         lastCompletedAt: '2026-04-09T01:05:00.000Z'
       })
@@ -336,7 +337,7 @@ describe('personAgentTaskQueueRunnerService', () => {
     db.close()
   })
 
-  it('returns false when only blocked await-refresh tasks remain', () => {
+  it('returns true when the runtime runner completes a pending refresh even without task runs', () => {
     const { db } = setupDatabase()
     seedBlockedTaskFixture(db)
 
@@ -345,7 +346,7 @@ describe('personAgentTaskQueueRunnerService', () => {
       now: '2026-04-09T01:06:00.000Z'
     })
 
-    expect(processed).toBe(false)
+    expect(processed).toBe(true)
     expect(listPersonAgentTaskRuns(db, {
       canonicalPersonId: 'cp-2'
     })).toEqual([])
@@ -367,9 +368,9 @@ describe('personAgentTaskQueueRunnerService', () => {
           last_error as lastError
          from person_agent_task_queue_runner_state
          where runner_name = ?`
-      ).get('person_agent_task_queue')
+      ).get(PERSON_AGENT_TASK_QUEUE_RUNNER_NAME)
     ).toEqual({
-      runnerName: 'person_agent_task_queue',
+      runnerName: PERSON_AGENT_TASK_QUEUE_RUNNER_NAME,
       status: 'idle',
       lastProcessedTaskCount: 0,
       totalProcessedTaskCount: 0,
@@ -383,9 +384,8 @@ describe('personAgentTaskQueueRunnerService', () => {
     const { db } = setupDatabase()
 
     expect(() => runPersonAgentTaskQueueCycle(db, {
-      source: 'background_runner',
       now: '2026-04-09T01:07:00.000Z',
-      processQueue: (() => {
+      processRuntimeLoop: (() => {
         throw new Error('runner exploded')
       }) as never
     } as never)).toThrow('runner exploded')
@@ -404,9 +404,9 @@ describe('personAgentTaskQueueRunnerService', () => {
           updated_at as updatedAt
          from person_agent_task_queue_runner_state
          where runner_name = ?`
-      ).get('person_agent_task_queue')
+      ).get(PERSON_AGENT_TASK_QUEUE_RUNNER_NAME)
     ).toEqual({
-      runnerName: 'person_agent_task_queue',
+      runnerName: PERSON_AGENT_TASK_QUEUE_RUNNER_NAME,
       status: 'error',
       lastStartedAt: '2026-04-09T01:07:00.000Z',
       lastCompletedAt: null,

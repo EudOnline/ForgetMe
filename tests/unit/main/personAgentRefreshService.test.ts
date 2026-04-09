@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { ensureAppPaths } from '../../../src/main/services/appPaths'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
 import {
@@ -654,6 +654,37 @@ describe('personAgentRefreshService', () => {
       'expand_topic',
       'fill_coverage_gap'
     ])
+
+    db.close()
+  })
+
+  it('feeds completed refreshes through the runtime loop hook', () => {
+    const { appPaths, db } = setupDatabase()
+    seedPromotionReadyPerson(db)
+
+    enqueuePersonAgentRefreshForCanonicalPeople(db, {
+      canonicalPersonIds: ['cp-1'],
+      reason: 'relationship_changed',
+      requestedAt: NOW
+    })
+
+    const processRuntimeLoop = vi.fn().mockReturnValue([])
+
+    const processed = processNextPersonAgentRefresh(db, {
+      appPaths,
+      now: NOW,
+      processRuntimeLoop
+    })
+
+    expect(processed).toMatchObject({
+      canonicalPersonId: 'cp-1',
+      status: 'completed'
+    })
+    expect(processRuntimeLoop).toHaveBeenCalledWith(db, {
+      canonicalPersonId: 'cp-1',
+      source: 'refresh_sync',
+      now: NOW
+    })
 
     db.close()
   })

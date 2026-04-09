@@ -336,6 +336,32 @@ function runTaskRuntime(db: ArchiveDatabase, input: {
   }
 }
 
+export function processPersonAgentRuntimeLoop(db: ArchiveDatabase, input: {
+  canonicalPersonId?: string
+  personAgentId?: string
+  limit?: number
+  source?: string
+  now?: string
+} = {}) {
+  return runPersonAgentRuntimeLoop(
+    db,
+    {
+      canonicalPersonId: input.canonicalPersonId,
+      personAgentId: input.personAgentId,
+      limit: input.limit
+    },
+    (taskId) => {
+      const result = runTaskRuntime(db, {
+        taskId,
+        source: input.source ?? 'background_runner',
+        now: input.now
+      })
+
+      return result.resultKind === 'task_run' ? result.taskRun : null
+    }
+  )
+}
+
 export function runPersonAgentRuntime(
   db: ArchiveDatabase,
   input: PersonAgentRuntimeInput
