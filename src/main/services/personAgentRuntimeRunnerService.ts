@@ -5,8 +5,8 @@ import type { ArchiveDatabase } from './db'
 import {
   getPersonAgentByCanonicalPersonId,
   getPersonAgentCapsule,
-  getPersonAgentTaskQueueRunnerState,
-  upsertPersonAgentTaskQueueRunnerState
+  getPersonAgentRuntimeRunnerState,
+  upsertPersonAgentRuntimeRunnerState
 } from './governancePersistenceService'
 import { runPersonAgentCapsuleBackfill } from './personAgentCapsuleBackfillService'
 import { processNextPersonAgentRefresh } from './personAgentRefreshService'
@@ -50,17 +50,19 @@ export function runPersonAgentRuntimeRunnerCycle(
     runnerName?: string
     processNextRefresh?: typeof processNextPersonAgentRefresh
     processRuntimeLoop?: typeof processPersonAgentRuntimeLoop
+    syncRuntimeArtifacts?: typeof syncPersonAgentCapsuleRuntimeArtifacts
   } = {}
 ) {
   const now = input.now ?? new Date().toISOString()
   const runnerName = input.runnerName ?? PERSON_AGENT_RUNTIME_RUNNER_NAME
   const processNextRefresh = input.processNextRefresh ?? processNextPersonAgentRefresh
   const processRuntimeLoop = input.processRuntimeLoop ?? processPersonAgentRuntimeLoop
-  const existingState = getPersonAgentTaskQueueRunnerState(db, {
+  const syncRuntimeArtifacts = input.syncRuntimeArtifacts ?? syncPersonAgentCapsuleRuntimeArtifacts
+  const existingState = getPersonAgentRuntimeRunnerState(db, {
     runnerName
   })
 
-  upsertPersonAgentTaskQueueRunnerState(db, {
+  upsertPersonAgentRuntimeRunnerState(db, {
     runnerName,
     status: 'running',
     lastStartedAt: now,
@@ -73,18 +75,25 @@ export function runPersonAgentRuntimeRunnerCycle(
   })
 
   try {
+    const refreshRuns = [] as ReturnType<typeof processPersonAgentRuntimeLoop>
     const refreshed = processNextRefresh(db, {
       appPaths: input.appPaths,
-      now
+      now,
+      processRuntimeLoop(runtimeDb, refreshInput) {
+        const runs = processRuntimeLoop(runtimeDb, refreshInput)
+        refreshRuns.push(...runs)
+        return runs
+      }
     })
-    const runs = processRuntimeLoop(db, {
+    const backgroundRuns = processRuntimeLoop(db, {
       limit: input.limit,
       source: input.source ?? 'background_runner',
       now
     })
+    const runs = [...refreshRuns, ...backgroundRuns]
     const processedTaskCount = runs.length
 
-    upsertPersonAgentTaskQueueRunnerState(db, {
+    upsertPersonAgentRuntimeRunnerState(db, {
       runnerName,
       status: 'idle',
       lastStartedAt: now,
@@ -107,7 +116,7 @@ export function runPersonAgentRuntimeRunnerCycle(
       })
 
       if (personAgent && capsule) {
-        syncPersonAgentCapsuleRuntimeArtifacts(db, {
+        syncRuntimeArtifacts(db, {
           capsule,
           personAgent,
           now
@@ -117,7 +126,7 @@ export function runPersonAgentRuntimeRunnerCycle(
 
     return Boolean(refreshed) || processedTaskCount > 0
   } catch (error) {
-    upsertPersonAgentTaskQueueRunnerState(db, {
+    upsertPersonAgentRuntimeRunnerState(db, {
       runnerName,
       status: 'error',
       lastStartedAt: now,

@@ -57,7 +57,7 @@ export function registerWorkspaceIpc(appPaths: AppPaths) {
   ipcMain.removeHandler('archive:listPersonAgentConsultationSessions')
   ipcMain.removeHandler('archive:getPersonAgentConsultationSession')
   ipcMain.removeHandler('archive:getPersonAgentRuntimeState')
-  ipcMain.removeHandler('archive:getPersonAgentTaskQueueRunnerState')
+  ipcMain.removeHandler('archive:getPersonAgentRuntimeRunnerState')
   ipcMain.removeHandler('archive:getPersonAgentState')
   ipcMain.removeHandler('archive:getPersonAgentCapsule')
   ipcMain.removeHandler('archive:listPersonAgentCapsuleMemoryCheckpoints')
@@ -138,8 +138,8 @@ export function registerWorkspaceIpc(appPaths: AppPaths) {
     return workspaceModule.getPersonAgentRuntimeState(input)
   })
 
-  ipcMain.handle('archive:getPersonAgentTaskQueueRunnerState', async () => {
-    return workspaceModule.getPersonAgentTaskQueueRunnerState()
+  ipcMain.handle('archive:getPersonAgentRuntimeRunnerState', async () => {
+    return workspaceModule.getPersonAgentRuntimeRunnerState()
   })
 
   ipcMain.handle('archive:getPersonAgentState', async (_event, payload) => {

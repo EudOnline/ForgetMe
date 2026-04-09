@@ -37,7 +37,7 @@ const {
   listPersonAgentAuditEvents,
   getPersonAgentCapsule,
   listPersonAgentCapsuleMemoryCheckpoints,
-  getPersonAgentTaskQueueRunnerState,
+  getPersonAgentRuntimeRunnerState,
   listPersonAgentRefreshQueue,
   listPersonAgentTaskRuns,
   listPersonAgentTasks,
@@ -80,7 +80,7 @@ const {
   listPersonAgentAuditEvents: vi.fn(),
   getPersonAgentCapsule: vi.fn(),
   listPersonAgentCapsuleMemoryCheckpoints: vi.fn(),
-  getPersonAgentTaskQueueRunnerState: vi.fn(),
+  getPersonAgentRuntimeRunnerState: vi.fn(),
   listPersonAgentRefreshQueue: vi.fn(),
   listPersonAgentTaskRuns: vi.fn(),
   listPersonAgentTasks: vi.fn(),
@@ -181,7 +181,7 @@ vi.mock('../../../src/main/services/governancePersistenceService', async (import
     getPersonAgentByCanonicalPersonId,
     listPersonAgentAuditEvents,
     getPersonAgentCapsule,
-    getPersonAgentTaskQueueRunnerState,
+    getPersonAgentRuntimeRunnerState,
     listPersonAgentCapsuleMemoryCheckpoints,
     listPersonAgentRefreshQueue,
     listPersonAgentTaskRuns,
@@ -261,7 +261,7 @@ describe('registerWorkspaceIpc session handlers', () => {
     getPersonAgentByCanonicalPersonId.mockReset()
     listPersonAgentAuditEvents.mockReset()
     getPersonAgentCapsule.mockReset()
-    getPersonAgentTaskQueueRunnerState.mockReset()
+    getPersonAgentRuntimeRunnerState.mockReset()
     listPersonAgentCapsuleMemoryCheckpoints.mockReset()
     listPersonAgentRefreshQueue.mockReset()
     listPersonAgentTaskRuns.mockReset()
@@ -496,7 +496,7 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
     listPersonAgentAuditEvents.mockReset()
     getPersonAgentCapsule.mockReset()
     listPersonAgentCapsuleMemoryCheckpoints.mockReset()
-    getPersonAgentTaskQueueRunnerState.mockReset()
+    getPersonAgentRuntimeRunnerState.mockReset()
     listPersonAgentTaskRuns.mockReset()
     listPersonAgentTasks.mockReset()
     listPersonAgentRefreshQueue.mockReset()
@@ -737,11 +737,11 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
     expect(close).toHaveBeenCalled()
   })
 
-  it('returns person-agent task queue runner state through ipc', async () => {
+  it('returns person-agent runtime runner state through ipc', async () => {
     const close = vi.fn()
     openDatabase.mockReturnValue({ close })
-    getPersonAgentTaskQueueRunnerState.mockReturnValue({
-      runnerName: 'person_agent_task_queue',
+    getPersonAgentRuntimeRunnerState.mockReturnValue({
+      runnerName: 'person_agent_runtime',
       status: 'idle',
       lastStartedAt: '2026-04-08T01:15:00.000Z',
       lastCompletedAt: '2026-04-08T01:15:02.000Z',
@@ -754,12 +754,12 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
 
     registerWorkspaceIpc(appPathsFixture())
 
-    const handler = handlerMap.get('archive:getPersonAgentTaskQueueRunnerState')
+    const handler = handlerMap.get('archive:getPersonAgentRuntimeRunnerState')
     const result = await handler?.({}, undefined)
 
-    expect(getPersonAgentTaskQueueRunnerState).toHaveBeenCalledWith(expect.anything(), {})
+    expect(getPersonAgentRuntimeRunnerState).toHaveBeenCalledWith(expect.anything(), {})
     expect(result).toEqual(expect.objectContaining({
-      runnerName: 'person_agent_task_queue',
+      runnerName: 'person_agent_runtime',
       status: 'idle',
       lastProcessedTaskCount: 4,
       totalProcessedTaskCount: 7,
@@ -913,8 +913,8 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
         createdAt: '2026-04-08T01:11:00.000Z'
       }
     ])
-    getPersonAgentTaskQueueRunnerState.mockReturnValue({
-      runnerName: 'person_agent_task_queue',
+    getPersonAgentRuntimeRunnerState.mockReturnValue({
+      runnerName: 'person_agent_runtime',
       status: 'idle',
       lastStartedAt: '2026-04-08T01:11:00.000Z',
       lastCompletedAt: '2026-04-08T01:11:02.000Z',
@@ -973,7 +973,7 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
       canonicalPersonId: 'cp-1',
       limit: 1
     })
-    expect(getPersonAgentTaskQueueRunnerState).toHaveBeenCalledWith(expect.anything(), {})
+    expect(getPersonAgentRuntimeRunnerState).toHaveBeenCalledWith(expect.anything(), {})
     expect(listPersonAgentTasks).toHaveBeenCalledWith(expect.anything(), {
       canonicalPersonId: 'cp-1'
     })
@@ -993,7 +993,7 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
           source: 'refresh_rebuild',
           changedFields: ['conflictBehavior']
         }),
-        taskQueueRunner: expect.objectContaining({
+        runtimeRunner: expect.objectContaining({
           status: 'healthy',
           stalled: false,
           thresholdMinutes: 15,
@@ -1041,7 +1041,7 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
         })
       ],
       runnerState: expect.objectContaining({
-        runnerName: 'person_agent_task_queue',
+        runnerName: 'person_agent_runtime',
         status: 'idle',
         totalProcessedTaskCount: 9
       }),
@@ -1180,7 +1180,7 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
     expect(close).toHaveBeenCalledTimes(2)
   })
 
-  it('surfaces stalled person-agent task queue runner alerts in inspection bundles', async () => {
+  it('surfaces stalled person-agent runtime runner alerts in inspection bundles', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-04-08T01:20:00.000Z'))
     try {
@@ -1206,8 +1206,8 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
       listPersonAgentRefreshQueue.mockReturnValue([])
       listPersonAgentAuditEvents.mockReturnValue([])
       listPersonAgentTasks.mockReturnValue([])
-      getPersonAgentTaskQueueRunnerState.mockReturnValue({
-        runnerName: 'person_agent_task_queue',
+      getPersonAgentRuntimeRunnerState.mockReturnValue({
+        runnerName: 'person_agent_runtime',
         status: 'running',
         lastStartedAt: '2026-04-08T01:00:00.000Z',
         lastCompletedAt: '2026-04-08T00:40:00.000Z',
@@ -1228,7 +1228,7 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
       expect(result).toEqual(expect.objectContaining({
         inspectionKind: 'capsule_runtime',
         overview: expect.objectContaining({
-          taskQueueRunner: expect.objectContaining({
+          runtimeRunner: expect.objectContaining({
             status: 'stalled',
             stalled: true,
             thresholdMinutes: 15,
@@ -1239,7 +1239,7 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
           expect.objectContaining({
             kind: 'runner_stalled',
             createdAt: '2026-04-08T01:00:00.000Z',
-            title: 'Task queue runner stalled',
+            title: 'Runtime runner stalled',
             emphasis: 'high'
           })
         ])

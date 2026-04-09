@@ -41,9 +41,36 @@ describe('person-agent persistence migrations', () => {
       'person_agent_runtime_state',
       'person_agent_tasks',
       'person_agent_task_runs',
-      'person_agent_task_queue_runner_state',
+      'person_agent_runtime_runner_state',
       'person_agent_capsules',
       'person_agent_capsule_memory_checkpoints'
+    ]))
+    expect(names).not.toEqual(expect.arrayContaining([
+      'agent_runs',
+      'agent_messages',
+      'agent_memories',
+      'agent_policy_versions',
+      'agent_suggestions',
+      'agent_runtime_settings',
+      'agent_runtime_setting_events',
+      'agent_objectives',
+      'agent_threads',
+      'agent_thread_participants',
+      'agent_messages_v2',
+      'agent_proposals',
+      'agent_votes',
+      'agent_tool_executions',
+      'agent_checkpoints',
+      'agent_role_state',
+      'agent_subagents',
+      'agent_runtime_events',
+      'agent_runtime_alerts',
+      'agent_runtime_alert_projection_state',
+      'agent_runtime_audit_projection_state',
+      'agent_runtime_audit_buckets',
+      'agent_runtime_scorecard_projection_state',
+      'agent_runtime_proposal_stats',
+      'agent_runtime_objective_stats'
     ]))
 
     expect(appPaths.personAgentWorkspaceDir).toBe(path.join(root, 'person-agents', 'workspaces'))
@@ -431,14 +458,14 @@ describe('person-agent persistence migrations', () => {
     db.close()
   })
 
-  it('creates and upserts person-agent task queue runner state rows', async () => {
+  it('creates and upserts person-agent runtime runner state rows', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'forgetme-person-agent-runner-state-db-'))
     const db = openDatabase(path.join(root, 'archive.sqlite'))
 
     runMigrations(db)
 
     const runnerStateColumns = db.prepare(
-      "pragma table_info('person_agent_task_queue_runner_state')"
+      "pragma table_info('person_agent_runtime_runner_state')"
     ).all() as Array<{ name: string }>
     expect(runnerStateColumns.map((column) => column.name)).toEqual(expect.arrayContaining([
       'runner_name',
@@ -453,10 +480,10 @@ describe('person-agent persistence migrations', () => {
     ]))
 
     const persistenceModule = await import('../../../src/main/services/governancePersistenceService')
-    const upsertRunnerState = Reflect.get(persistenceModule, 'upsertPersonAgentTaskQueueRunnerState') as
+    const upsertRunnerState = Reflect.get(persistenceModule, 'upsertPersonAgentRuntimeRunnerState') as
       | ((...args: unknown[]) => unknown)
       | undefined
-    const getRunnerState = Reflect.get(persistenceModule, 'getPersonAgentTaskQueueRunnerState') as
+    const getRunnerState = Reflect.get(persistenceModule, 'getPersonAgentRuntimeRunnerState') as
       | ((...args: unknown[]) => unknown)
       | undefined
 
@@ -464,7 +491,7 @@ describe('person-agent persistence migrations', () => {
     expect(typeof getRunnerState).toBe('function')
 
     upsertRunnerState?.(db, {
-      runnerName: 'person_agent_task_queue',
+      runnerName: 'person_agent_runtime',
       status: 'running',
       lastStartedAt: '2026-04-09T01:05:00.000Z',
       lastCompletedAt: null,
@@ -476,7 +503,7 @@ describe('person-agent persistence migrations', () => {
     })
 
     upsertRunnerState?.(db, {
-      runnerName: 'person_agent_task_queue',
+      runnerName: 'person_agent_runtime',
       status: 'idle',
       lastStartedAt: '2026-04-09T01:05:00.000Z',
       lastCompletedAt: '2026-04-09T01:05:03.000Z',
@@ -488,7 +515,7 @@ describe('person-agent persistence migrations', () => {
     })
 
     expect(getRunnerState?.(db, {})).toEqual({
-      runnerName: 'person_agent_task_queue',
+      runnerName: 'person_agent_runtime',
       status: 'idle',
       lastStartedAt: '2026-04-09T01:05:00.000Z',
       lastCompletedAt: '2026-04-09T01:05:03.000Z',

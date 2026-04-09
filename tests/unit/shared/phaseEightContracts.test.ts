@@ -871,7 +871,7 @@ describe('phase-eight memory workspace contracts', () => {
         latestStrategyChange: null,
         capsuleStatus: 'missing',
         activationSource: null,
-        taskQueueRunner: {
+        runtimeRunner: {
           status: 'missing',
           stalled: false,
           thresholdMinutes: 15,

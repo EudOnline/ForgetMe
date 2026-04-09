@@ -11,7 +11,7 @@ import type {
 import type { ArchiveDatabase } from './db'
 import {
   getPersonAgentRuntimeState,
-  getPersonAgentTaskQueueRunnerState,
+  getPersonAgentRuntimeRunnerState,
   listPersonAgentTaskRuns,
   listPersonAgentTasks,
   listPersonAgentInteractionMemories
@@ -84,7 +84,7 @@ export function syncPersonAgentCapsuleRuntimeArtifacts(db: ArchiveDatabase, inpu
   const interactionMemories = listPersonAgentInteractionMemories(db, {
     personAgentId: input.personAgent.personAgentId
   })
-  const runnerState = getPersonAgentTaskQueueRunnerState(db, {})
+  const runnerState = getPersonAgentRuntimeRunnerState(db, {})
 
   const identityPath = path.join(input.capsule.workspaceRoot, 'identity.json')
   writeArtifactFile({
@@ -139,7 +139,7 @@ export function syncPersonAgentCapsuleRuntimeArtifacts(db: ArchiveDatabase, inpu
       latestTaskRunId: latestTaskRun?.runId ?? null,
       latestTaskRunKind: latestTaskRun?.taskKind ?? null,
       latestTaskRunAt: latestTaskRun?.updatedAt ?? null,
-      taskRunner: runnerState
+      runtimeRunner: runnerState
         ? {
             runnerName: runnerState.runnerName,
             status: runnerState.status,

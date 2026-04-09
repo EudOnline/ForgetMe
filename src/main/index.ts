@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import { join } from 'node:path'
 import { app, BrowserWindow } from 'electron'
 import { registerIpc } from './bootstrap/registerIpc'
+import { initializeMainProcess } from './bootstrap/startMainProcess'
 import { createServiceContainer } from './bootstrap/serviceContainer'
 import { ensureAppPaths } from './services/appPaths'
 
@@ -76,12 +77,16 @@ let backgroundRunners: ReturnType<ReturnType<typeof createServiceContainer>['sta
 app.whenReady().then(() => {
   const appPaths = ensureAppPaths(resolveAppDataRoot())
   const serviceContainer = createServiceContainer(appPaths)
-  registerIpc(serviceContainer)
-  void Promise.resolve(serviceContainer.runStartupRepairs()).catch((error) => {
-    console.error('person-agent capsule startup repair failed', error)
+  void initializeMainProcess({
+    serviceContainer,
+    registerIpc,
+    createWindow,
+    onStartupRepairError(error) {
+      console.error('person-agent capsule startup repair failed', error)
+    }
+  }).then((runners) => {
+    backgroundRunners = runners
   })
-  backgroundRunners = serviceContainer.startBackgroundRunners()
-  createWindow()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

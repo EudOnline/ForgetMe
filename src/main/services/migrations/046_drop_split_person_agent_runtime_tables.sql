@@ -1,0 +1,6 @@
+drop index if exists idx_person_agent_task_queue_runner_state_updated_at;
+
+alter table person_agent_task_queue_runner_state rename to person_agent_runtime_runner_state;
+
+create index if not exists idx_person_agent_runtime_runner_state_updated_at
+  on person_agent_runtime_runner_state(updated_at desc);

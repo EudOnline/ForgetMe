@@ -1,55 +1,3 @@
-import type {
-  AgentArtifactRef,
-  AgentCheckpointKind,
-  AgentCheckpointMetadata,
-  AgentCheckpointRecord,
-  AgentExecutionBudget,
-  AgentMessageKind,
-  AgentMessageRecordV2,
-  AgentObjectiveDetail,
-  AgentObjectiveInitiator,
-  AgentObjectiveKind,
-  AgentObjectiveRecord,
-  AgentObjectiveRiskLevel,
-  AgentObjectiveStatus,
-  AgentParticipantKind,
-  AgentProposalKind,
-  AgentProposalAutonomyDecision,
-  AgentProposalRecord,
-  AgentProposalRiskLevel,
-  AgentProposalStatus,
-  AgentSkillPackId,
-  AcknowledgeObjectiveRuntimeAlertInput,
-  ListObjectiveRuntimeEventsInput,
-  ListObjectiveRuntimeAlertsInput,
-  ObjectiveRuntimeEventRecord,
-  ObjectiveRuntimeScorecard,
-  ObjectiveRuntimeProjectionHealthRecord,
-  ObjectiveRuntimeSnapshot,
-  ObjectiveRuntimeAlertRecord,
-  ObjectiveRuntimeSettingsRecord,
-  ResolveObjectiveRuntimeAlertInput,
-  AgentSubagentRecord,
-  AgentSubagentStatus,
-  AgentThreadDetail,
-  AgentThreadKind,
-  AgentThreadParticipantRecord,
-  AgentThreadRecord,
-  AgentThreadStatus,
-  AgentToolExecutionRecord,
-  AgentToolExecutionStatus,
-  AgentVoteRecord,
-  AgentVoteValue,
-  ConfirmAgentProposalInput,
-  CreateAgentObjectiveInput,
-  CreateAgentProposalInput,
-  GetAgentObjectiveInput,
-  GetAgentThreadInput,
-  ListAgentObjectivesInput,
-  RespondToAgentProposalInput,
-  UpdateObjectiveRuntimeSettingsInput,
-} from './objectiveRuntimeContracts'
-
 export type ImportBatchSummary = {
   batchId: string
   sourceLabel: string
@@ -885,14 +833,14 @@ export type PersonAgentRuntimeStateRecord = {
   updatedAt: string
 }
 
-export type PersonAgentTaskQueueRunnerStatus =
+export type PersonAgentRuntimeRunnerStatus =
   | 'idle'
   | 'running'
   | 'error'
 
-export type PersonAgentTaskQueueRunnerStateRecord = {
+export type PersonAgentRuntimeRunnerStateRecord = {
   runnerName: string
-  status: PersonAgentTaskQueueRunnerStatus
+  status: PersonAgentRuntimeRunnerStatus
   lastStartedAt: string | null
   lastCompletedAt: string | null
   lastFailedAt: string | null
@@ -1018,7 +966,7 @@ export type PersonAgentInspectionBundle = {
   highlights: PersonAgentInspectionHighlight[]
   capsule: PersonAgentCapsuleRecord | null
   capsuleCheckpoint: PersonAgentCapsuleMemoryCheckpointRecord | null
-  runnerState: PersonAgentTaskQueueRunnerStateRecord | null
+  runnerState: PersonAgentRuntimeRunnerStateRecord | null
   tasks: PersonAgentTaskRecord[]
   state: PersonAgentRecord | null
   memorySummary: PersonAgentMemorySummary | null
@@ -1041,7 +989,7 @@ export type PersonAgentInspectionOverview = {
   } | null
   capsuleStatus: PersonAgentCapsuleStatus | 'missing'
   activationSource: PersonAgentCapsuleActivationSource | null
-  taskQueueRunner: {
+  runtimeRunner: {
     status: 'healthy' | 'stalled' | 'error' | 'missing'
     stalled: boolean
     thresholdMinutes: number
@@ -2155,85 +2103,6 @@ export type AgentTaskKindByRole = {
 
 export type AgentTaskKind = AgentTaskKindByRole[AgentRole]
 
-export type AgentMemoryRecord = {
-  memoryId: string
-  role: AgentRole
-  memoryKey: string
-  memoryValue: string
-  createdAt: string
-  updatedAt: string
-}
-
-export type AgentPolicyVersionRecord = {
-  policyVersionId: string
-  role: AgentRole
-  policyKey: string
-  policyBody: string
-  createdAt: string
-}
-
-export type {
-  AgentArtifactRef,
-  AgentCheckpointKind,
-  AgentCheckpointMetadata,
-  AgentCheckpointRecord,
-  AgentExecutionBudget,
-  AgentMessageKind,
-  AgentMessageRecordV2,
-  AgentObjectiveDetail,
-  AgentObjectiveInitiator,
-  AgentObjectiveKind,
-  AgentObjectiveRecord,
-  AgentObjectiveRiskLevel,
-  AgentObjectiveStatus,
-  AgentParticipantKind,
-  AgentProposalKind,
-  AgentProposalAutonomyDecision,
-  AgentProposalRecord,
-  AgentProposalRiskLevel,
-  AgentProposalStatus,
-  AgentSkillPackId,
-  AcknowledgeObjectiveRuntimeAlertInput,
-  ListObjectiveRuntimeEventsInput,
-  ListObjectiveRuntimeAlertsInput,
-  ObjectiveRuntimeAlertRecord,
-  ObjectiveRuntimeEventRecord,
-  ObjectiveRuntimeScorecard,
-  ObjectiveRuntimeProjectionHealthRecord,
-  ObjectiveRuntimeSnapshot,
-  ObjectiveRuntimeSettingsRecord,
-  ResolveObjectiveRuntimeAlertInput,
-  AgentSubagentRecord,
-  AgentSubagentStatus,
-  AgentThreadDetail,
-  AgentThreadKind,
-  AgentThreadParticipantRecord,
-  AgentThreadRecord,
-  AgentThreadStatus,
-  AgentToolExecutionRecord,
-  AgentToolExecutionStatus,
-  AgentVoteRecord,
-  AgentVoteValue,
-  ConfirmAgentProposalInput,
-  CreateAgentObjectiveInput,
-  CreateAgentProposalInput,
-  GetAgentObjectiveInput,
-  GetAgentThreadInput,
-  ListAgentObjectivesInput,
-  RespondToAgentProposalInput,
-  UpdateObjectiveRuntimeSettingsInput,
-} from './objectiveRuntimeContracts'
-
-export type ListAgentMemoriesInput = {
-  role?: AgentRole
-  memoryKey?: string
-}
-
-export type ListAgentPolicyVersionsInput = {
-  role?: AgentRole
-  policyKey?: string
-}
-
 export interface ArchiveApi {
   selectImportFiles: () => Promise<string[]>
   selectBackupExportDestination: () => Promise<string | null>
@@ -2244,24 +2113,6 @@ export interface ArchiveApi {
   runRecoveryDrill: (input: { exportRoot: string; targetRoot: string; overwrite?: boolean; encryptionPassword?: string }) => Promise<RestoreRunResult | null>
   createImportBatch: (input: CreateImportBatchInput) => Promise<ImportBatchSummary>
   preflightImportBatch: (input: { sourcePaths: string[] }) => Promise<ImportPreflightResult>
-  createAgentObjective: (input: CreateAgentObjectiveInput) => Promise<AgentObjectiveDetail>
-  refreshObjectiveTriggers: () => Promise<AgentObjectiveDetail[]>
-  listAgentObjectives: (input?: ListAgentObjectivesInput) => Promise<AgentObjectiveRecord[]>
-  getAgentObjective: (input: GetAgentObjectiveInput) => Promise<AgentObjectiveDetail | null>
-  getAgentThread: (input: GetAgentThreadInput) => Promise<AgentThreadDetail | null>
-  respondToAgentProposal: (input: RespondToAgentProposalInput) => Promise<AgentProposalRecord | null>
-  confirmAgentProposal: (input: ConfirmAgentProposalInput) => Promise<AgentProposalRecord | null>
-  getObjectiveRuntimeSnapshot: () => Promise<ObjectiveRuntimeSnapshot>
-  getObjectiveRuntimeScorecard: () => Promise<ObjectiveRuntimeScorecard>
-  getObjectiveRuntimeProjectionHealth: () => Promise<ObjectiveRuntimeProjectionHealthRecord[]>
-  listObjectiveRuntimeEvents: (input?: ListObjectiveRuntimeEventsInput) => Promise<ObjectiveRuntimeEventRecord[]>
-  listObjectiveRuntimeAlerts: (input?: ListObjectiveRuntimeAlertsInput) => Promise<ObjectiveRuntimeAlertRecord[]>
-  acknowledgeObjectiveRuntimeAlert: (input: AcknowledgeObjectiveRuntimeAlertInput) => Promise<ObjectiveRuntimeAlertRecord | null>
-  resolveObjectiveRuntimeAlert: (input: ResolveObjectiveRuntimeAlertInput) => Promise<ObjectiveRuntimeAlertRecord | null>
-  getObjectiveRuntimeSettings: () => Promise<ObjectiveRuntimeSettingsRecord>
-  updateObjectiveRuntimeSettings: (input: UpdateObjectiveRuntimeSettingsInput) => Promise<ObjectiveRuntimeSettingsRecord>
-  listAgentMemories: (input?: ListAgentMemoriesInput) => Promise<AgentMemoryRecord[]>
-  listAgentPolicyVersions: (input?: ListAgentPolicyVersionsInput) => Promise<AgentPolicyVersionRecord[]>
   listImportBatches: () => Promise<ImportBatchSummary[]>
   getImportBatch: (batchId: string) => Promise<ImportBatchSummary | null>
   searchArchive: (input: { query?: string; fileKinds?: string[]; batchId?: string; duplicateClass?: string; personName?: string }) => Promise<ArchiveSearchResult[]>
@@ -2282,7 +2133,7 @@ export interface ArchiveApi {
   listPersonAgentConsultationSessions: (input?: ListPersonAgentConsultationSessionsInput) => Promise<PersonAgentConsultationSessionSummary[]>
   getPersonAgentConsultationSession: (input: GetPersonAgentConsultationSessionInput) => Promise<PersonAgentConsultationSessionDetail | null>
   getPersonAgentRuntimeState: (input: GetPersonAgentRuntimeStateInput) => Promise<PersonAgentRuntimeStateRecord | null>
-  getPersonAgentTaskQueueRunnerState: () => Promise<PersonAgentTaskQueueRunnerStateRecord | null>
+  getPersonAgentRuntimeRunnerState: () => Promise<PersonAgentRuntimeRunnerStateRecord | null>
   getPersonAgentState: (input: GetPersonAgentStateInput) => Promise<PersonAgentRecord | null>
   getPersonAgentCapsule: (input: GetPersonAgentCapsuleInput) => Promise<PersonAgentCapsuleRecord | null>
   listPersonAgentCapsuleMemoryCheckpoints: (

@@ -31,7 +31,7 @@ import {
   listPersonAgentCapsuleMemoryCheckpoints,
   listPersonAgentInteractionMemories,
   listPersonAgentRefreshQueue,
-  getPersonAgentTaskQueueRunnerState,
+  getPersonAgentRuntimeRunnerState,
   listPersonAgentTaskRuns,
   listPersonAgentTasks
 } from '../../../services/governancePersistenceService'
@@ -77,9 +77,9 @@ import type {
   PersonAgentRefreshQueueRecord
 } from '../../../shared/archiveContracts'
 
-const PERSON_AGENT_TASK_QUEUE_RUNNER_STALLED_THRESHOLD_MINUTES = 15
-const PERSON_AGENT_TASK_QUEUE_RUNNER_STALLED_THRESHOLD_MS =
-  PERSON_AGENT_TASK_QUEUE_RUNNER_STALLED_THRESHOLD_MINUTES * 60 * 1000
+const PERSON_AGENT_RUNTIME_RUNNER_STALLED_THRESHOLD_MINUTES = 15
+const PERSON_AGENT_RUNTIME_RUNNER_STALLED_THRESHOLD_MS =
+  PERSON_AGENT_RUNTIME_RUNNER_STALLED_THRESHOLD_MINUTES * 60 * 1000
 
 function databasePath(appPaths: AppPaths) {
   return path.join(appPaths.sqliteDir, 'archive.sqlite')
@@ -113,7 +113,7 @@ function buildPersonAgentInspectionOverview(input: {
   memorySummary: PersonAgentMemorySummary | null
   refreshQueue: PersonAgentRefreshQueueRecord[]
   auditEvents: PersonAgentAuditEventRecord[]
-  runnerState: ReturnType<typeof getPersonAgentTaskQueueRunnerState>
+  runnerState: ReturnType<typeof getPersonAgentRuntimeRunnerState>
   now: string
 }) {
   const latestStrategyChangeEvent = input.auditEvents.find((event) => event.eventKind === 'strategy_profile_updated') ?? null
@@ -121,7 +121,7 @@ function buildPersonAgentInspectionOverview(input: {
   const changedFields = Array.isArray(latestStrategyChangePayload.changedFields)
     ? latestStrategyChangePayload.changedFields.filter((value): value is string => typeof value === 'string')
     : []
-  const runnerHealth = evaluatePersonAgentTaskQueueRunnerHealth({
+  const runnerHealth = evaluatePersonAgentRuntimeRunnerHealth({
     runnerState: input.runnerState,
     now: input.now
   })
@@ -143,7 +143,7 @@ function buildPersonAgentInspectionOverview(input: {
       : null,
     capsuleStatus: input.capsule?.capsuleStatus ?? 'missing',
     activationSource: input.capsule?.activationSource ?? null,
-    taskQueueRunner: runnerHealth
+    runtimeRunner: runnerHealth
   }
 }
 
@@ -151,10 +151,10 @@ function buildPersonAgentInspectionHighlights(input: {
   refreshQueue: PersonAgentRefreshQueueRecord[]
   auditEvents: PersonAgentAuditEventRecord[]
   memorySummary: PersonAgentMemorySummary | null
-  runnerState: ReturnType<typeof getPersonAgentTaskQueueRunnerState>
+  runnerState: ReturnType<typeof getPersonAgentRuntimeRunnerState>
   now: string
 }) {
-  const runnerHealth = evaluatePersonAgentTaskQueueRunnerHealth({
+  const runnerHealth = evaluatePersonAgentRuntimeRunnerHealth({
     runnerState: input.runnerState,
     now: input.now
   })
@@ -226,16 +226,16 @@ function buildPersonAgentInspectionHighlights(input: {
     runnerHighlights.push({
       kind: 'runner_error',
       createdAt: input.runnerState?.lastFailedAt ?? input.runnerState?.updatedAt ?? input.now,
-      title: 'Task queue runner failed',
-      summary: runnerHealth.reason ?? 'The background task queue runner reported an error.',
+      title: 'Runtime runner failed',
+      summary: runnerHealth.reason ?? 'The background runtime runner reported an error.',
       emphasis: 'high'
     })
   } else if (runnerHealth.status === 'stalled') {
     runnerHighlights.push({
       kind: 'runner_stalled',
       createdAt: input.runnerState?.lastStartedAt ?? input.runnerState?.updatedAt ?? input.now,
-      title: 'Task queue runner stalled',
-      summary: runnerHealth.reason ?? 'The background task queue runner has not completed within the expected window.',
+      title: 'Runtime runner stalled',
+      summary: runnerHealth.reason ?? 'The background runtime runner has not completed within the expected window.',
       emphasis: 'high'
     })
   }
@@ -245,16 +245,16 @@ function buildPersonAgentInspectionHighlights(input: {
     .slice(0, 6)
 }
 
-function evaluatePersonAgentTaskQueueRunnerHealth(input: {
-  runnerState: ReturnType<typeof getPersonAgentTaskQueueRunnerState>
+function evaluatePersonAgentRuntimeRunnerHealth(input: {
+  runnerState: ReturnType<typeof getPersonAgentRuntimeRunnerState>
   now: string
 }) {
   if (!input.runnerState) {
     return {
       status: 'missing',
       stalled: false,
-      thresholdMinutes: PERSON_AGENT_TASK_QUEUE_RUNNER_STALLED_THRESHOLD_MINUTES,
-      reason: 'No task queue runner state has been recorded yet.',
+      thresholdMinutes: PERSON_AGENT_RUNTIME_RUNNER_STALLED_THRESHOLD_MINUTES,
+      reason: 'No runtime runner state has been recorded yet.',
       lastHeartbeatAt: null,
       lastProcessedTaskCount: 0,
       totalProcessedTaskCount: 0,
@@ -272,8 +272,8 @@ function evaluatePersonAgentTaskQueueRunnerHealth(input: {
     return {
       status: 'error',
       stalled: false,
-      thresholdMinutes: PERSON_AGENT_TASK_QUEUE_RUNNER_STALLED_THRESHOLD_MINUTES,
-      reason: input.runnerState.lastError ?? 'The latest task queue runner cycle failed.',
+      thresholdMinutes: PERSON_AGENT_RUNTIME_RUNNER_STALLED_THRESHOLD_MINUTES,
+      reason: input.runnerState.lastError ?? 'The latest runtime runner cycle failed.',
       lastHeartbeatAt,
       lastProcessedTaskCount: input.runnerState.lastProcessedTaskCount,
       totalProcessedTaskCount: input.runnerState.totalProcessedTaskCount,
@@ -284,12 +284,12 @@ function evaluatePersonAgentTaskQueueRunnerHealth(input: {
   if (input.runnerState.status === 'running' && input.runnerState.lastStartedAt) {
     const startedAt = Date.parse(input.runnerState.lastStartedAt)
     const now = Date.parse(input.now)
-    if (Number.isFinite(startedAt) && Number.isFinite(now) && now - startedAt > PERSON_AGENT_TASK_QUEUE_RUNNER_STALLED_THRESHOLD_MS) {
+    if (Number.isFinite(startedAt) && Number.isFinite(now) && now - startedAt > PERSON_AGENT_RUNTIME_RUNNER_STALLED_THRESHOLD_MS) {
       return {
         status: 'stalled',
         stalled: true,
-        thresholdMinutes: PERSON_AGENT_TASK_QUEUE_RUNNER_STALLED_THRESHOLD_MINUTES,
-        reason: `Task queue runner has been running for more than ${PERSON_AGENT_TASK_QUEUE_RUNNER_STALLED_THRESHOLD_MINUTES} minutes without a completion signal.`,
+        thresholdMinutes: PERSON_AGENT_RUNTIME_RUNNER_STALLED_THRESHOLD_MINUTES,
+        reason: `Runtime runner has been running for more than ${PERSON_AGENT_RUNTIME_RUNNER_STALLED_THRESHOLD_MINUTES} minutes without a completion signal.`,
         lastHeartbeatAt: input.runnerState.lastStartedAt,
         lastProcessedTaskCount: input.runnerState.lastProcessedTaskCount,
         totalProcessedTaskCount: input.runnerState.totalProcessedTaskCount,
@@ -301,7 +301,7 @@ function evaluatePersonAgentTaskQueueRunnerHealth(input: {
   return {
     status: 'healthy',
     stalled: false,
-    thresholdMinutes: PERSON_AGENT_TASK_QUEUE_RUNNER_STALLED_THRESHOLD_MINUTES,
+    thresholdMinutes: PERSON_AGENT_RUNTIME_RUNNER_STALLED_THRESHOLD_MINUTES,
     reason: null,
     lastHeartbeatAt,
     lastProcessedTaskCount: input.runnerState.lastProcessedTaskCount,
@@ -479,8 +479,8 @@ export function createWorkspaceModule(appPaths: AppPaths) {
     async getPersonAgentRuntimeState(input: Parameters<typeof getPersonAgentConsultationRuntimeState>[1]) {
       return this.withArchiveDatabase((db) => getPersonAgentConsultationRuntimeState(db, input))
     },
-    async getPersonAgentTaskQueueRunnerState() {
-      return this.withArchiveDatabase((db) => getPersonAgentTaskQueueRunnerState(db, {}))
+    async getPersonAgentRuntimeRunnerState() {
+      return this.withArchiveDatabase((db) => getPersonAgentRuntimeRunnerState(db, {}))
     },
     async getPersonAgentState(input: { canonicalPersonId: string }) {
       return this.withArchiveDatabase((db) => getPersonAgentByCanonicalPersonId(db, input))
@@ -558,7 +558,7 @@ export function createWorkspaceModule(appPaths: AppPaths) {
         const auditEvents = listPersonAgentAuditEvents(db, {
           canonicalPersonId: input.canonicalPersonId
         })
-        const runnerState = getPersonAgentTaskQueueRunnerState(db, {})
+        const runnerState = getPersonAgentRuntimeRunnerState(db, {})
         const tasks = listPersonAgentTasks(db, {
           canonicalPersonId: input.canonicalPersonId
         })
