@@ -822,6 +822,17 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
         createdAt: '2026-04-08T01:00:00.000Z'
       }
     ])
+    getPersonAgentTaskQueueRunnerState.mockReturnValue({
+      runnerName: 'person_agent_task_queue',
+      status: 'idle',
+      lastStartedAt: '2026-04-08T01:11:00.000Z',
+      lastCompletedAt: '2026-04-08T01:11:02.000Z',
+      lastFailedAt: null,
+      lastProcessedTaskCount: 4,
+      totalProcessedTaskCount: 9,
+      lastError: null,
+      updatedAt: '2026-04-08T01:11:02.000Z'
+    })
 
     registerWorkspaceIpc(appPathsFixture())
 
@@ -843,6 +854,7 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
     expect(listPersonAgentAuditEvents).toHaveBeenCalledWith(expect.anything(), {
       canonicalPersonId: 'cp-1'
     })
+    expect(getPersonAgentTaskQueueRunnerState).toHaveBeenCalledWith(expect.anything(), {})
     expect(listPersonAgentTasks).toHaveBeenCalledWith(expect.anything(), {
       canonicalPersonId: 'cp-1'
     })
@@ -860,6 +872,15 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
           createdAt: '2026-04-08T01:00:00.000Z',
           source: 'refresh_rebuild',
           changedFields: ['conflictBehavior']
+        }),
+        taskQueueRunner: expect.objectContaining({
+          status: 'healthy',
+          stalled: false,
+          thresholdMinutes: 15,
+          lastHeartbeatAt: '2026-04-08T01:11:02.000Z',
+          lastProcessedTaskCount: 4,
+          totalProcessedTaskCount: 9,
+          lastError: null
         })
       }),
       recommendations: expect.objectContaining({
@@ -897,6 +918,11 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
           title: 'Recurring interaction topic'
         })
       ],
+      runnerState: expect.objectContaining({
+        runnerName: 'person_agent_task_queue',
+        status: 'idle',
+        totalProcessedTaskCount: 9
+      }),
       tasks: [
         expect.objectContaining({
           taskId: 'task-1',
@@ -927,6 +953,73 @@ describe('registerWorkspaceIpc person-agent inspection handlers', () => {
       ]
     }))
     expect(close).toHaveBeenCalled()
+  })
+
+  it('surfaces stalled person-agent task queue runner alerts in inspection bundles', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-08T01:20:00.000Z'))
+    try {
+      const close = vi.fn()
+      openDatabase.mockReturnValue({ close })
+      getPersonAgentByCanonicalPersonId.mockReturnValue({
+        personAgentId: 'agent-1',
+        canonicalPersonId: 'cp-1',
+        status: 'active',
+        promotionTier: 'high_signal',
+        promotionScore: 81,
+        promotionReasonSummary: 'High-signal person agent.',
+        strategyProfile: null,
+        factsVersion: 3,
+        interactionVersion: 4,
+        lastRefreshedAt: '2026-04-08T01:00:00.000Z',
+        lastActivatedAt: '2026-04-08T00:30:00.000Z',
+        createdAt: '2026-04-07T00:00:00.000Z',
+        updatedAt: '2026-04-08T01:00:00.000Z'
+      })
+      getPersonAgentFactMemorySummary.mockReturnValue(null)
+      listPersonAgentInteractionMemories.mockReturnValue([])
+      listPersonAgentRefreshQueue.mockReturnValue([])
+      listPersonAgentAuditEvents.mockReturnValue([])
+      listPersonAgentTasks.mockReturnValue([])
+      getPersonAgentTaskQueueRunnerState.mockReturnValue({
+        runnerName: 'person_agent_task_queue',
+        status: 'running',
+        lastStartedAt: '2026-04-08T01:00:00.000Z',
+        lastCompletedAt: '2026-04-08T00:40:00.000Z',
+        lastFailedAt: null,
+        lastProcessedTaskCount: 0,
+        totalProcessedTaskCount: 9,
+        lastError: null,
+        updatedAt: '2026-04-08T01:00:00.000Z'
+      })
+
+      registerWorkspaceIpc(appPathsFixture())
+
+      const handler = handlerMap.get('archive:getPersonAgentInspectionBundle')
+      const result = await handler?.({}, { canonicalPersonId: 'cp-1' })
+
+      expect(result).toEqual(expect.objectContaining({
+        overview: expect.objectContaining({
+          taskQueueRunner: expect.objectContaining({
+            status: 'stalled',
+            stalled: true,
+            thresholdMinutes: 15,
+            lastHeartbeatAt: '2026-04-08T01:00:00.000Z'
+          })
+        }),
+        highlights: expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'runner_stalled',
+            createdAt: '2026-04-08T01:00:00.000Z',
+            title: 'Task queue runner stalled',
+            emphasis: 'high'
+          })
+        ])
+      }))
+      expect(close).toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('lists and transitions person-agent tasks through ipc', async () => {

@@ -888,6 +888,7 @@ export type PersonAgentInspectionBundle = {
   overview: PersonAgentInspectionOverview
   recommendations: PersonAgentInspectionRecommendations
   highlights: PersonAgentInspectionHighlight[]
+  runnerState: PersonAgentTaskQueueRunnerStateRecord | null
   tasks: PersonAgentTaskRecord[]
   state: PersonAgentRecord | null
   memorySummary: PersonAgentMemorySummary | null
@@ -908,10 +909,20 @@ export type PersonAgentInspectionOverview = {
     source: string | null
     changedFields: string[]
   } | null
+  taskQueueRunner: {
+    status: 'healthy' | 'stalled' | 'error' | 'missing'
+    stalled: boolean
+    thresholdMinutes: number
+    reason: string | null
+    lastHeartbeatAt: string | null
+    lastProcessedTaskCount: number
+    totalProcessedTaskCount: number
+    lastError: string | null
+  }
 }
 
 export type PersonAgentInspectionHighlight = {
-  kind: 'refresh_pending' | 'refresh_failed' | 'strategy_change' | 'interaction_hotspot'
+  kind: 'refresh_pending' | 'refresh_failed' | 'strategy_change' | 'interaction_hotspot' | 'runner_stalled' | 'runner_error'
   createdAt: string
   title: string
   summary: string
