@@ -9,6 +9,7 @@ import {
   listPersonAgentFactMemories,
   listPersonAgentInteractionMemories,
   listPersonAgentRefreshQueue,
+  listPersonAgentTaskRuns,
   listPersonAgentTasks
 } from '../../../src/main/services/governancePersistenceService'
 import { approveProfileAttributeCandidate } from '../../../src/main/services/profileCandidateReviewService'
@@ -544,7 +545,7 @@ describe('personAgentRefreshService', () => {
     })
     expect(listPersonAgentAuditEvents(db, {
       canonicalPersonId: 'cp-1'
-    })).toEqual([])
+    }).filter((event) => event.eventKind === 'strategy_profile_updated')).toEqual([])
 
     seedPendingConflictProfileCandidates(db, {
       canonicalPersonId: 'cp-1',
@@ -566,7 +567,7 @@ describe('personAgentRefreshService', () => {
     })
     const auditEvents = listPersonAgentAuditEvents(db, {
       canonicalPersonId: 'cp-1'
-    })
+    }).filter((event) => event.eventKind === 'strategy_profile_updated')
 
     expect(refreshedAgent?.strategyProfile).toEqual({
       profileVersion: 2,
@@ -596,7 +597,7 @@ describe('personAgentRefreshService', () => {
     db.close()
   })
 
-  it('resyncs person-agent tasks after refresh completion', () => {
+  it('resyncs and auto-processes person-agent tasks after refresh completion', () => {
     const db = setupDatabase()
     seedPromotionReadyPerson(db)
 
@@ -617,8 +618,15 @@ describe('personAgentRefreshService', () => {
 
     expect(expandTask).toMatchObject({
       taskKind: 'expand_topic',
-      taskKey: 'expand_topic:topic.profile_facts:2:4'
+      taskKey: 'expand_topic:topic.profile_facts:2:4',
+      status: 'completed'
     })
+    expect(listPersonAgentTaskRuns(db, {
+      canonicalPersonId: 'cp-1'
+    }).map((run) => run.taskKind).sort()).toEqual([
+      'expand_topic',
+      'fill_coverage_gap'
+    ])
 
     db.close()
   })

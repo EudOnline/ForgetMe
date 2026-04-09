@@ -14,7 +14,10 @@ import {
   derivePersonAgentStrategyProfile,
   resolveNextPersonAgentStrategyProfile
 } from './personAgentStrategyService'
-import { syncPersonAgentTasks } from './personAgentTaskService'
+import {
+  processPersonAgentTaskQueue,
+  syncPersonAgentTasks
+} from './personAgentTaskService'
 
 function uniqueStrings(values: string[]) {
   return [...new Set(values)].sort((left, right) => left.localeCompare(right))
@@ -257,6 +260,11 @@ export function processNextPersonAgentRefresh(db: ArchiveDatabase, input: {
 
     syncPersonAgentTasks(db, {
       canonicalPersonId: pending.canonicalPersonId,
+      now
+    })
+    processPersonAgentTaskQueue(db, {
+      canonicalPersonId: pending.canonicalPersonId,
+      source: 'refresh_sync',
       now
     })
   } catch (error) {

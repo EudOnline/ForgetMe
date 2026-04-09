@@ -15,6 +15,7 @@ import {
 } from '../../../src/main/services/governancePersistenceService'
 import {
   executePersonAgentTask,
+  processPersonAgentTaskQueue,
   syncPersonAgentTasks,
   transitionPersonAgentTask
 } from '../../../src/main/services/personAgentTaskService'
@@ -504,6 +505,58 @@ describe('personAgentTaskService', () => {
       taskId: refreshTask!.taskId,
       status: 'pending'
     })
+
+    db.close()
+  })
+
+  it('auto-processes executable tasks while leaving await-refresh pending', () => {
+    const db = setupDatabase()
+    seedTaskFixture(db)
+
+    syncPersonAgentTasks(db, {
+      canonicalPersonId: 'cp-1',
+      now: NOW
+    })
+
+    const runs = processPersonAgentTaskQueue(db, {
+      canonicalPersonId: 'cp-1',
+      source: 'background_queue',
+      now: '2026-04-08T12:08:00.000Z'
+    })
+
+    expect(runs.map((run) => run.taskKind)).toEqual([
+      'resolve_conflict',
+      'fill_coverage_gap',
+      'expand_topic',
+      'review_strategy_change'
+    ])
+    expect(runs.every((run) => run.runStatus === 'completed')).toBe(true)
+    expect(listPersonAgentTasks(db, {
+      canonicalPersonId: 'cp-1',
+      status: 'pending'
+    })).toEqual([
+      expect.objectContaining({
+        taskKind: 'await_refresh',
+        status: 'pending'
+      })
+    ])
+    expect(listPersonAgentTasks(db, {
+      canonicalPersonId: 'cp-1',
+      status: 'completed'
+    }).map((task) => task.taskKind)).toEqual([
+      'resolve_conflict',
+      'fill_coverage_gap',
+      'expand_topic',
+      'review_strategy_change'
+    ])
+    expect(listPersonAgentTaskRuns(db, {
+      canonicalPersonId: 'cp-1'
+    }).map((run) => run.taskKind).sort()).toEqual([
+      'expand_topic',
+      'fill_coverage_gap',
+      'resolve_conflict',
+      'review_strategy_change'
+    ])
 
     db.close()
   })

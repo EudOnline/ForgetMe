@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest'
 import { openDatabase, runMigrations } from '../../../src/main/services/db'
 import {
   getPersonAgentRuntimeState,
+  listPersonAgentTaskRuns,
+  listPersonAgentTasks,
   replacePersonAgentFactMemories,
   upsertPersonAgent,
   upsertPersonAgentInteractionMemory
@@ -208,6 +210,19 @@ describe('personAgentConsultationService', () => {
       lastConsultedAt: '2026-04-08T12:05:00.000Z'
     })
     expect(runtimeState?.lastAnswerDigest?.length).toBeGreaterThan(0)
+    expect(listPersonAgentTaskRuns(db, {
+      canonicalPersonId: 'cp-1'
+    }).map((run) => run.taskKind).sort()).toEqual([
+      'expand_topic',
+      'resolve_conflict'
+    ])
+    expect(listPersonAgentTasks(db, {
+      canonicalPersonId: 'cp-1',
+      status: 'completed'
+    }).map((task) => task.taskKind)).toEqual([
+      'resolve_conflict',
+      'expand_topic'
+    ])
 
     db.close()
   })

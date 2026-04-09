@@ -12,6 +12,7 @@ import {
   listPersonAgentAuditEvents,
   listPersonAgentInteractionMemories,
   listPersonAgentRefreshQueue,
+  listPersonAgentTasks,
   replacePersonAgentTasks,
   updatePersonAgentTaskStatus
 } from './governancePersistenceService'
@@ -67,6 +68,10 @@ function coverageGapQuestion() {
 
 function strategyQuestion() {
   return '这次策略调整是否需要同步到前端展示方式？'
+}
+
+function isAutoExecutableTask(task: PersonAgentTaskRecord) {
+  return task.taskKind !== 'await_refresh'
 }
 
 function buildTaskExecutionRun(_db: ArchiveDatabase, task: PersonAgentTaskRecord): Omit<
@@ -408,4 +413,37 @@ export function executePersonAgentTask(db: ArchiveDatabase, input: {
   })
 
   return run
+}
+
+export function processPersonAgentTaskQueue(db: ArchiveDatabase, input: {
+  canonicalPersonId?: string
+  personAgentId?: string
+  limit?: number
+  source?: string
+  now?: string
+} = {}) {
+  const executableTasks = listPersonAgentTasks(db, {
+    canonicalPersonId: input.canonicalPersonId,
+    personAgentId: input.personAgentId,
+    status: 'pending'
+  }).filter(isAutoExecutableTask)
+
+  const limitedTasks = input.limit && input.limit > 0
+    ? executableTasks.slice(0, input.limit)
+    : executableTasks
+
+  const runs: PersonAgentTaskRunRecord[] = []
+  for (const task of limitedTasks) {
+    const run = executePersonAgentTask(db, {
+      taskId: task.taskId,
+      source: input.source ?? 'background_queue',
+      now: input.now
+    })
+
+    if (run) {
+      runs.push(run)
+    }
+  }
+
+  return runs
 }
