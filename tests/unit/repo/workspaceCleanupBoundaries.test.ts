@@ -23,4 +23,13 @@ describe('workspace cleanup boundaries', () => {
 
     expect(source).not.toContain('suggestedAsks')
   })
+
+  it('keeps archive contracts free of the retired suggested ask alias', () => {
+    const source = fs.readFileSync(
+      path.resolve('src/shared/archiveContracts.ts'),
+      'utf8'
+    )
+
+    expect(source).not.toContain('MemoryWorkspaceSuggestedAsk')
+  })
 })

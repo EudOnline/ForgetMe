@@ -471,7 +471,7 @@ export type MemoryWorkspaceBoundaryRedirectReason =
   | 'delegation_not_allowed'
   | 'style_evidence_unavailable'
 
-export type MemoryWorkspaceSuggestedAsk = {
+type MemoryWorkspaceAskActionFields = {
   label: string
   question: string
   expressionMode: MemoryWorkspaceExpressionMode
@@ -481,15 +481,11 @@ export type MemoryWorkspaceSuggestedAsk = {
 export type MemoryWorkspaceSuggestedAction =
   | ({
       kind: 'ask'
-    } & MemoryWorkspaceSuggestedAsk)
+    } & MemoryWorkspaceAskActionFields)
   | {
       kind: 'open_persona_draft_sandbox'
       workflowKind: 'persona_draft_sandbox'
-      label: string
-      question: string
-      expressionMode: MemoryWorkspaceExpressionMode
-      rationale: string
-    }
+    } & MemoryWorkspaceAskActionFields
 
 export type MemoryWorkspaceBoundaryRedirect = {
   kind: 'persona_request'
