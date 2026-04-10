@@ -2077,28 +2077,6 @@ export type AgentRole =
   | 'workspace'
   | 'governance'
 
-export type AgentTaskKindByRole = {
-  ingestion:
-    | 'ingestion.import_batch'
-    | 'ingestion.rerun_enrichment'
-    | 'ingestion.summarize_document_evidence'
-  review:
-    | 'review.summarize_queue'
-    | 'review.suggest_safe_group_action'
-    | 'review.apply_safe_group'
-    | 'review.apply_item_decision'
-  workspace:
-    | 'workspace.ask_memory'
-    | 'workspace.compare'
-    | 'workspace.publish_draft'
-  governance:
-    | 'governance.record_feedback'
-    | 'governance.summarize_failures'
-    | 'governance.propose_policy_update'
-}
-
-export type AgentTaskKind = AgentTaskKindByRole[AgentRole]
-
 export interface ArchiveApi {
   selectImportFiles: () => Promise<string[]>
   selectBackupExportDestination: () => Promise<string | null>

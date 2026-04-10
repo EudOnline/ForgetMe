@@ -32,4 +32,14 @@ describe('workspace cleanup boundaries', () => {
 
     expect(source).not.toContain('MemoryWorkspaceSuggestedAsk')
   })
+
+  it('keeps archive contracts free of unused agent task kind aliases', () => {
+    const source = fs.readFileSync(
+      path.resolve('src/shared/archiveContracts.ts'),
+      'utf8'
+    )
+
+    expect(source).not.toContain('export type AgentTaskKindByRole')
+    expect(source).not.toContain('export type AgentTaskKind =')
+  })
 })
