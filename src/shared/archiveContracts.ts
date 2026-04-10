@@ -1353,11 +1353,9 @@ export type ExportApprovedPersonaDraftResult = {
   exportedAt: string
 }
 
-export type ApprovedDraftPublicationKind = 'local_share_package'
-
 export type ApprovedPersonaDraftPublicationArtifact = {
   formatVersion: 'phase10k1'
-  publicationKind: ApprovedDraftPublicationKind
+  publicationKind: 'local_share_package'
   publishedAt: string
   publicationId: string
   title: string
@@ -1374,7 +1372,7 @@ export type ApprovedPersonaDraftPublicationRecord = {
   publicationId: string
   draftReviewId: string
   sourceTurnId: string
-  publicationKind: ApprovedDraftPublicationKind
+  publicationKind: 'local_share_package'
   status: 'published'
   packageRoot: string
   manifestPath: string
@@ -1480,7 +1478,7 @@ export type PublishApprovedPersonaDraftResult = {
   publicationId: string
   draftReviewId: string
   sourceTurnId: string
-  publicationKind: ApprovedDraftPublicationKind
+  publicationKind: 'local_share_package'
   packageRoot: string
   manifestPath: string
   publicArtifactPath: string
@@ -1572,16 +1570,12 @@ export type SendApprovedPersonaDraftToProviderResult = {
   createdAt: string
 }
 
-export type MemoryWorkspaceCompareRunStatus = 'completed' | 'failed'
-
-export type MemoryWorkspaceCompareEvaluationDimensionKey =
-  | 'groundedness'
-  | 'traceability'
-  | 'guardrail_alignment'
-  | 'usefulness'
-
 export type MemoryWorkspaceCompareEvaluationDimension = {
-  key: MemoryWorkspaceCompareEvaluationDimensionKey
+  key:
+    | 'groundedness'
+    | 'traceability'
+    | 'guardrail_alignment'
+    | 'usefulness'
   label: string
   score: number
   maxScore: number
@@ -1636,7 +1630,7 @@ export type MemoryWorkspaceCompareRunRecord = {
   target: MemoryWorkspaceCompareTarget
   provider: string | null
   model: string | null
-  status: MemoryWorkspaceCompareRunStatus
+  status: 'completed' | 'failed'
   errorMessage: string | null
   response: MemoryWorkspaceResponse | null
   evaluation: MemoryWorkspaceCompareRunEvaluation
@@ -2060,15 +2054,13 @@ export type ImportPreflightItem = {
   status: 'supported' | 'unsupported' | 'duplicate_candidate'
 }
 
-export type ImportPreflightSummary = {
-  totalCount: number
-  supportedCount: number
-  unsupportedCount: number
-}
-
 export type ImportPreflightResult = {
   items: ImportPreflightItem[]
-  summary: ImportPreflightSummary
+  summary: {
+    totalCount: number
+    supportedCount: number
+    unsupportedCount: number
+  }
 }
 
 export type AgentRole =

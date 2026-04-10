@@ -42,4 +42,16 @@ describe('workspace cleanup boundaries', () => {
     expect(source).not.toContain('export type AgentTaskKindByRole')
     expect(source).not.toContain('export type AgentTaskKind =')
   })
+
+  it('keeps archive contracts free of leaf aliases that are only internally forwarded', () => {
+    const source = fs.readFileSync(
+      path.resolve('src/shared/archiveContracts.ts'),
+      'utf8'
+    )
+
+    expect(source).not.toContain('export type ApprovedDraftPublicationKind')
+    expect(source).not.toContain('export type MemoryWorkspaceCompareRunStatus')
+    expect(source).not.toContain('export type MemoryWorkspaceCompareEvaluationDimensionKey')
+    expect(source).not.toContain('export type ImportPreflightSummary')
+  })
 })
