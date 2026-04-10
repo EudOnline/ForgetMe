@@ -227,16 +227,6 @@ export type PersonDossierEvidenceRef = {
   label: string
 }
 
-export type PersonDossierIdentityCard = {
-  primaryDisplayName: string
-  aliases: string[]
-  manualLabels: string[]
-  firstSeenAt: string | null
-  lastSeenAt: string | null
-  evidenceCount: number
-  displayType: DossierDisplayType
-}
-
 export type PersonDossierSectionItem = {
   id: string
   label: string
@@ -296,7 +286,15 @@ export type PersonDossierReviewShortcut = {
 
 export type PersonDossier = {
   person: CanonicalPersonDetail
-  identityCard: PersonDossierIdentityCard
+  identityCard: {
+    primaryDisplayName: string
+    aliases: string[]
+    manualLabels: string[]
+    firstSeenAt: string | null
+    lastSeenAt: string | null
+    evidenceCount: number
+    displayType: DossierDisplayType
+  }
   thematicSections: PersonDossierSection[]
   timelineHighlights: PersonDossierTimelineHighlight[]
   relationshipSummary: PersonDossierRelationshipSummary[]
@@ -829,14 +827,9 @@ export type PersonAgentRuntimeStateRecord = {
   updatedAt: string
 }
 
-export type PersonAgentRuntimeRunnerStatus =
-  | 'idle'
-  | 'running'
-  | 'error'
-
 export type PersonAgentRuntimeRunnerStateRecord = {
   runnerName: string
-  status: PersonAgentRuntimeRunnerStatus
+  status: 'idle' | 'running' | 'error'
   lastStartedAt: string | null
   lastCompletedAt: string | null
   lastFailedAt: string | null
@@ -850,13 +843,6 @@ export type PersonAgentRuntimeRunnerStateRecord = {
   lastProcessedCapsuleSessionNamespace?: string | null
   updatedAt: string
 }
-
-export type PersonAgentTaskKind =
-  | 'await_refresh'
-  | 'resolve_conflict'
-  | 'fill_coverage_gap'
-  | 'expand_topic'
-  | 'review_strategy_change'
 
 export type PersonAgentTaskStatus =
   | 'pending'
@@ -885,7 +871,12 @@ export type PersonAgentTaskRecord = {
   taskKey: string
   personAgentId: string
   canonicalPersonId: string
-  taskKind: PersonAgentTaskKind
+  taskKind:
+    | 'await_refresh'
+    | 'resolve_conflict'
+    | 'fill_coverage_gap'
+    | 'expand_topic'
+    | 'review_strategy_change'
   status: PersonAgentTaskStatus
   priority: 'high' | 'medium'
   title: string
@@ -904,7 +895,12 @@ export type PersonAgentTaskRunRecord = {
   taskKey: string
   personAgentId: string
   canonicalPersonId: string
-  taskKind: PersonAgentTaskKind
+  taskKind:
+    | 'await_refresh'
+    | 'resolve_conflict'
+    | 'fill_coverage_gap'
+    | 'expand_topic'
+    | 'review_strategy_change'
   runStatus: PersonAgentTaskRunStatus
   summary: string
   suggestedQuestion: string | null
@@ -953,21 +949,6 @@ export type PersonAgentMemorySummary = {
   canonicalPersonId: string
   factSummary: PersonAgentFactMemorySummary | null
   interactionMemories: PersonAgentInteractionMemoryRecord[]
-}
-
-export type PersonAgentInspectionBundle = {
-  canonicalPersonId: string
-  overview: PersonAgentInspectionOverview
-  recommendations: PersonAgentInspectionRecommendations
-  highlights: PersonAgentInspectionHighlight[]
-  capsule: PersonAgentCapsuleRecord | null
-  capsuleCheckpoint: PersonAgentCapsuleMemoryCheckpointRecord | null
-  runnerState: PersonAgentRuntimeRunnerStateRecord | null
-  tasks: PersonAgentTaskRecord[]
-  state: PersonAgentRecord | null
-  memorySummary: PersonAgentMemorySummary | null
-  refreshQueue: PersonAgentRefreshQueueRecord[]
-  auditEvents: PersonAgentAuditEventRecord[]
 }
 
 export type PersonAgentInspectionOverview = {
@@ -1213,8 +1194,20 @@ export type RunPersonAgentCapsuleRuntimeResult =
       resultKind: 'not_found'
     }
 
-export type PersonAgentCapsuleRuntimeInspection = PersonAgentInspectionBundle & {
+export type PersonAgentCapsuleRuntimeInspection = {
   inspectionKind: 'capsule_runtime'
+  canonicalPersonId: string
+  overview: PersonAgentInspectionOverview
+  recommendations: PersonAgentInspectionRecommendations
+  highlights: PersonAgentInspectionHighlight[]
+  capsule: PersonAgentCapsuleRecord | null
+  capsuleCheckpoint: PersonAgentCapsuleMemoryCheckpointRecord | null
+  runnerState: PersonAgentRuntimeRunnerStateRecord | null
+  tasks: PersonAgentTaskRecord[]
+  state: PersonAgentRecord | null
+  memorySummary: PersonAgentMemorySummary | null
+  refreshQueue: PersonAgentRefreshQueueRecord[]
+  auditEvents: PersonAgentAuditEventRecord[]
 }
 
 export type ListPersonAgentRefreshQueueInput = {
@@ -1225,7 +1218,12 @@ export type ListPersonAgentTaskRunsInput = {
   taskId?: string
   personAgentId?: string
   canonicalPersonId?: string
-  taskKind?: PersonAgentTaskKind
+  taskKind?:
+    | 'await_refresh'
+    | 'resolve_conflict'
+    | 'fill_coverage_gap'
+    | 'expand_topic'
+    | 'review_strategy_change'
   runStatus?: PersonAgentTaskRunStatus
 }
 

@@ -73,4 +73,16 @@ describe('workspace cleanup boundaries', () => {
     expect(source).not.toContain('export type ListPersonAgentTasksInput')
     expect(source).not.toContain('export type SafeReviewGroupApprovalResult')
   })
+
+  it('keeps archive contracts free of aliases that only feed other exported shapes', () => {
+    const source = fs.readFileSync(
+      path.resolve('src/shared/archiveContracts.ts'),
+      'utf8'
+    )
+
+    expect(source).not.toContain('export type PersonDossierIdentityCard')
+    expect(source).not.toContain('export type PersonAgentRuntimeRunnerStatus')
+    expect(source).not.toContain('export type PersonAgentTaskKind')
+    expect(source).not.toContain('export type PersonAgentInspectionBundle')
+  })
 })
