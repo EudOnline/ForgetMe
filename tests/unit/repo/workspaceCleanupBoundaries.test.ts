@@ -85,4 +85,13 @@ describe('workspace cleanup boundaries', () => {
     expect(source).not.toContain('export type PersonAgentTaskKind')
     expect(source).not.toContain('export type PersonAgentInspectionBundle')
   })
+
+  it('keeps archive contracts free of unused context pack mode constants', () => {
+    const source = fs.readFileSync(
+      path.resolve('src/shared/archiveContracts.ts'),
+      'utf8'
+    )
+
+    expect(source).not.toContain('export const CONTEXT_PACK_EXPORT_MODES')
+  })
 })

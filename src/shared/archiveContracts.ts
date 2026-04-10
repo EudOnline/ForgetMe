@@ -1641,12 +1641,9 @@ export type MemoryWorkspaceCompareMatrixDetail = MemoryWorkspaceCompareMatrixSum
   rows: MemoryWorkspaceCompareMatrixRowRecord[]
 }
 
-export const CONTEXT_PACK_EXPORT_MODES = [
-  'approved_only',
-  'approved_plus_derived'
-] as const
-
-export type ContextPackExportMode = (typeof CONTEXT_PACK_EXPORT_MODES)[number]
+export type ContextPackExportMode =
+  | 'approved_only'
+  | 'approved_plus_derived'
 
 export type ContextPackScope =
   | { kind: 'person'; canonicalPersonId: string }
