@@ -16,7 +16,6 @@ import type {
   MemoryWorkspaceScope,
   MemoryWorkspaceSessionSummary,
   MemoryWorkspaceSuggestedAction,
-  MemoryWorkspaceSuggestedAsk,
   MemoryWorkspaceTurnRecord
 } from '../../shared/archiveContracts'
 import { ApprovedPersonaDraftHandoffPanel } from './ApprovedPersonaDraftHandoffPanel'
@@ -27,22 +26,6 @@ type Translator = (key: string, params?: Record<string, string | number | boolea
 
 function formatDisplayType(displayType: string) {
   return displayType.replace(/_/g, ' ')
-}
-
-function normalizeSuggestedActions(boundaryRedirect: MemoryWorkspaceBoundaryRedirect) {
-  const suggestedActions = boundaryRedirect.suggestedActions
-  if (Array.isArray(suggestedActions)) {
-    return suggestedActions
-  }
-
-  const legacySuggestedAsks = (
-    boundaryRedirect as MemoryWorkspaceBoundaryRedirect & { suggestedAsks?: MemoryWorkspaceSuggestedAsk[] }
-  ).suggestedAsks ?? []
-
-  return legacySuggestedAsks.map((suggestion) => ({
-    kind: 'ask',
-    ...suggestion
-  } satisfies MemoryWorkspaceSuggestedAction))
 }
 
 function renderCitation(
@@ -154,7 +137,7 @@ function renderResponse(
   },
   t: Translator
 ) {
-  const suggestedActions = response.boundaryRedirect ? normalizeSuggestedActions(response.boundaryRedirect) : []
+  const suggestedActions = response.boundaryRedirect?.suggestedActions ?? []
 
   return (
     <>

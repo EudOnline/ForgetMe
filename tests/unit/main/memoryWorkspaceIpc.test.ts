@@ -273,15 +273,15 @@ describe('registerWorkspaceIpc session handlers', () => {
     listPersonAgentInteractionMemories.mockReset()
   })
 
-  it('removes unified and deleted legacy person-agent channels before registration', () => {
+  it('does not keep removing deleted legacy person-agent channels during registration', () => {
     registerWorkspaceIpc(appPathsFixture())
 
     expect(removeHandler).toHaveBeenCalledWith('archive:runPersonAgentCapsuleRuntime')
     expect(removeHandler).toHaveBeenCalledWith('archive:getPersonAgentCapsuleRuntimeInspection')
-    expect(removeHandler).toHaveBeenCalledWith('archive:askPersonAgentConsultation')
-    expect(removeHandler).toHaveBeenCalledWith('archive:transitionPersonAgentTask')
-    expect(removeHandler).toHaveBeenCalledWith('archive:executePersonAgentTask')
-    expect(removeHandler).toHaveBeenCalledWith('archive:getPersonAgentInspectionBundle')
+    expect(removeHandler).not.toHaveBeenCalledWith('archive:askPersonAgentConsultation')
+    expect(removeHandler).not.toHaveBeenCalledWith('archive:transitionPersonAgentTask')
+    expect(removeHandler).not.toHaveBeenCalledWith('archive:executePersonAgentTask')
+    expect(removeHandler).not.toHaveBeenCalledWith('archive:getPersonAgentInspectionBundle')
   })
 
   it('passes persisted session asks through ipc and preserves conversation context cards', async () => {
