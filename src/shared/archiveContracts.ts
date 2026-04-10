@@ -1176,27 +1176,6 @@ export type AskMemoryWorkspacePersistedInput = AskMemoryWorkspaceInput & {
   sessionId?: string
 }
 
-export type GetPersonAgentStateInput = {
-  canonicalPersonId: string
-}
-
-export type GetPersonAgentCapsuleInput = {
-  capsuleId?: string
-  personAgentId?: string
-  canonicalPersonId?: string
-}
-
-export type ListPersonAgentCapsuleMemoryCheckpointsInput = {
-  capsuleId?: string
-  personAgentId?: string
-  canonicalPersonId?: string
-  limit?: number
-}
-
-export type GetPersonAgentMemorySummaryInput = {
-  canonicalPersonId: string
-}
-
 export type RunPersonAgentCapsuleRuntimeInput =
   | {
       operationKind: 'consultation'
@@ -1234,41 +1213,12 @@ export type RunPersonAgentCapsuleRuntimeResult =
       resultKind: 'not_found'
     }
 
-export type GetPersonAgentCapsuleRuntimeInspectionInput = {
-  canonicalPersonId: string
-}
-
 export type PersonAgentCapsuleRuntimeInspection = PersonAgentInspectionBundle & {
   inspectionKind: 'capsule_runtime'
 }
 
-export type ListPersonAgentConsultationSessionsInput = {
-  personAgentId?: string
-  canonicalPersonId?: string
-}
-
-export type GetPersonAgentConsultationSessionInput = {
-  sessionId: string
-}
-
-export type GetPersonAgentRuntimeStateInput = {
-  canonicalPersonId: string
-}
-
 export type ListPersonAgentRefreshQueueInput = {
   status?: 'pending' | 'processing' | 'completed' | 'failed'
-}
-
-export type ListPersonAgentAuditEventsInput = {
-  personAgentId?: string
-  canonicalPersonId?: string
-  eventKind?: string
-}
-
-export type ListPersonAgentTasksInput = {
-  personAgentId?: string
-  canonicalPersonId?: string
-  status?: PersonAgentTaskStatus
 }
 
 export type ListPersonAgentTaskRunsInput = {
@@ -1860,19 +1810,6 @@ export type DecisionJournalSearchResult = {
   undoneAt: string | null
 }
 
-export type SafeReviewGroupApprovalResult = {
-  status: 'approved'
-  batchId: string
-  journalId: string
-  groupKey: string
-  itemCount: number
-  canonicalPersonId: string | null
-  canonicalPersonName: string | null
-  itemType: 'profile_attribute_candidate'
-  fieldKey: string | null
-  queueItemIds: string[]
-}
-
 export type ReviewWorkbenchListItem = {
   queueItemId: string
   itemType: 'structured_field_candidate' | 'profile_attribute_candidate'
@@ -2094,22 +2031,26 @@ export interface ArchiveApi {
   askMemoryWorkspacePersisted: (input: AskMemoryWorkspacePersistedInput) => Promise<MemoryWorkspaceTurnRecord | null>
   runPersonAgentCapsuleRuntime: (input: RunPersonAgentCapsuleRuntimeInput) => Promise<RunPersonAgentCapsuleRuntimeResult>
   getPersonAgentCapsuleRuntimeInspection: (
-    input: GetPersonAgentCapsuleRuntimeInspectionInput
+    input: { canonicalPersonId: string }
   ) => Promise<PersonAgentCapsuleRuntimeInspection | null>
-  listPersonAgentConsultationSessions: (input?: ListPersonAgentConsultationSessionsInput) => Promise<PersonAgentConsultationSessionSummary[]>
-  getPersonAgentConsultationSession: (input: GetPersonAgentConsultationSessionInput) => Promise<PersonAgentConsultationSessionDetail | null>
-  getPersonAgentRuntimeState: (input: GetPersonAgentRuntimeStateInput) => Promise<PersonAgentRuntimeStateRecord | null>
+  listPersonAgentConsultationSessions: (input?: { personAgentId?: string; canonicalPersonId?: string }) => Promise<PersonAgentConsultationSessionSummary[]>
+  getPersonAgentConsultationSession: (input: { sessionId: string }) => Promise<PersonAgentConsultationSessionDetail | null>
+  getPersonAgentRuntimeState: (input: { canonicalPersonId: string }) => Promise<PersonAgentRuntimeStateRecord | null>
   getPersonAgentRuntimeRunnerState: () => Promise<PersonAgentRuntimeRunnerStateRecord | null>
-  getPersonAgentState: (input: GetPersonAgentStateInput) => Promise<PersonAgentRecord | null>
-  getPersonAgentCapsule: (input: GetPersonAgentCapsuleInput) => Promise<PersonAgentCapsuleRecord | null>
+  getPersonAgentState: (input: { canonicalPersonId: string }) => Promise<PersonAgentRecord | null>
+  getPersonAgentCapsule: (
+    input: { capsuleId?: string; personAgentId?: string; canonicalPersonId?: string }
+  ) => Promise<PersonAgentCapsuleRecord | null>
   listPersonAgentCapsuleMemoryCheckpoints: (
-    input: ListPersonAgentCapsuleMemoryCheckpointsInput
+    input: { capsuleId?: string; personAgentId?: string; canonicalPersonId?: string; limit?: number }
   ) => Promise<PersonAgentCapsuleMemoryCheckpointRecord[]>
   listPersonAgentRefreshQueue: (input?: ListPersonAgentRefreshQueueInput) => Promise<PersonAgentRefreshQueueRecord[]>
-  listPersonAgentAuditEvents: (input?: ListPersonAgentAuditEventsInput) => Promise<PersonAgentAuditEventRecord[]>
-  listPersonAgentTasks: (input?: ListPersonAgentTasksInput) => Promise<PersonAgentTaskRecord[]>
+  listPersonAgentAuditEvents: (input?: { personAgentId?: string; canonicalPersonId?: string; eventKind?: string }) => Promise<PersonAgentAuditEventRecord[]>
+  listPersonAgentTasks: (
+    input?: { personAgentId?: string; canonicalPersonId?: string; status?: PersonAgentTaskStatus }
+  ) => Promise<PersonAgentTaskRecord[]>
   listPersonAgentTaskRuns: (input?: ListPersonAgentTaskRunsInput) => Promise<PersonAgentTaskRunRecord[]>
-  getPersonAgentMemorySummary: (input: GetPersonAgentMemorySummaryInput) => Promise<PersonAgentMemorySummary | null>
+  getPersonAgentMemorySummary: (input: { canonicalPersonId: string }) => Promise<PersonAgentMemorySummary | null>
   runMemoryWorkspaceCompare: (input: RunMemoryWorkspaceCompareInput) => Promise<MemoryWorkspaceCompareSessionDetail | null>
   listMemoryWorkspaceCompareSessions: (input?: { scope?: MemoryWorkspaceScope }) => Promise<MemoryWorkspaceCompareSessionSummary[]>
   getMemoryWorkspaceCompareSession: (compareSessionId: string) => Promise<MemoryWorkspaceCompareSessionDetail | null>
@@ -2156,7 +2097,18 @@ export interface ArchiveApi {
   listReviewWorkbenchItems: (input?: { itemType?: 'structured_field_candidate' | 'profile_attribute_candidate'; status?: 'pending' | 'approved' | 'rejected' | 'undone'; canonicalPersonId?: string; fieldKey?: string; hasConflict?: boolean }) => Promise<ReviewWorkbenchListItem[]>
   getReviewWorkbenchItem: (queueItemId: string) => Promise<ReviewWorkbenchDetail | null>
   approveReviewItem: (queueItemId: string) => Promise<{ status: 'approved'; journalId: string; queueItemId: string; candidateId: string }>
-  approveSafeReviewGroup: (input: { groupKey: string }) => Promise<SafeReviewGroupApprovalResult>
+  approveSafeReviewGroup: (input: { groupKey: string }) => Promise<{
+    status: 'approved'
+    batchId: string
+    journalId: string
+    groupKey: string
+    itemCount: number
+    canonicalPersonId: string | null
+    canonicalPersonName: string | null
+    itemType: 'profile_attribute_candidate'
+    fieldKey: string | null
+    queueItemIds: string[]
+  }>
   rejectReviewItem: (input: { queueItemId: string; note?: string }) => Promise<{ status: 'rejected'; journalId: string; queueItemId: string; candidateId: string }>
   undoDecision: (journalId: string) => Promise<{ status: 'undone'; journalId: string }>
   setRelationshipLabel: (input: { fromPersonId: string; toPersonId: string; label: string }) => Promise<{ id: string; status: 'approved' }>

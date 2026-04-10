@@ -54,4 +54,23 @@ describe('workspace cleanup boundaries', () => {
     expect(source).not.toContain('export type MemoryWorkspaceCompareEvaluationDimensionKey')
     expect(source).not.toContain('export type ImportPreflightSummary')
   })
+
+  it('keeps archive api person-agent signatures free of forwarded input and result aliases', () => {
+    const source = fs.readFileSync(
+      path.resolve('src/shared/archiveContracts.ts'),
+      'utf8'
+    )
+
+    expect(source).not.toContain('export type GetPersonAgentStateInput')
+    expect(source).not.toContain('export type GetPersonAgentCapsuleInput')
+    expect(source).not.toContain('export type ListPersonAgentCapsuleMemoryCheckpointsInput')
+    expect(source).not.toContain('export type GetPersonAgentMemorySummaryInput')
+    expect(source).not.toContain('export type GetPersonAgentCapsuleRuntimeInspectionInput')
+    expect(source).not.toContain('export type ListPersonAgentConsultationSessionsInput')
+    expect(source).not.toContain('export type GetPersonAgentConsultationSessionInput')
+    expect(source).not.toContain('export type GetPersonAgentRuntimeStateInput')
+    expect(source).not.toContain('export type ListPersonAgentAuditEventsInput')
+    expect(source).not.toContain('export type ListPersonAgentTasksInput')
+    expect(source).not.toContain('export type SafeReviewGroupApprovalResult')
+  })
 })
